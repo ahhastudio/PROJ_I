@@ -1,0 +1,445 @@
+'use strict';
+// D&D 규칙 바탕 (DESIGN.md 56): SRD 5.2.1 규칙을 그대로 — 12직업 · 능력치 6종 · d20 명중 · 내성 6종 · 상태이상 · 탐험 판정.
+// 숫자 크기는 혼합형 — 맞느냐는 D&D 크기(AC는 층마다 천천히), 얼마나 아프냐는 성장 배율(G.Fantasy.allyAtk)이 정한다.
+// 용병 능력치: 고용할 때 4d6에서 가장 낮은 하나를 버리고 여섯 번 굴려 직업 우선순위대로 놓는다(m.ab). 레벨 4·8·12·16·19에 주능력 +2(최대 20).
+G.Dnd = (() => {
+  const U = G.U;
+  const AB = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const AB_N = { str: '근력', dex: '민첩', con: '건강', int: '지능', wis: '지혜', cha: '매력' };
+  // Lv 19는 SRD 5.2.1에서 능력치 상승 대신 서사 은혜 (DESIGN.md 59) — 은혜와 서사 단계가 주능력을 30까지
+  const ASI_LV = [4, 8, 12, 16], AB_MAX = 20, EPIC_MAX = 30;
+  // 갑옷: 가벼움 12+민첩 · 중간 14+민첩(최대 2) · 무거움 16 · 마법 갑옷 13+민첩 · 비무장 방어 10+민첩+(건강 · 지혜) · 방패 +2 · 갑옷 강화 10단계마다 +1 (최대 +3)
+  // 갑옷은 G.SRD.ARMOR 표. 바바리안 · 몽크의 비무장 방어만 직업 규칙
+  const armorAC = (m, ab) => { const SR = G.SRD, q = SR.armorOf(m), e = SR.eq(m); if (q.cat === 'none') { if (m.cls === 'barbarian') return 10 + N.mod(ab.dex) + N.mod(ab.con); if (m.cls === 'monk' && !e.shield) return 10 + N.mod(ab.dex) + N.mod(ab.wis); } return q.base + Math.min(q.dexMax, N.mod(ab.dex)); };
+  // 12직업 (SRD 5.2.1 직업 표): 히트 다이스 · 주능력 · 내성 난이도와 주문에 쓰는 능력(dc, DESIGN.md 124) · 능력치 놓는 순서 · 갑옷 · 방패 · 내성 숙련 · 기술 숙련(탐험 판정에 쓰는 셋만)
+  // 내부 키는 옛 저장을 살리려고 그대로 둔다: archer = 레인저 · dragoon = 파이터 · mage = 소서러 · archmage = 위저드 · scout = 드루이드
+  const CLS = {
+    barbarian: { hd: 12, pri: 'str', dc: 'str', order: ['str', 'con', 'dex', 'wis', 'cha', 'int'], armor: 'barb', saves: ['str', 'con'], sk: ['perception'] },
+    bard: { hd: 8, pri: 'cha', dc: 'cha', order: ['cha', 'dex', 'con', 'wis', 'int', 'str'], armor: 'leather', saves: ['dex', 'cha'], sk: ['perception', 'investigation', 'persuasion'] },
+    cleric: { hd: 8, pri: 'wis', dc: 'wis', order: ['wis', 'con', 'str', 'cha', 'dex', 'int'], armor: 'chainshirt', shield: true, saves: ['wis', 'cha'], sk: ['persuasion'] },
+    scout: { hd: 8, pri: 'wis', dc: 'wis', order: ['wis', 'con', 'dex', 'int', 'cha', 'str'], armor: 'leather', shield: true, saves: ['int', 'wis'], sk: ['perception'] },
+    dragoon: { hd: 10, pri: 'str', dc: 'str', order: ['str', 'con', 'dex', 'wis', 'cha', 'int'], armor: 'heavy', saves: ['str', 'con'], sk: ['perception'] },
+    monk: { hd: 8, pri: 'dex', dc: 'wis', order: ['dex', 'wis', 'con', 'str', 'int', 'cha'], armor: 'monk', saves: ['str', 'dex'], sk: [] },
+    paladin: { hd: 10, pri: 'str', dc: 'cha', order: ['str', 'cha', 'con', 'wis', 'dex', 'int'], armor: 'heavy', shield: true, saves: ['wis', 'cha'], sk: ['persuasion'] },
+    archer: { hd: 10, pri: 'dex', dc: 'wis', order: ['dex', 'wis', 'con', 'str', 'int', 'cha'], armor: 'studded', saves: ['str', 'dex'], sk: ['perception', 'investigation'] },
+    rogue: { hd: 8, pri: 'dex', dc: 'dex', order: ['dex', 'con', 'cha', 'int', 'wis', 'str'], armor: 'leather', saves: ['dex', 'int'], sk: ['perception', 'investigation', 'persuasion'] },
+    mage: { hd: 6, pri: 'cha', dc: 'cha', order: ['cha', 'con', 'dex', 'wis', 'int', 'str'], armor: 'none', saves: ['con', 'cha'], sk: ['persuasion'] },
+    warlock: { hd: 8, pri: 'cha', dc: 'cha', order: ['cha', 'con', 'dex', 'wis', 'int', 'str'], armor: 'leather', saves: ['wis', 'cha'], sk: ['investigation'] },
+    archmage: { hd: 6, pri: 'int', dc: 'int', order: ['int', 'con', 'dex', 'wis', 'cha', 'str'], armor: 'none', saves: ['int', 'wis'], sk: ['investigation'] },
+  };
+  // SRD 기술 18개 (능력치 순)
+  const SKILL_AB = { athletics: 'str', acrobatics: 'dex', sleight: 'dex', stealth: 'dex', arcana: 'int', history: 'int', investigation: 'int', nature: 'int', religion: 'int', animal: 'wis', insight: 'wis', medicine: 'wis', perception: 'wis', survival: 'wis', deception: 'cha', intimidation: 'cha', performance: 'cha', persuasion: 'cha' };
+  const SKILL_N = { athletics: '운동', acrobatics: '곡예', sleight: '손재주', stealth: '은신', arcana: '비전학', history: '역사', investigation: '조사', nature: '자연', religion: '종교', animal: '동물 조련', insight: '통찰', medicine: '의학', perception: '지각', survival: '생존', deception: '기만', intimidation: '위협', performance: '공연', persuasion: '설득' };
+  // SRD 직업 표의 장비 숙련: 무기 · 갑옷 · 도구
+  const TRAIN = { barbarian: ['단순 · 군용', '경갑 · 평갑 · 방패', ''], bard: ['단순', '경갑', '악기 3'], cleric: ['단순', '경갑 · 평갑 · 방패', ''], scout: ['단순', '경갑 · 방패', '약초 도구'], dragoon: ['단순 · 군용', '경갑 · 평갑 · 중갑 · 방패', ''], monk: ['단순 · 경량 군용', '없음', '장인 도구 또는 악기 1'], paladin: ['단순 · 군용', '경갑 · 평갑 · 중갑 · 방패', ''], archer: ['단순 · 군용', '경갑 · 평갑 · 방패', ''], rogue: ['단순 · 기교 또는 경량 군용', '경갑', '도둑 도구'], mage: ['단순', '없음', ''], warlock: ['단순', '경갑', ''], archmage: ['단순', '없음', ''] };
+  // 용병 정보가 없는 단장 몸(옛 저장)의 기본값. 보통 단장은 만든 캐릭터의 능력치를 쓴다
+  const HERO_AB = { str: 16, dex: 12, con: 14, int: 10, wis: 12, cha: 13 }, HERO_SAVES = ['str', 'con'];
+  // 몬스터: 층이 곧 도전 등급. AC 12 + 층/5 (최대 20) · 명중 +3 + 층/4 (최대 +13) · 내성 +1 + 층/5 · 능력 DC 10 + 층/4 (최대 19). 보스 AC +1 · 명중 · 내성 · DC +2
+  const MON_AC = (fl, boss) => Math.min(20, 12 + Math.floor(fl / 5)) + (boss ? 1 : 0);
+  const MON_HIT = (fl, boss) => 3 + Math.min(10, Math.floor(fl / 4)) + (boss ? 2 : 0);
+  const MON_SAVE = (fl, boss) => 1 + Math.floor(fl / 5) + (boss ? 2 : 0);
+  const MON_DC = (fl, boss) => Math.min(19, 10 + Math.floor(fl / 4)) + (boss ? 2 : 0);
+  // 상태이상 (SRD 부록 「Conditions」): 손을 못 씀 · 공격 불리 · 맞을 때 상대 이점 · 근접 명중은 치명타
+  // SRD 5.2.1 용어집의 상태 15종. out = 행동 불능(행동 · 추가 행동 · 반응 없음, 집중이 끊긴다) · sdFail = 근력 · 민첩 내성 자동 실패 · dexDis = 민첩 내성 불리
+  const COND = {
+    stunned: { n: '기절', out: true, hitAdv: true, sdFail: true },
+    paralyzed: { n: '마비', out: true, hitAdv: true, meleeCrit: true, sdFail: true },
+    unconscious: { n: '의식 없음', out: true, hitAdv: true, meleeCrit: true, sdFail: true },
+    petrified: { n: '석화', out: true, hitAdv: true, sdFail: true, resAll: true },
+    incapacitated: { n: '행동 불능', out: true },
+    prone: { n: '넘어짐', atkDis: true }, // SRD: 자기 차례에 이동력 절반으로 일어선다. 곁에서 치면 이점, 멀리서 쏘면 불리 (N.adv)
+    grappled: { n: '붙잡힘' }, // SRD: 이동력 0 · 붙잡은 쪽이 아닌 상대를 칠 때 불리 (N.adv)
+    restrained: { n: '속박', atkDis: true, hitAdv: true, dexDis: true },
+    frightened: { n: '공포', atkDis: true },
+    poisoned: { n: '중독', atkDis: true },
+    blinded: { n: '실명', atkDis: true, hitAdv: true },
+    charmed: { n: '매혹' }, // SRD: 매혹한 쪽을 공격하지 못한다 (N.adv가 막지 않는다 — G.Foe.target · 기술 표적에서 거른다)
+    deafened: { n: '귀먹음' },
+    invisible: { n: '투명' }, // SRD: 나를 노리는 공격 불리 · 내 공격 이점 (N.invis)
+    // 무기 숙련 「약화」(Sap) · 잔인한 조롱: 다음 공격 불리 / 인도의 화살: 다음에 맞는 공격 이점
+    sapped: { n: '약화', atkDis: true },
+    outlined: { n: '빛남', hitAdv: true },
+  };
+  // 직업 기본 규칙: 추가 공격(파이터 · 팔라딘 · 레인저 · 바바리안 · 몽크, Lv 5 — 파이터는 11에 셋 · 20에 넷) · 소마법 강화(Lv 5 · 11 · 17)
+  const MARTIAL = new Set(['dragoon', 'paladin', 'archer', 'barbarian', 'monk']), CASTER = new Set(['mage', 'archmage', 'warlock', 'scout', 'bard']);
+  // 우리가 몬스터에게 거는 것 (F.inflict): 기절 = 건강 내성 · 정지(마비) = 지혜 내성 · 감전(느려짐) = 건강 내성. 지속 피해 · 표식은 굴림 없이
+  const INFLICT_SAVE = { stun: 'con', stop: 'wis', shock: 'con' };
+  const fl = () => G.S.w.fantasy.floor || 1;
+  const now = () => G.S.runTime;
+  // 기본 공격 (SRD 무기 · 소마법): [주사위 개수, 주사위, 더하는 능력, 피해 종류]. 소마법은 능력치를 더하지 않는다
+  // 주문 직업의 기본 공격은 소마법(능력 수정치 없음): 신성한 불꽃 · 잔인한 조롱 · 화염살 · 서리 광선 · 불꽃 생성 · 섬뜩한 폭발. 곁의 적에게 무기가 더 세면 무기를 휘두른다 (a.swing)
+  const CANTRIP = { cleric: [1, 8, 'radiant', '신성한 불꽃'], bard: [1, 6, 'psychic', '잔인한 조롱'], mage: [1, 10, 'fire', '화염살'], archmage: [1, 8, 'cold', '서리 광선'], scout: [1, 8, 'fire', '불꽃 생성'], warlock: [1, 10, 'force', '섬뜩한 폭발'] };
+  const dice = (n, d) => { // N.dieMin: 대형 무기 전투 (1 · 2 → 3) · N.reroll: 강화 주문 (낮은 주사위 다시)
+    const min = N.dieMin || 0; let rr = N.reroll || 0, s = 0;
+    const fv = N.fateV ? N.fateV() : 0; if (fv) { const face = Math.max(min, Math.ceil(fv * d / 20)); if (!rr || face >= (d + 1) / 2) return n * face; const k = Math.min(n, rr); let s2 = face * (n - k); for (let i = 0; i < k; i++) s2 += 1 + U.rand(d); N.rerollUsed = true; return s2; } // 운명판 (G.Dice): 지금 행동하는 사람의 이번 라운드 눈(d20)을 d면으로 환산 — 1~20을 d등분. 강화 주문은 낮은 눈의 주사위를 (매력 수정치 개수만큼) 새로 굴린다
+    if (!rr) { for (let i = 0; i < n; i++) s += Math.max(min, 1 + U.rand(d)); return s; }
+    const a = []; for (let i = 0; i < n; i++) a.push(1 + U.rand(d));
+    a.sort((p, q) => p - q);
+    for (let i = 0; i < a.length && rr > 0; i++, rr--) if (a[i] < (d + 1) / 2) { a[i] = 1 + U.rand(d); N.rerollUsed = true; }
+    return a.reduce((p, q) => p + q, 0);
+  };
+  const N = {
+    AB, AB_N, CLS, COND, SKILL_AB, SKILL_N, TRAIN,
+    // ── 피해 (SRD): 주사위 + 능력 수정치. 치명타는 주사위만 두 배. 장비 · 트리 · 스킬 배율은 그 위에 곱한다 ──
+    // 섬뜩한 폭발을 기본 공격으로 쓰는 사람: 워락, 또는 워락 레벨에 고통의 폭발이 있는 다중 직업 (소서러 + 워락 2 — 그걸 노리고 찍는다). 그 사람의 워락 시점을 돌려준다
+    ebOf(m) { if (!m) return null; if (m.cls === 'warlock') return m; if (G.MC?.on(m) && G.MC.lvOf(m, 'warlock') > 0) { const v = G.MC.view(m, 'warlock'); if (G.Opt.of(v).includes('sr_agon')) return v; } return null; },
+    weapon(e) { const m = e.merc, wv = N.ebOf(m); if (wv) { const o = G.Opt.of(wv); if (o.includes('iv_pblade')) return { n: 1, d: 8, b: N.mod(N.ab(m).cha), t: G.Trinket.props(m, 'wtype')[0]?.[1] || 'radiant' }; if (o.includes('sr_agon')) return { n: 1, d: 10, b: N.mod(N.ab(m).cha), t: G.Trinket.props(m, 'wtype')[0]?.[1] || 'force' }; } if (m && CANTRIP[m.cls] && !e.swing) { const q = CANTRIP[m.cls]; return { n: q[0], d: q[1], b: 0, t: G.Trinket.props(m, 'wtype')[0]?.[1] || q[2] }; } if (!m) return { n: 2, d: 6, b: 0, t: 'slashing' }; const SR = G.SRD, q = SR.weaponOf(m), ma = m.cls === 'monk' && (q.hidden || q.cat === 'simple' || q.props.includes('light')), mad = m.lv >= 17 ? 12 : m.lv >= 11 ? 10 : m.lv >= 5 ? 8 : 6, two = q.vd && !SR.eq(m).shield, face = two ? q.vd : q.dd; return { n: ma ? 1 : q.dn, d: ma ? Math.max(mad, face) : face, flat: !ma && q.flat ? q.flat : 0, b: N.mod(N.ab(m)[N.atkAb(m)]) + (!ma && q.flat ? q.flat : 0), t: G.Trinket.props(m, 'wtype')[0]?.[1] || (m.cls === 'monk' && m.lv >= 6 ? 'force' : q.t) }; },
+    // 무기 능력: 기교는 높은 쪽 · 원거리는 민첩 · 몽크 무기도 높은 쪽 · 그 밖 근력
+    atkAb(m) { const q = G.SRD.weaponOf(m), ab = N.ab(m); if (q.props.includes('finesse') || (m.cls === 'monk' && (q.hidden || q.cat === 'simple' || q.props.includes('light')))) return ab.dex >= ab.str ? 'dex' : 'str'; return q.rng === 'ranged' ? 'dex' : 'str'; },
+    // 공격 사거리 (칸): 주문 직업은 소마법, 나머지는 무기 표. 5피트 = 1칸
+    // 사거리 (SRD 그대로, 1칸 = 5피트). 먼 거리로 쏘는 차례(longNow)에는 긴 사거리
+    rng0(e) { const m = e.merc; if (!e.def) return 0; if (!m) return e.def.range; if (CANTRIP[m.cls]) { if (e.def.range < 2) return e.def.range; const b = G.SRD_RANGE.basic[m.cls]; return G.SRD_RANGE.cells(m.cls === 'warlock' && G.Opt.has(e, 'iv_spear') ? b + 6 * m.lv : b); } const q = G.SRD.weaponOf(m); if (q.rng === 'ranged') return G.SRD_RANGE.cells(q.ft / 5); return q.props.includes('reach') ? 2.9 : e.def.range < 2 ? e.def.range : 1.3; },
+    rngL(e) { const m = e.merc; if (!m || !e.def || (CANTRIP[m.cls] && e.def.range >= 2)) return 0; const q = G.SRD.weaponOf(m); return q.ftL ? G.SRD_RANGE.cells(q.ftL / 5) : 0; },
+    rng(e) { return e.longNow ? N.rngL(e) || N.rng0(e) : N.rng0(e); },
+    // 몸집: 거대화 · 확대 주문을 쓰면 정말 커진다 (그리는 쪽: prep)
+    sizeK(e) { if (N.bon(e, 'large')) return 1.5; for (const k in e.bf || {}) if (/enlarge/i.test(k)) return 1.5; return 1; },
+    // 여러 칸을 차지하는 몸 (설계 2026-11-19 용 보스): cells = 한 변의 칸 수 (지금은 용만 — spawnMon이 SRD 크기에서 정한다).
+    // 몸은 (x, y) 칸에서 오른쪽 · 아래로 넓어진다: 칸 오프셋 -⌊(n-1)/2⌋ … ⌈(n-1)/2⌉. 짝수 몸의 가운데는 (x + .5, y + .5)
+    cells: e => (e && e.cells) || 1,
+    trueDragon: n => /(새끼 용|어린 \S+ 용|성룡|고룡)$/.test(n || ''), // 진짜 용 (유사용 · 반룡 · 와이번은 아님) — 부위 인형으로 그리고 크기대로 칸을 차지한다
+    CELLS: { large: 2, huge: 3, gargantuan: 4 },
+    footOff: n => Array.from({ length: n }, (_, i) => i - ((n - 1) >> 1)),
+    foot(e, x = Math.round(e.x), y = Math.round(e.y)) { const n = N.cells(e); if (n === 1) return [[x, y]]; const o = N.footOff(n), out = []; for (const b of o) for (const a of o) out.push([x + a, y + b]); return out; },
+    // 가장 가까운 칸끼리의 거리 (칸 중심 기준, 붙어 있으면 1 · 대각선 √2). 1칸끼리는 중심 거리와 같다
+    gap(a, b) {
+      const na = N.cells(a), nb = N.cells(b); if (na === 1 && nb === 1) return Math.hypot(a.x - b.x, a.y - b.y);
+      const ca = (na - 1) % 2 / 2, cb = (nb - 1) % 2 / 2, ha = (na - 1) / 2, hb = (nb - 1) / 2;
+      const dx = Math.max(0, Math.abs(a.x + ca - b.x - cb) - ha - hb), dy = Math.max(0, Math.abs(a.y + ca - b.y - cb) - ha - hb);
+      return Math.hypot(dx, dy);
+    },
+    // 먼 거리 불리: 무기 기본 사거리(투척 포함) 너머
+    farDis(att, tg) { if (!att?.longNow || !tg) return false; const d = Math.hypot(att.x - tg.x, att.y - tg.y); if (att.kind === 'mon') return d > G.Foe.reach0(att); return d > G.SRD_RANGE.cells(G.SRD.weaponOf(att.merc).ft / 5); },
+    gearWeapon: m => N.weapon({ merc: m, swing: true }),
+    // 이 공격이 소마법인가: 소마법 직업의 기본 공격이되, 칼날의 계약(계약 무기 — 무기 공격)이면 아니다. 무기 공격이어야 맞힌 뒤 기술(섬뜩한 강타 · 생명을 마시는 자)이 붙는다
+    cantripAtk: a => !!a.merc && !a.swing && !!N.cantrip(a.merc) && !(N.ebOf(a.merc) && G.Opt.of(N.ebOf(a.merc)).includes('iv_pblade')),
+    cantrip: m => { const q = CANTRIP[N.ebOf(m) ? 'warlock' : m.cls]; return q && { n: q[0], d: q[1], t: q[2], name: q[3] }; },
+    avg: w => w.n * (w.d + 1) / 2 + w.b,
+    dice,
+    // 이번 한 번의 피해 / 평균 피해: 평균으로 만든 배율에 곱한다
+    rollK(e, crit, nd = 1) { const w = N.weapon(e); N.dieMin = e.merc && N.melee(e) && G.Guild.skill(e.merc, 'fs_gwf') && G.SRD.styleOn(e.merc, 'fs_gwf') ? 3 : 0; const v = dice(w.n * nd * (crit ? 2 : 1), w.d); N.dieMin = 0; return Math.max(1, v + w.b + N.bsum(e, 'dmgB') + N.bdice(e, 'dmgD') /* 확대 1d4 같은 피해 주사위 (SRD) */ + (e.merc && !N.melee(e) && !N.spellAtk(e) && G.Items.ammoOK?.(e.merc) ? G.Trinket.sum(e.merc, 'dmgR') : 0) /* 마법 탄환 */ + (e.merc ? G.Trinket.sum(e.merc, 'dmgB') + G.Story.scarSum(e.merc, 'dmgB') : 0)) / Math.max(1, N.avg(w)); } /* 마법 무기 +1~+3 (SRD): 명중과 피해 모두 */, // nd: 소마법 단계(5 · 11 · 17레벨)만큼 주사위 수를 늘린다 (SRD)
+    // 몬스터 공격 하나: 평균 대비 비율 · 치명타면 주사위만 두 배
+    monRoll(a, crit) { const k = crit ? 2 : 1, ex = a.ex; return Math.max(1, dice(a.n * k, a.d) + a.b + (ex ? dice(ex.n * k, ex.d) : 0)) / Math.max(1, G.Foe.avgOf(a)); },
+    // 체력 (SRD): 1레벨은 히트 다이스 최대, 이후 레벨마다 평균 + 1, 건강 수정치 × 레벨
+    srdHP(m) { const h = N.cls(m).hd; return Math.max(1, h + (m.lv - 1) * (h / 2 + 1) + N.mod(N.ab(m).con) * m.lv + G.Story.scarSum(m, 'hpLv') * m.lv + (G.Res.species(m) === 'dwarf' ? m.lv : 0) + (G.Trinket.has(m, 'hpLv') ? m.lv : 0) + (G.Guild.skill(m, 'sr_dres') ? m.lv + 2 : 0)); },
+    // 광란 (SRD): 무모한 공격 + 격노 중 차례의 첫 명중에 격노 피해만큼 d6
+    frenzy(a) { if (!a.merc || !G.Fantasy.sk(a, 'sr_frenzy') || !N.bon(a, 'rage') || !N.bon(a, 'reckless') || a.frN === G.Turn.no()) return 0; a.frN = G.Turn.no(); return dice(G.Res.rageDmg(a.merc.lv), 6); },
+    // 기본 공격은 이제 빗나갈 수 있다(평균 명중 약 70%) — 그만큼 한 방을 키워 처치 속도를 예전과 맞춘다
+    HIT_K: 1,
+    mod: s => Math.floor((s - 10) / 2),
+    prof: lv => 2 + Math.floor((Math.max(1, lv) - 1) / 4),
+    // 4d6 가장 낮은 것 버림
+    roll4: () => { const d = [0, 0, 0, 0].map(() => 1 + U.rand(6)).sort((a, b) => a - b); return d[1] + d[2] + d[3]; },
+    rollAb(cls) {
+      const c = CLS[cls] || CLS.archer, v = AB.map(() => N.roll4()).sort((a, b) => b - a), ab = {};
+      c.order.forEach((k, i) => (ab[k] = v[i]));
+      return ab;
+    },
+    // 레벨이 올린 능력치 포함 (주능력부터 20까지, 다 차면 다음 순서)
+    ab(m) {
+      if (m.__base) m = m.__base; // 다중 직업의 직업 시점: 능력치는 그 사람 것 (G.MC)
+      if (!m.ab || m.abCls !== m.cls) { m.ab = N.rollAb(m.cls); m.abCls = m.cls; }
+      const c = N.cls(m), ab = { ...m.ab }; { const bg = G.SRD.bgAb(m, c.order); for (const k in bg) ab[k] = Math.min(AB_MAX, ab[k] + bg[k]); }
+      let pts = G.Reward?.on ? 0 : 2 * (G.MC?.on(m) ? G.MC.list(m) : [{ cls: m.cls, lv: m.lv }]).reduce((a, q) => a + (q.cls === 'dragoon' ? [4, 6, 8, 12, 14, 16] : q.cls === 'rogue' ? [4, 8, 10, 12, 16] : ASI_LV).filter(l => q.lv >= l).length, 0); // SRD 직업 표 (다중 직업은 직업 레벨마다) /* 새 게임(G.Reward.on)은 능력치 향상을 플레이어가 고른다 — m.ab에 바로 더한다 (js/game/reward.js) */
+      if (G.SrdX?.grappler(m) && pts >= 2) { pts -= 2; ab.dex = Math.min(AB_MAX, ab.dex + 1); } // 첫 능력치 향상 자리에 붙잡기 재주 (SRD: 능력치 향상 대신 재주, 민첩 +1)
+      for (const k of c.order) { const up = Math.min(pts, AB_MAX - ab[k]); if (up > 0) { ab[k] += up; pts -= up; } if (!pts) break; }
+      const ep = (m.boons || []).length + (m.bt || 0);
+      if (ep) ab[c.pri] = Math.max(ab[c.pri], Math.min(EPIC_MAX, ab[c.pri] + ep));
+      // 마법 물건: 능력치 더하기 · 고정 (DESIGN.md 58)
+      if ((G.MC ? G.MC.lvOf(m, 'monk') : m.cls === 'monk' ? m.lv : 0) >= 20) { ab.dex = Math.min(25, ab.dex + 4); ab.wis = Math.min(25, ab.wis + 4); } // 몸과 마음
+      if (G.Guild.skill(m, 'ft_champion')) { ab.str = Math.min(25, ab.str + 4); ab.con = Math.min(25, ab.con + 4); }
+      for (const k in m.abPerm || {}) ab[k] = Math.min(30, ab[k] + m.abPerm[k]); // 능력치 책 (SRD): +2, 최대 30
+      if (m.strSet && m.strSet.until > now()) ab.str = Math.max(ab.str, m.strSet.v); // 거인 힘의 물약 (SRD): 근력 점수가 바뀐다
+      return G.Trinket.ability(m, ab);
+    },
+    // 이 직업에게 그 능력치가 무엇에 쓰이나 (화면 설명 — DESIGN.md 65). 주능력 = 공격
+    role(cls, k) {
+      const c = CLS[cls] || CLS.archer, out = [];
+      if (k === c.pri) out.push('공격');
+      if (k === c.dc && k !== c.pri) out.push(cls === 'monk' ? '집중 난이도' : '주문');
+      if (k === 'con') out.push('체력');
+      if (k === 'dex' && c.armor !== 'heavy') out.push('방어');
+      if ((k === 'con' && c.armor === 'barb') || (k === 'wis' && c.armor === 'monk')) out.push('방어');
+      if (out.length) return out.join(' · ');
+      return { str: '넘어짐 버티기', dex: '선제', int: '미믹 알아채기', wis: '기습 알아채기', cha: '흥정' }[k];
+    },
+    // 공격 · 체력 · 방어에 쓰이나 (만들기 · 상세에서 강조)
+    key: (cls, k) => /공격|체력|방어|주문|집중/.test(N.role(cls, k)),
+    // 능력치 합 (선술집 몸값 · 표시)
+    total: m => { N.ab(m); return N.sumAb(m.ab); },
+    sumAb: ab => AB.reduce((s, k) => s + ab[k], 0),
+    // 신전 축복 (G.Guild.blessT)
+    bless: e => (e.merc && G.RT.fantasy && G.RT.fantasy.floorT < G.Guild.blessT() ? 2 : 0),
+    cls: m => CLS[m.cls] || CLS.archer,
+    // 히트 다이스 → 몸 체력 배율 (d6 0.72 · d8 0.96 · d10 1.2 · d12 1.44)
+    hdK: cls => (CLS[cls] || CLS.archer).hd * 0.12,
+
+    // ── 몸(던전 위 엔티티)마다 ──
+    abOf(e) { return e.merc ? N.ab(e.merc) : e.kind === 'hero' ? HERO_AB : null; },
+    // 명중 보정: 숙련 + 주능력 수정치
+    hit(e) {
+      if (e.merc) return (e.castAb || CANTRIP[e.merc.cls] && !e.swing || G.SRD.canW(e.merc, G.SRD.eq(e.merc).w) || G.SRD.weaponOf(e.merc).hidden ? N.prof(e.merc.lv) : 0) + (e.castAb ? N.mod(N.ab(e.merc)[e.castAb]) : CANTRIP[e.merc.cls] && !e.swing ? N.mod(N.ab(e.merc)[N.cls(e.merc).pri]) : N.mod(N.ab(e.merc)[N.atkAb(e.merc)])) + G.Guild.sum(e.merc, 'hitB') + G.Trinket.sum(e.merc, 'hit') + (G.Guild.skill(e.merc, 'fs_archery') ? 2 : 0) + (N.spellAtk(e) ? G.Trinket.sum(e.merc, 'spellHit') : !N.melee(e) && G.Items.ammoOK?.(e.merc) ? G.Trinket.sum(e.merc, 'hitR') : 0); // 신전의 축복(N.bless)은 굴림에서 1d4 · 전쟁 마법사의 완드 · 마법 탄환 (SRD)
+      if (e.kind === 'hero') return 3 + N.mod(HERO_AB.str) + Math.floor(fl() / 5);
+      if (e.kind === 'rival') return MON_HIT(fl(), false) + 1;
+      return e.stat ? G.Foe.attackOf(e).hit : MON_HIT(fl(), e.boss);
+    },
+    spellAtk: e => !!e.merc && (!!e.castAb || (!!CANTRIP[e.merc.cls] && !e.swing)), // 주문 공격인가 (마법 물건의 주문 명중)
+    // 수호의 노래 = 신앙의 방패 +2 · 성벽 = 방패 주문 +5 (SRD)
+    ac(e) { const v = N.acBase(e); return e.acMinus ? Math.max(Math.min(v, 10), v - e.acMinus) : v; }, // 부식 (SRD): AC 10 아래로는 안 내려간다
+    acBase(e) {
+      if (e.merc) { const c = N.cls(e.merc), ab = N.ab(e.merc); return Math.max(armorAC(e.merc, ab), G.Guild.skill(e.merc, 'sr_dres') ? 10 + N.mod(ab.dex) + N.mod(ab.cha) : 0, G.Guild.skill(e.merc, 'iv_armor') ? 13 + N.mod(ab.dex) : 0, G.Trinket.sum(e.merc, 'acSet') ? G.Trinket.sum(e.merc, 'acSet') + N.mod(ab.dex) : 0) + (G.SRD.eq(e.merc).shield && (G.SRD.canShield(e.merc.cls) || G.MC?.shield(e.merc)) ? G.SRD.SHIELD.ac : 0) + G.Trinket.sum(e.merc, 'ac') + N.bsum(e, 'ac') + (G.Guild.skill(e.merc, 'fs_defense') && G.SRD.styleOn(e.merc, 'fs_defense') ? 1 : 0); }
+      if (e.kind === 'hero') return 18 + Math.min(3, Math.floor(fl() / 10));
+      if (e.kind === 'rival') return MON_AC(fl(), false) + N.bsum(e, 'ac');
+      return (e.stat ? e.stat.ac : MON_AC(fl(), e.boss)) + N.bsum(e, 'ac');
+    },
+    // 주문 · 능력 내성 난이도: 8 + 숙련 + 직업의 dc 능력 (몬스터는 층으로)
+    dcAb: (m, k) => G.SrdX?.castAb(m, k) || (k === 'sr_topple' ? N.atkAb(m) : N.cls(m).dc), // 넘어뜨리기는 공격에 쓴 능력 (SRD Topple)
+    dc(e, ab) { return e.merc ? 8 + N.prof(e.merc.lv) + N.mod(N.ab(e.merc)[ab || e.castAb || N.cls(e.merc).dc]) + G.Trinket.sum(e.merc, 'dc') + N.bsum(e, 'dcB') : e.kind === 'hero' ? 8 + N.hit(e) : e.stat ? e.stat.dc : MON_DC(fl(), e.boss); },
+    // 내성 보정: 능력 수정치 + 직업 내성 숙련
+    saveBonus(e, k) {
+      if (e.merc) return N.mod(N.ab(e.merc)[k]) + (N.cls(e.merc).saves.includes(k) || G.Guild.skill(e.merc, 'ft_survivor') || (G.Guild.skill(e.merc, 'ft_slippery') && (k === 'wis' || k === 'cha')) ? N.prof(e.merc.lv) : 0) + G.Trinket.sum(e.merc, 'save') + N.bless(e);
+      if (e.kind === 'hero') return N.mod(HERO_AB[k]) + (HERO_SAVES.includes(k) ? 2 + Math.floor(fl() / 8) : 0);
+      return e.stat ? e.stat.save[k] : MON_SAVE(fl(), e.boss);
+    },
+    // 기술 판정 보정 (지각 · 조사 · 설득): 능력 수정치 + 숙련(직업에 있으면)
+    // 숙련 (출신 재주): 셋 다 숙련
+    // 기술: 능력 수정치 + 숙련(직업 · 배경 · 종족 · 재주) · 전문가는 두 배
+    profs: m => m.profO || G.SRD.profs(m, G.Res.species(m)), // profO: 시험용 고정
+    skill(m, sk) { const pr = N.prof(m.lv), own = N.profs(m).includes(sk), ex = !m.profO && G.SRD.expert(m, G.Res.species(m)).includes(sk); return N.mod(N.ab(m)[SKILL_AB[sk]]) + G.Trinket.props(m, 'skB').reduce((a, p) => a + (p[1] === sk ? p[2] : 0), 0) /* 도둑 · 등반 장갑 */ + Math.max(own ? (ex ? 2 : 1) * pr : 0, m.cls === 'bard' && m.lv >= 2 ? Math.floor(pr / 2) : 0) + G.SRD.orderBonus(m, sk, N.mod(N.ab(m).wis)); }, // 바드 만능 재주꾼: 숙련 없는 기술에 절반
+    // 방치형이라 파티에서 가장 잘하는 사람이 굴린다 (그 사람을 함께 돌려준다)
+    best(list, sk) { let b = null, v = -99; for (const m of list) { const s = N.skill(m, sk) + (N.reliable(m) ? 5 : 0); if (s > v) { v = s; b = m; } } return { m: b, v }; },
+    // 로그 믿음직한 재능 (Reliable Talent): 숙련 판정은 10 아래로 굴리지 않는다 — 방치형 판정에서는 +5로
+    reliable: m => G.Guild.skill(m, 'sr_reliable'),
+
+    // ── 상태이상: e.cond = { 이름: 끝나는 시각 } (몬스터의 옛 기절 · 정지 타이머도 같이 읽는다) ──
+    has(e, k) {
+      if (k === 'stunned' && e.stun > 0) return true;
+      if (k === 'paralyzed' && e.stop > 0) return true;
+      return !!(e.cond && e.cond[k] > now());
+    },
+    // 생물 종류 (언데드 퇴치 · 신성 강타 · 인간형 포박)
+    undead: e => e.ty === 'undead', fiend: e => e.ty === 'fiend', humanoid: e => e.kind === 'rival' || e.ty === 'humanoid',
+    // ── 잠깐 붙는 효과: e.bf = { 키: { until, ac, hit, save, dmg, taken, cd, adv, dis } } — 같은 키는 덮어쓴다 ──
+    buff(e, k, t, props) { (e.bf = e.bf || {})[k] = Object.assign({ until: now() + t }, props); },
+    // 주사위 보너스(SRD 축복 1d4 · 바드의 영감 1d6 등): 굴릴 때마다 새로 굴린다
+    bdice(e, p) { let v = 0; if (e.bf) for (const k in e.bf) { const b = e.bf[k]; if (b.until > now() && b[p]) v += dice(1, b[p]); } return v; },
+    bsum(e, p) { let v = 0; if (e.bf) for (const k in e.bf) { const b = e.bf[k]; if (b.until > now() && b[p]) v += b[p]; } return v; },
+    bprod(e, p) { let v = 1; if (e.bf) for (const k in e.bf) { const b = e.bf[k]; if (b.until > now() && b[p] != null) v *= b[p]; } return v; },
+    bon: (e, k) => !!(e.bf && e.bf[k] && e.bf[k].until > now()),
+    // 한 번에 몇 번 치나 (추가 공격) · 소마법 단계 (1~4)
+    attacks(a) { const m = a.merc; if (!m) return 1; const ex = N.bsum(a, 'extraAtk') + G.Trinket.sum(m, 'extraAtk'); if (!MARTIAL.has(m.cls)) return 1 + ex + (m.cls === 'warlock' ? (G.Guild.skill(m, 'iv_devour') ? 2 : G.Guild.skill(m, 'iv_thirst') ? 1 : 0) : 0); return (m.cls === 'dragoon' ? (m.lv >= 20 ? 4 : m.lv >= 11 ? 3 : m.lv >= 5 ? 2 : 1) : m.lv >= 5 ? 2 : 1) + ex; },
+    tier: a => (a.merc ? 1 + (a.merc.lv >= 5) + (a.merc.lv >= 11) + (a.merc.lv >= 17) : 1),
+    caster: a => !!a.merc && CASTER.has(a.merc.cls),
+    // 로그 기습 (Sneak Attack): 이점이 있거나 표적 곁(1.5칸)에 다른 동료가 있으면, 한 번에 (Lv/2 올림)d6 — 주사위 하나에 피해 +50%
+    // 기습 (SRD 로그): 이점이거나 곁에 동료가 있으면 차례에 한 번 ⌈레벨/2⌉d6. 주사위 개수를 돌려준다
+    sneak(rt, a, tg, adv) {
+      if (!a.merc || a.merc.cls !== 'rogue' || a.sneakN === G.Turn.no()) return 0; { const q = G.SRD.weaponOf(a.merc); if (!(q.props.includes('finesse') || q.rng === 'ranged')) return 0; } // SRD: 기교 또는 원거리 무기
+      // SRD: 이점이 있거나, 불리 없이 표적 5피트 안에 행동 불능이 아닌 동료가 있을 때
+      if (!(adv > 0) && !(adv === 0 && rt.party.some(p => p !== a && !p.dead && !N.out(p) && Math.hypot(p.x - tg.x, p.y - tg.y) <= 1.5))) return 0;
+      a.sneakN = G.Turn.no(); // 기습: 턴에 한 번 (SRD)
+      return Math.ceil(a.merc.lv / 2);
+    },
+    atkDis(e) { for (const k in COND) if (COND[k].atkDis && N.has(e, k) && !(k === 'blinded' && e.merc && G.Guild.skill(e.merc, 'ft_feral'))) return true; return false; }, // 야성의 감각: 맹안시로 실명 불리가 없다
+    any(e, flag) { for (const k in COND) if (COND[k][flag] && N.has(e, k)) return true; return false; },
+    // 행동 불능 (기절 · 마비 · 의식 없음 · 석화 · 행동 불능)
+    out: e => N.any(e, 'out'),
+    // 투명 (SRD 상태 · 투명 주문 · 물약 · 반지 · 망토)
+    invis: e => !!e && (N.has(e, 'invisible') || N.bon(e, 'invis') || N.bon(e, 'invis2') || N.bon(e, 'invisC') || !!(e.merc && G.Trinket.has(e.merc, 'invis'))),
+    // 탈진 (SRD): 단계마다 D20 굴림 −2 · 속도 −5피트. 6단계면 죽는다. 긴 휴식에 1단계 (G.Res.long)
+    exh: e => (e?.merc ? e.merc.exh || 0 : e?.exh || 0),
+    addExh(f, rt, p, n = 1, why) { const o = p.merc || p; o.exh = Math.min(6, (o.exh || 0) + n); if (why) o.exhWhy = Object.assign(o.exhWhy || {}, { [why]: (o.exhWhy?.[why] || 0) + n }); G.fx(rt, { k: 'text', x: p.x, y: p.y - 1.1, s: `탈진 ${o.exh}`, col: '#c9a6ff', t: 1, sz: 0.85, pop: true }); if (o.exh >= 6 && p.merc && !p.dead) { p.hp = 0; p.dead = true; G.Story.die(f, rt, p); } },
+    clearExh(p, why) { const o = p.merc || p; const n = o.exhWhy?.[why] || 0; if (n) { o.exh = Math.max(0, (o.exh || 0) - n); delete o.exhWhy[why]; } },
+    // 움직이지 못함 (속박)
+    held: e => N.has(e, 'restrained') || N.has(e, 'grappled'),
+    // from = 건 동료: 새로 걸렸으면 연계기 계기 (G.Combo)
+    give(rt, e, k, t, from) {
+      if (e?.merc?.feast && (k === 'poisoned' || k === 'frightened')) return; // 영웅의 연회 (SRD): 중독 · 공포 면역
+      if (N.bsum(e, 'imm_' + k) > 0 || G.SrdX?.condBlock(e, k, from)) return;
+      if (e.merc && (k === 'frightened' || k === 'charmed')) {
+        if (G.Guild.skill(e.merc, 'ft_mindless') && N.bon(e, 'rage')) return;
+        const ft = k === 'frightened' ? 'ft_acourage' : 'ft_adev';
+        if (rt.party && rt.party.some(q => !q.dead && q.merc && G.Guild.skill(q.merc, ft) && Math.hypot(q.x - e.x, q.y - e.y) <= (G.Guild.skill(q.merc, 'ft_aexpand') ? 6 : 3))) return;
+      }
+      const had = N.has(e, k);
+      (e.cond = e.cond || {})[k] = Math.max(e.cond[k] || 0, now() + t);
+      if (COND[k]?.out && e.concK) G.Res.endConc(e); // 행동 불능이면 집중이 끊긴다 (SRD)
+      if (k === 'charmed' && from) e.charmBy = from; // 매혹 (SRD): 매혹한 쪽을 공격하지 못한다
+      if ((k === 'prone' || COND[k]?.out || k === 'grappled' || k === 'restrained') && G.Terrain && rt?.map) G.Terrain.fall(rt, e, k); // 날다가 넘어지거나 행동 불능 · 속도 0이면 떨어진다 (SRD Flying)
+      if (!had) G.fx(rt, { k: 'text', x: e.x, y: e.y - 1.1, s: COND[k].n, col: '#c9a6ff', t: 1, sz: 0.85, pop: true });
+    },
+    // 이점(+1) · 불리(−1): 공격자가 중독 · 공포 · 속박이면 불리, 상대가 기절 · 마비 · 넘어짐 · 속박이면 이점. 둘 다면 상쇄
+    adv(att, tg) {
+      const proneD = tg && att && N.has(tg, 'prone') ? Math.hypot(att.x - tg.x, att.y - tg.y) : 0; // 넘어진 상대: 곁에서 이점 · 멀리서 불리
+      let a = (tg && (N.any(tg, 'hitAdv') || N.bsum(tg, 'hitAdv') > 0)) || (att && N.bsum(att, 'adv') > 0) || (proneD && proneD <= 1.5) ? 1 : 0;
+      // 정밀한 사냥꾼: 내 표식 적에게 이점 · 종잡을 수 없음: 나를 노리는 공격에 이점 없음
+      if (att && tg && tg.hm && tg.hm.by === att && G.Fantasy.sk(att, 'sr_precise')) a = 1;
+      if (att && att.merc && att.sworn === tg && G.Trinket.has(att.merc, 'oath')) a = 1;
+      if (att && att.studied === tg) a = 1;
+      if (att?.merc && tg?.helped && tg.helpBy !== att) a = 1; // 사역마의 도움 · 돕기 (SRD Help: 동료의 다음 공격)
+      const rt = att && tg ? G.Fantasy.rt(G.S.w.fantasy) : null; // 무리 전술 · 붙은 적에게 쏘기 (G.Foe)
+      if (rt && att.kind === 'mon' && G.Foe.pack(rt, att, tg)) a = 1;
+      const sun = rt && att?.kind === 'mon' && G.Foe.has(att, 'sunsens') && G.Light?.sunAt(rt, att.x, att.y); // 햇빛 민감 (SRD): 햇빛 속에서 공격에 불리
+      if (att?.merc && tg && tg.mark > 0) a = 1; // 집중 표적 (SRD 돕기): 그 적을 치는 동료에게 이점
+      if (tg && tg.broke === 'rage') a = 1; // 이성을 잃고 날뛰는 사람 (SRD 무모한 공격): 그를 노리는 공격에 이점
+      if (att?.merc && G.Story.advOf(att, tg)) a = 1; // 결의 · 맹세의 적 · 다혈질의 첫 공격 · 이성을 잃음
+      const seeInv = att?.seeInv || att?.merc && (N.boon(att.merc, 'truesight') || G.Guild.skill(att.merc, 'iv_witch') || G.Trinket.has(att.merc, 'seeInv'));
+      if (att && N.invis(att)) a = 1; // 투명 (SRD): 내 공격 이점
+      if (tg && tg.merc && G.Fantasy.sk(tg, 'sr_elusive') && !N.out(tg)) a = 0; // 종잡을 수 없음 (SRD): 행동 불능이 아니면 나를 노리는 공격에 이점 없음
+      const d = (tg && N.invis(tg) && !seeInv) /* 투명 (SRD): 나를 노리는 공격 불리 */ || (att && att.grabBy && N.has(att, 'grappled') && att.grabBy !== tg) /* 붙잡힘 (SRD): 붙잡은 쪽이 아닌 상대에게 불리 */ || (tg && tg._dodge)  || proneD > 1.5 || N.farDis(att, tg) || (rt && G.Foe.pointBlank(rt, att)) || (att && N.atkDis(att)) || (tg && att && tg.bf && Object.values(tg.bf).some(b => b.until > now() && b.hitDisVs?.includes(String(att.stat?.ty || att.ty || '').split(' ')[0]))) /* 선악 보호 (SRD): 그 종류만 */ || (tg && (N.bsum(tg, 'hitDis') > (att?.merc && N.bon(tg, 'invis') && (N.boon(att.merc, 'truesight') || G.Guild.skill(att.merc, 'iv_witch')) ? 1 : 0) || (tg.merc && !tg.dispOff && G.Trinket.has(tg.merc, 'hitDis')) || (G.Turn.oa && tg.merc && (G.Trinket.has(tg.merc, 'oaDis') || G.Guild.skill(tg.merc, 'ft_escape'))))) ? 1 : 0;
+      const [la, ld] = G.Light ? G.Light.adv(att, tg) : [0, 0]; // 빛과 시야 (SRD): 보이지 않는 표적은 불리 · 보이지 않는 공격자는 이점
+      return (a || la ? 1 : 0) - (d || ld || sun ? 1 : 0);
+    },
+    // 반응 (SRD): 라운드에 하나 — 자기 차례 시작에 되찾는다 (G.Turn.next). 기회 공격 · 방어막 · 반격 주문 · 베는 말 · 직감 회피 · 받아넘기기 … 모두 이것 하나를 쓴다
+    react: e => !!e && !N.bon(e, 'slow') /* 감속 (SRD): 반응을 못 한다 */ && !(e.reacted && (G.RT.fantasy?.turn || now() - (e.reactT || 0) < G.Res_ROUND)) && !e.noReact && !N.out(e) && !(e.kind === 'mon' && (e.stun > 0 || e.stop > 0)),
+    useReact(e) { e.reacted = true; e.reactT = now(); }, /* 실시간 구간은 한 라운드 시간이 지나면 */
+    boon: (m, k) => !!(m && m.boons && m.boons.includes(k)),
+    d20(adv) { const a = 1 + U.rand(20); if (!adv) return a; const b = 1 + U.rand(20); return adv > 0 ? Math.max(a, b) : Math.min(a, b); },
+    atkDie(att, tg) { return N.d20(N.adv(att, tg)); }, // 공격 굴림의 d20만 먼저 (턴 엔진이 주사위부터 보여 줄 때 — 운명판 G.Dice가 감싼다)
+    melee: e => (e.longNow ? false : e.kind === 'mon' ? !G.Foe.ranged(e) : e.def ? N.rng0(e) < 2 || (e.merc && !CANTRIP[e.merc.cls] && G.SRD.weaponOf(e.merc).rng === 'melee') : e.kind === 'hero'),
+    // 명중 굴림: 1은 늘 빗나감 · 치명 범위(critAt 이상, 기본 20)는 늘 맞고 치명타 · 마비된 상대를 근접으로 맞히면 치명타
+    attack(att, tg, critAt = 20) {
+      const r = N.attackRoll(att, tg, critAt);
+      if (r.hit && N.bsum(att, 'minorD') && Math.hypot(att.x - tg.x, att.y - tg.y) <= 3.5) tg._minorBy = att; /* 하급 원소 소환 (SRD): 15피트 발산 안의 생물을 맞히면 */
+      // 턴제 전투가 말풍선에 적을 굴림 (G.Turn)
+      if (G.Turn.rec) G.Turn.note({ dark: G.Light && G.RT.fantasy?.map ? !G.Light.sees(G.RT.fantasy, att, tg) : false, att, tg, nat: r.nat, mod: r.tot != null ? r.tot - r.nat : N.hit(att) + N.bsum(att, 'hit'), /* 굴린 보너스 주사위(축복 · 영감 …)까지 */ ac: N.ac(tg), cov: G.Foe.cover(G.Fantasy.rt(G.S.w.fantasy), att, tg), adv: r.adv, hit: r.hit, crit: r.crit });
+      return r;
+    },
+    attackRollAgain(att, tg, critAt) { const m = att.merc, sp = m.sp; m.sp = 'human'; const r = N.attackRoll(att, tg, critAt); m.sp = sp; return r; },
+    attackRoll(att, tg, critAt) {
+      const adv = N.adv(att, tg); if (att.bf?.invis2 && !(att.merc && G.Guild.skill(att.merc, 'ft_supsneak'))) delete att.bf.invis2; /* 최상급 잠행 (SRD 도둑 9): 투명이 풀리지 않는다 */ /* 투명의 물약 (SRD): 공격하면 끝 (이점은 이번 공격까지) */ const nat = G.Turn.pre != null ? G.Turn.takePre() : N.d20(adv);
+      if (att.merc && tg.helped && tg.helpBy !== att) { tg.helped = false; tg.helpBy = null; }
+      if (nat === 1 && att.merc && G.Res.species(att.merc) === 'halfling' && G.Turn.pre == null) return N.attackRollAgain(att, tg, critAt); // 턴제: 먼저 굴린 눈으로 판정한다
+      if (nat === 1) { if (att.seek) { att.seek = false; att.seekUsed = true; return N.attackRollAgain(att, tg, critAt); } if (att.heroic) { att.heroic = false; return N.attackRollAgain(att, tg, critAt); } return { hit: false, crit: false, nat, adv }; }
+      if (nat >= critAt) return { hit: true, crit: true, nat, adv };
+      // 주사위 보너스는 굴린다 (SRD): 축복 · 영웅심 · 바드의 영감 · 신전의 축복 1d4 · 저주(액운) −1d4
+      att._hitDR = N.bdice(att, 'hitD'); att._blR = N.bless(att) ? dice(1, 4) : 0;
+      let tot = nat + N.hit(att) + N.bsum(att, 'hit') + att._hitDR + att._blR + (att.merc ? G.Story.hitDie(att) : 0) - 2 * N.exh(att) - (att.merc?.raisePen || 0); // 탈진 (SRD): 단계마다 −2 · 사자 소생 −4
+      // 베는 말 (SRD Cutting Words · 반응): 60피트 안 몬스터의 명중에서 바드의 영감 주사위를 깎는다 (영감 1회를 쓴다)
+      if (att.kind === 'mon' && tg.kind !== 'mon') tot -= N.cutting(att);
+      if (N.bon(tg, 'sunder') && att !== tg.sunderBy && att.merc) { tot += 5; delete tg.bf.sunder; } // 가르기: 다음 공격 +5
+      const ac = N.ac(tg) + G.Foe.cover(G.Fantasy.rt(G.S.w.fantasy), att, tg);
+      if (att.merc && tot < ac && G.Guild.skill(att.merc, 'sr_peerless') && G.Res.once(att.merc, 'peerless', Math.max(1, N.mod(N.ab(att.merc).cha)))) tot += 1 + U.rand(att.merc.lv >= 15 ? 12 : att.merc.lv >= 10 ? 10 : 8); // 비길 데 없는 기술: 영감 주사위
+      if (tot >= ac && tg.kind === 'mon' && tg.stat?.parry && tot < ac + tg.stat.parry && N.react(tg) && !((N.rng(att) || 0) >= 2) && G.Fantasy.sees(G.Fantasy.rt(G.S.w.fantasy).map, tg, att)) { N.useReact(tg); G.fx(G.Fantasy.rt(G.S.w.fantasy), { k: 'text', x: tg.x, y: tg.y - 1.1, s: '받아넘기기', col: '#d8c79a', t: 0.8, sz: 0.75 }); return { hit: false, crit: false, nat, adv }; } /* 받아넘기기 (SRD Parry · 반응): 근접 명중에 AC +n */
+      // 방어막 (SRD Shield · 반응): 맞을 공격이 5 이내로 넘었으면 AC +5 (다음 차례 시작까지)
+      if (tot >= ac && tot < ac + 5 && tg.merc && G.Fantasy.sk(tg, 'sr_shield') && N.react(tg) && G.Res.can(tg.merc, 'sr_shield', { slot: 1 })) {
+        G.Res.pay(tg.merc, 'sr_shield', { slot: 1 }); N.useReact(tg);
+        N.flip(tg, '방어막', '#c9a6ff');
+        N.buff(tg, 'shield', G.Res_ROUND, { ac: 5 }); /* 방어막 (SRD): 다음 차례 시작까지 */
+        G.fx(G.RT.fantasy, { k: 'ring', x: tg.x, y: tg.y, r: 0.9, t: 0.4, col: '#c9a6ff' });
+        return { hit: false, crit: false, nat, adv };
+      }
+      if (tot >= ac && tot < ac + 5 && tg.stat?.id === 'mage' && (tg.pm || 0) < 3 && !N.out(tg)) { // 메이지 방어막 (SRD Protective Magic)
+        tg.pm = (tg.pm || 0) + 1; N.flip(tg, '방어막', '#c9a6ff'); N.buff(tg, 'shield', G.Res_ROUND, { ac: 5 });
+        G.fx(G.RT.fantasy, { k: 'ring', x: tg.x, y: tg.y, r: 0.9, t: 0.4, col: '#c9a6ff' });
+        return { hit: false, crit: false, nat, adv };
+      }
+      let hit = tot >= ac;
+      // 바드의 영감 (SRD): D20 굴림에 실패하면 그 주사위를 굴려 더한다. 굴리면 사라진다
+      if (!hit && att.merc && N.bon(att, 'insp')) { const v = dice(1, att.bf.insp.inspD || 6); delete att.bf.insp; tot += v; if (tot >= ac) { hit = true; N.flip(att, '바드의 영감'); } }
+      if (att.merc) {
+        if (hit) att.studied = null;
+        else {
+          if (G.Guild.skill(att.merc, 'ft_studied')) att.studied = tg;
+          if (att.heroic) { att.heroic = false; return N.attackRollAgain(att, tg, critAt); } // 영웅적 전사
+          if (att.seek) { att.seek = false; att.seekUsed = true; return N.attackRollAgain(att, tg, critAt); } // 추적 주문
+          if (G.Guild.skill(att.merc, 'ft_stroke')) { if (G.Res.once(att.merc, 'ft_stroke')) { N.flip(att, '행운의 일격'); hit = true; } }
+        }
+      }
+      // 전투 기량의 은혜: 빗나간 공격 하나를 명중으로 (6초에 한 번)
+      if (!hit && att.merc && N.boon(att.merc, 'prowess') && !(att.prowT > now())) { att.prowT = now() + G.Res_ROUND; /* 다음 차례 시작까지 */ hit = N.flip(att, '전투 기량'); }
+      // 명중이 보정 덕분이었다면 그 이름을
+      else if (hit && att.merc) {
+        const pb = G.Guild.sum(att.merc, 'hitB'), ib = 0, bl = att._blR || 0;
+        if (pb && tot - pb < ac) N.flip(att, '비길 데 없는 기술');
+        else if (ib && tot - ib < ac) N.flip(att, '바드의 영감');
+        else if (bl && tot - bl < ac) N.flip(att, '신전의 축복');
+      }
+      return { hit, crit: hit && N.melee(att) && N.any(tg, 'meleeCrit'), nat, adv, tot: hit && tot < ac ? ac : tot };
+    },
+    cutting(att) {
+      const rt = G.RT.fantasy;
+      if (!rt) return 0;
+      const b = rt.allies.find(a => !a.dead && G.Fantasy.sk(a, 'sr_cutting') && N.react(a) && G.Res.can(a.merc, 'sr_insp', G.Skill.SK.sr_insp?.res) && Math.hypot(a.x - att.x, a.y - att.y) <= 6);
+      if (!b) return 0;
+      N.useReact(b); G.Res.pay(b.merc, 'sr_insp', G.Skill.SK.sr_insp?.res);
+      G.fx(rt, { k: 'text', x: att.x, y: att.y - 1, s: '베는 말', col: '#e0a040', t: 0.8, sz: 0.75 });
+      const L = G.MC ? G.MC.lvOf(b.merc, 'bard') : b.merc.lv; return 1 + U.rand(L >= 15 ? 12 : L >= 10 ? 10 : L >= 5 ? 8 : 6); /* 바드의 영감 주사위 (SRD): 바드 레벨 */
+    },
+    // 내성 굴림: 성공하면 true
+    // 내성: 성공하면 true. 우리 쪽은 기술 · 오라 · 영감 덕분에 결과가 뒤집혔을 때 그 이름을 띄운다 (DESIGN.md 66)
+    save(tg, k, dc) {
+      const ok = N.saveRoll(tg, k, dc);
+      if (G.Turn.rec) G.Turn.note({ sv: true, tg, k, dc, ok });
+      return ok;
+    },
+    saveRoll(tg, k, dc) {
+      if ((k === 'str' || k === 'dex') && N.any(tg, 'sdFail') && !(tg.stat?.legRes > (tg.legUsed || 0))) return false; // 기절 · 마비 · 의식 없음 · 석화 (SRD): 근력 · 민첩 내성 자동 실패
+      const aura = N.aura(tg), sd = N.bdice(tg, 'saveD'), insp = 0, b = N.saveBonus(tg, k) + N.bsum(tg, 'save') + sd + aura - 2 * N.exh(tg) - (tg.merc?.raisePen || 0) /* 탈진 (SRD) · 사자 소생 */, dis = (!tg.merc && (N.bon(tg, 'stagger') || G.Skill.height)) || (k === 'dex' && N.any(tg, 'dexDis')) /* 속박 (SRD): 민첩 내성 불리 */ || ((k === 'str' || k === 'con') && N.bon(tg, 'wither')) /* 시듦의 지팡이 */, r0 = N.d20(((k === 'str' && N.bon(tg, 'large')) /* 확대 (SRD): 근력 내성 이점 */ || (tg.merc && G.Foe.dtype === 'poison' && G.Trinket.has(tg.merc, 'poisonAdv')) /* 적응의 목걸이 */ || (N.bsum(tg, 'saveAdv') > 0) || (tg.merc && (G.Res.saveAdv(tg, k) || G.Trinket.has(tg.merc, 'magicRes') || (k === 'dex' && G.Guild.skill(tg.merc, 'ft_danger')) || ((k === 'wis' || k === 'cha') && G.Guild.skill(tg.merc, 'ft_counter')))) || tg.stat?.magicRes ? 1 : 0) - (dis ? 1 : 0)), r = k === 'str' && tg.merc && G.Guild.skill(tg.merc, 'ft_might') ? Math.max(r0, N.ab(tg.merc).str - b) : r0;
+      if (dis) { if (tg.bf?.stagger) delete tg.bf.stagger; if (G.Skill.height) { G.Skill.height = false; G.Skill.heightUsed = true; } }
+      if (r + b < dc && tg.stat?.legRes > (tg.legUsed || 0)) { tg.legUsed = (tg.legUsed || 0) + 1; N.flip(tg, '전설적 저항'); return true; } // SRD: 실패를 성공으로
+      if (r + b >= dc) {
+        if (tg.merc && aura && r + b - aura < dc) N.flip(tg, '보호의 오라');
+        else if (tg.merc && insp && r + b - insp < dc) N.flip(tg, '바드의 영감');
+        return true;
+      }
+      if (tg.merc && N.bon(tg, 'insp')) { const v = dice(1, tg.bf.insp.inspD || 6); delete tg.bf.insp; if (r + b + v >= dc) return N.flip(tg, '바드의 영감'); } // 바드의 영감 (SRD): 실패하면 굴려 더한다
+      if (!tg.merc) return false;
+      if (G.Res.saveRetry(tg) && N.d20(0) + b >= dc) return N.flip(tg, '인간의 끈기');
+      if (k === 'dex' && G.Trinket.has(tg.merc, 'evade') && G.Res.once(tg.merc, 'evade', 3)) { N.flip(tg, '회피의 반지'); return true; } // SRD는 새벽에 1d3 충전 → 전투당 3번
+      if (G.Trinket.has(tg.merc, 'reroll') && G.Res.once(tg.merc, 'luck')) { if (N.d20(0) + b >= dc) { N.flip(tg, '행운의 검'); return true; } }
+      // 파이터 불굴 (SRD Indomitable): 실패한 내성을 다시 + 파이터 레벨 (긴 휴식에 1 · 13레벨 2 · 17레벨 3)
+      if (G.Fantasy.sk(tg, 'sr_indom') && G.Res.can(tg.merc, 'sr_indom', { long: m => (m.lv >= 17 ? 3 : m.lv >= 13 ? 2 : 1) })) { G.Res.pay(tg.merc, 'sr_indom', { long: 1 }); if (N.d20(0) + b + tg.merc.lv >= dc) return N.flip(tg, '불굴'); return false; }
+      // 운명의 은혜 (SRD): 실패한 내성에 2d4 (선제권을 굴리거나 휴식하면 다시)
+      if (N.boon(tg.merc, 'fate') && !tg.fateUsed) { tg.fateUsed = true; if (r + b + 2 + U.rand(4) + U.rand(4) >= dc) return N.flip(tg, '운명의 은혜'); }
+      // 어둠의 행운 (SRD 악마 후원자): 실패한 내성에 d10 (긴 휴식에 매력 수정치번)
+      if (G.Fantasy.sk(tg, 'sr_luck') && G.Res.can(tg.merc, 'sr_luck', { long: m => Math.max(1, N.mod(N.ab(m).cha)) })) { G.Res.pay(tg.merc, 'sr_luck', { long: 1 }); if (r + b + 1 + U.rand(10) >= dc) return N.flip(tg, '어둠의 행운'); }
+      return false;
+    },
+    // 결과를 뒤집은 규칙의 이름을 머리 위에 (같은 사람은 1.2초에 하나). 늘 true — 성공한 판정에서 그대로 돌려준다
+    flip(e, s, col = '#ffe08a') {
+      const rt = G.RT.fantasy;
+      if (rt && !(e._flipT > now())) { e._flipT = now() + 1.2; G.fx(rt, { k: 'text', x: e.x, y: e.y - 1.4, s, col, t: 1.1, sz: 0.8, pop: true }); }
+      return true;
+    },
+    // 팔라딘 보호의 오라 (Aura of Protection): 3칸 안 동료의 내성 + 매력 수정치(최소 1)
+    aura(tg) {
+      const rt = G.RT.fantasy;
+      if (!rt || tg.kind === 'mon' || tg.kind === 'rival') return 0;
+      let v = 0;
+      for (const a of rt.allies) if (!a.dead && G.Fantasy.sk(a, 'sr_aura') && Math.hypot(a.x - tg.x, a.y - tg.y) <= 3) v = Math.max(v, Math.max(1, N.mod(N.ab(a.merc).cha)));
+      return v;
+    },
+    // 빗나감 표시: 피해 숫자 자리에 작은 회색
+    miss(rt, tg) { G.fx(rt, { k: 'text', x: tg.x, y: tg.y - 0.6, s: '빗나감', col: '#9aa0a8', t: 0.6, sz: 0.65 }); },
+
+    // ── 전투에 끼어드는 규칙 ──
+    // 우리가 거는 기절 · 정지 · 감전: 몬스터가 내성에 성공하면 걸리지 않는다
+    resists(m, k, from) {
+      const ab = INFLICT_SAVE[k];
+      if (!ab || !from || m.kind !== 'mon') return false;
+      return N.save(m, ab, N.dc(from));
+    },
+    // 몬스터가 우리를 맞혔다: 공격의 추가 효과 (F.hurtMember → G.Foe)
+    onHit(rt, mo, p) { G.Foe.onHit(rt, mo, p); },
+    // 선제권 (SRD 「Initiative」): 몬스터가 우리를 알아챌 때 민첩 판정 대결. 우리 지각(수동 10+)이 몬스터 은신(10 + 층/5)보다 낮으면 기습당해 불리.
+    // 이기면 그 몬스터가 1.5초 늦게 치고, 지면 바로 친다
+    initiative(rt, mo) {
+      const ms = (rt.party || rt.allies).filter(a => !a.dead && a.merc).map(a => a.merc);
+      // 경계 (출신 재주): 선제권에 숙련 보너스
+      const dexMs = ms.map(m => N.mod(N.ab(m).dex) + (G.Feat.has(m, 'alert') ? N.prof(m.lv) : 0)), ours = ms.length ? Math.max(...dexMs) : N.mod(HERO_AB.dex);
+      const per = N.best(ms, 'perception'), surprised = 10 + per.v < 10 + Math.floor(fl() / 5);
+      const feral = rt.allies.some(a => !a.dead && (G.Fantasy.sk(a, 'sr_feral') || (a.merc && G.Trinket.has(a.merc, 'init'))));
+      const win = mo.noted || N.d20((surprised ? -1 : 0) + (feral ? 1 : 0)) + ours >= N.d20(0) + Math.floor(fl() / 6) + (mo.boss ? 2 : 0);
+      mo.atkT = win ? 1.5 : 0;
+      if (win && rt.allies.length) { const a = rt.allies.find(q => q.merc && N.mod(N.ab(q.merc).dex) + (G.Feat.has(q.merc, 'alert') ? N.prof(q.merc.lv) : 0) === ours && !q.dead);  }
+    },
+    // 미믹 알아채기 (SRD Mimic: 지능(조사) DC 15). 깊을수록 +층/10
+    spotMimic(rt) {
+      const ms = rt.allies.filter(a => !a.dead && a.merc).map(a => a.merc), b = N.best(ms, 'investigation');
+      if (!b.m || N.d20(0) + b.v < 15 + Math.floor(fl() / 10)) return null;
+      return rt.allies.find(a => a.merc === b.m);
+    },
+    // 설득 (선술집 몸값): 명단에서 가장 잘하는 사람의 보정마다 2% 깎는다 (최대 20%)
+    haggle(f) { const b = N.best(f.mercs.filter(m => !(m.inj > 0)), 'persuasion'); return b.m ? 1 - U.clamp(0.02 * b.v, 0, 0.2) : 1; },
+  };
+  return N;
+})();

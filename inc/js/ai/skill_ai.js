@@ -1,0 +1,291 @@
+'use strict';
+// 자동 전투의 스킬 고르기 (유틸리티 AI, DESIGN.md 113): 차례마다 쓸 수 있는 스킬에 점수를 매겨 가장 높은 것을 쓴다.
+// 점수 단위: 기본 공격 한 번 = 1. 피해는 넘치는 몫을 뺀 값, 회복은 파티 체력의 몫 × 위급함.
+// 슬롯은 위협이 낮을수록 아낀다. 기본 공격보다 낮으면 행동에 쓰지 않는다.
+G.SkillAI = (() => {
+  const D = G.D, GD = () => G.Guild, SK = () => G.Skill.SK, H = () => G.Skill.H, DN = () => G.Dnd, F = () => G.Fantasy;
+  const byEn = {}; for (const id in G.SRD_SP) byEn[G.SRD_SP[id].en] = G.SRD_SP[id];
+  const meta = k => byEn[D.MSKILLS[k]?.en] || null;
+  const diceAvg = s => { if (!s) return 0; let m = /^(\d+)×(\d+)d(\d+)/.exec(s); if (m) return m[1] * m[2] * (+m[3] + 1) / 2; m = /^(\d+)d(\d+)/.exec(s); return m ? m[1] * (+m[2] + 1) / 2 : 0; };
+  const PARTY_ROUNDS = 3, HIT_P = 0.65, SAVE_FAIL = 0.6, SLOT_K = 0.4, HEAL_K = 12, COND_K = 3.5, BUFF_K = 1.5, SUMMON_K = 2, DEFAULT_K = 1;
+  const alive = x => (x.rt.party || x.rt.allies || []).filter(p => !p.dead && p.merc);
+  // ── 전술 판단 (2026-11-20): 숫자는 SRD DB(G.SRD_SP — 주사위 · 내성 · 범위 · 상태 이상 · 상향)에서 읽고, 여기엔 "그 효과가 전투에서 얼마나 값어치 있나"만 둔다 ──
+  // 값의 단위는 적 체력(게임 단위): 남은 라운드 동안 깎거나 막는 양. 집중은 깨질 수 있어 CONC를 곱한다.
+  // 막는 값 = 그 적의 라운드당 피해(SRD) × 막는 몫 × 라운드 → toE로 적 체력 단위. 묶인 적은 아군이 이점으로 더 친다(그 몫도 더한다)
+  const CONC = 0.8, SUM_HIT = 0.6, NEXT_K = 0.85; // 소환수의 명중은 운명판과 상관없이 대충
+  // ── 명중 · 내성 확률 (2026-11-20 — 예전엔 명중 65% · 내성 실패 60%로 고정): 실제 명중 보정 · AC · 이점/불리 · 주문 DC · 그 적의 내성으로.
+  // 운명판: 이번 라운드 그 사람의 d20은 판에 이미 보이는 눈이다 (js/game/fate.js — 공격 = 눈, 적의 내성 = 21 − 눈). 눈을 알면 맞나 안 맞나가 정해진다 —
+  // 눈이 낮은 라운드엔 굴림 없는 기술(마법 화살 · 축복 · 치유), 높은 라운드엔 큰 공격 주문. 다른 변수(엄폐 · 보너스 주사위)가 있어 1 · 0 대신 0.95 · 0.05
+  const P20 = need => Math.max(0.05, Math.min(0.95, (21 - need) / 20)); // d20 ≥ need (1은 빗나감 · 20은 명중)
+  let FORCE = null; // 다음 라운드 값을 잴 때 그 눈으로 바꿔 끼운다 (score의 내다보기)
+  const fateV = a => { if (FORCE && FORCE.a === a) return FORCE.v; const Dc = G.Dice, S = Dc?.st; if (!S || !S.ready || !a?.merc) return 0; const r = S.die.has(a) ? S.die.get(a) : S.used.has(a) ? null : Dc.peek(a); return r && !r.special ? r.value : 0; };
+  // 다음 라운드의 눈: 판에 보이는 그 사람 줄의 다음 칸 (이번 라운드 칸을 이미 썼으면 지금 칸). 줄이 끝나 새로 굴리게 되면 모른다 (0)
+  const fateNext = a => { if (FORCE) return 0; const Dc = G.Dice, S = Dc?.st, L = S && S.ready && a?.merc ? Dc.line(a) : null; if (!L) return 0; const i = S.die.has(a) || S.used.has(a) ? L.at : L.at + 1, r = L.cells[i]; return i < L.cells.length && r && !r.special ? r.value : 0; };
+  function pHit(a, o, fate = true) {
+    const hb = DN().hit(a), ac = DN().ac(o), adv = DN().adv ? DN().adv(a, o) : 0, nat = P20(ac - hb), v = fate ? fateV(a) : 0;
+    if (v) { const h = v === 20 || (v !== 1 && v + hb >= ac); return adv > 0 ? (h ? 0.95 : nat) : adv < 0 ? (h ? nat : 0.05) : h ? 0.95 : 0.05; }
+    return adv > 0 ? 1 - (1 - nat) ** 2 : adv < 0 ? nat * nat : nat;
+  }
+  function pFail(a, o, ab) { const sv = o.stat?.save?.[ab] ?? 0, dc = DN().dc ? DN().dc(a) : 13, v = fateV(a); if (v) return 21 - v + sv < dc ? 0.95 : 0.05; return Math.max(0.05, Math.min(0.95, (dc - 1 - sv) / 20)); } // 내성에는 1 · 20 자동이 없다 (SRD)
+  // 기본 공격이 맞을 확률: 내성 소마법(신성한 불꽃 · 잔인한 조롱)이면 내성 실패
+  // 피해 · 치유 주사위도 운명판에서 (2026-11-20, 사용자: 「해당 라운드에 명중률이나 데미지를 계산할수 있으니까 그걸 기반으로 판단해야」): 이번 라운드 눈을 알면 dN = 올림(눈 × N ÷ 20) (js/rules/dnd.js),
+  // 모르면 평균. 여러 라운드 이어지는 것(자리 피해 · 헥스)은 이번 라운드만 그 눈, 다음 라운드부터 평균. 눈 20이면 그 라운드 첫 공격은 치명타 (주사위 두 배)
+  const face = (a, d) => { const v = fateV(a); return v ? Math.max(1, Math.ceil(v * d / 20)) : (d + 1) / 2; };
+  const rollAvg = (a, s) => { if (!s) return 0; let m = /^(\d+)×(\d+)d(\d+)/.exec(s); if (m) return m[1] * m[2] * face(a, +m[3]); m = /^(\d+)d(\d+)/.exec(s); return m ? m[1] * face(a, +m[2]) : 0; };
+  const crit2 = a => (fateV(a) === 20 && !G.Dice?.st?.crit?.has(a) ? 2 : 1);
+  const faceNext = (a, d) => { const v = fateNext(a); return v ? Math.max(1, Math.ceil(v * d / 20)) : (d + 1) / 2; };
+  const over = (C, d) => (face(C.a, d) + (C.R >= 2 ? faceNext(C.a, d) - (d + 1) / 2 : 0) + (d + 1) / 2 * Math.max(0, C.R - 1)) / Math.max(1, C.R); // 이번 라운드 눈 + 다음 라운드 눈(보이면) + 그 뒤 평균 — 라운드당
+  const pBasic = (a, o) => (a.def?.saveAtk && DN().cantripAtk?.(a) ? pFail(a, o, a.def.saveAtk) : pHit(a, o));
+  // 상태 이상 하나의 무게 (SRD 상태 규칙): [그 적이 못 하는 몫, 그 적을 치는 아군이 얻는 몫]. 공포 · 매혹 · 중독은 공격하는 쪽에 이점을 주지 않는다 — 이점은 마비 · 기절 · 속박 · 실명 · 넘어짐 · 빛남
+  // 마비 · 의식 없음은 근접 공격이 치명타라 아군 몫이 크다
+  const COND_W = { paralyzed: [1, 0.6], unconscious: [1, 0.6], stunned: [1, 0.3], petrified: [1, 0.3], incapacitated: [1, 0], restrained: [0.3, 0.3], frightened: [0.5, 0], charmed: [0.4, 0], blinded: [0.4, 0.3], prone: [0.2, 0.3], poisoned: [0.3, 0], grappled: [0.1, 0], deafened: [0.05, 0], outlined: [0, 0.3], sapped: [0.15, 0], slowed: [0.15, 0] }; // sapped = 액운 (공격 · 내성 −1d4) · slowed = 감속의 이동 절반
+  const condW = cs => [Math.max(0, ...(cs || []).map(c => (COND_W[c] || [0.3, 0])[0])), Math.max(0, ...(cs || []).map(c => (COND_W[c] || [0.3, 0])[1]))];
+  const hits = C => { const a = C.a, mel = DN().melee(a); return (DN().ebOf(a.merc) && !mel ? DN().tier(a) : DN().caster(a) && !mel ? 1 : DN().attacks(a)) * C.ph; }; // 이 사람이 라운드에 맞히는 횟수 (헥스 · 표식이 붙는 수)
+  // 그 적을 묶는 값: 그 적이 못 친 몫 + 아군이 이점으로 더 친 몫 (w = [못 하는 몫, 아군 몫]). 파티 단위 (2026-11-20 4단계):
+  //  - 이미 행동 불능인 적에게 또 거는 값은 없다 (다른 아군이 먼저 묶었다)
+  //  - 아군 몫(이점 · 마비의 근접 치명타 · 넘어짐)은 근접 아군이 그 적 곁에 있어야 다 산다 — 없으면 절반 (원거리도 이점은 받지만 치명타 · 넘어짐의 이점은 근접만)
+  //  - 한 라운드짜리(기절 타격 · 명령)는 이번 라운드에 내 뒤로 차례가 남은 아군만 그 이점을 쓴다
+  const DOWN = ['paralyzed', 'stunned', 'unconscious', 'petrified', 'incapacitated'];
+  const dis = (C, o, w, dur) => {
+    if (DOWN.some(c => DN().has(o, c))) return 0; const t = Math.min(C.R, dur);
+    const melee = C.ps.some(p => p !== C.a && !p.dead && !(DN().caster(p) && !DN().melee(p)) && Math.hypot(p.x - o.x, p.y - o.y) <= 2.5) ? 1 : 0.5, soon = dur <= 1 && C.after ? C.after : 1;
+    return (C.toE(C.fDPR(o)) * w[0] + C.pDPR * C.share(o) * w[1] * melee * soon) * t;
+  };
+  const repeat = (C, o, ab) => 1 / Math.max(0.15, 1 - C.pf(o, ab)); // 차례마다 다시 내성 — 묶여 있는 기대 라운드
+  const typeOk = { 'Hold Person': o => /humanoid/.test(o.stat?.ty || o.ty || ''), 'Hold Monster': o => !/undead/.test(o.stat?.ty || o.ty || '') }; // 대상 종류가 정해진 주문 (SRD 본문)
+  const incoming = C => C.all.reduce((s, o) => s + C.fDPR(o), 0) / Math.max(1, C.ps.length); // 아군 한 사람이 라운드에 받는 피해 (SRD)
+  // DB에서 읽는 값: 그 슬롯으로 쓰면 주사위 · 대상이 는다 (upR)
+  const dbDice = (o, C, res, avgOnly, next) => { if (!o.dice) return 0; const up = C.up(res, o.lv), n = o.dice[0] + (o.upR?.d ? o.upR.d[0] * up : 0); return n * (next ? faceNext(C.a, o.dice[1]) : avgOnly ? (o.dice[1] + 1) / 2 : face(C.a, o.dice[1])) + (o.dice[2] || 0); }; // 이번 라운드 (운명판의 눈) · avgOnly = 다음 라운드부터
+  // 쓰러뜨리는 값: 운명판으로 피해가 정해져 있으니 "이번에 확실히 쓰러진다"를 안다 — 그 적의 남은 공격이 사라진다 (그 적의 라운드당 피해 × 두 라운드쯤, 적 체력 단위)
+  // sure = 쓰러뜨리는 피해(내성 절반 주문이면 버텨도 남는 몫), p = 맞을 확률 — 거의 확실할 때만
+  const killV = (C, q, sure, p) => (p >= 0.9 && sure >= q.hp ? C.toE(C.fDPR(q)) * Math.min(C.R, 2) : 0);
+  // 나에게 들어오는 피해 (붙어 있는 적의 몫, 없으면 평균의 절반) · 치유의 값
+  const atkAll = C => AI.basic(C.a, C.x); // 공격 행동 전체 (추가 공격까지 · 맞힐 확률 · 맞히면 붙는 표식 · 강타까지) — 무예 기술은 여기에 효과가 하나 붙는다. 기본 공격과 같은 값으로 (2026-11-21: 붙는 몫이 빠져 표식 든 레인저가 숙련 기술을 안 썼다)
+  const onMe = C => { const adj = C.near(1.8); return adj.length ? adj.reduce((s, o) => s + C.fDPR(o), 0) : incoming(C) * 0.5; };
+  // 치유 amt(SRD)를 가장 다친 사람(spread면 여럿에게 나눠)에게: 채운 몫(SRD) → 적 체력 단위, 위급할수록 크게. 쓰러져 죽어 가는 사람을 일으키면 그 사람의 공격이 돌아온다
+  function healV(C, who, amt, spread) {
+    const L = who.filter(p => !p.dead && p.hp < p.max).sort((p, q) => p.hp / p.max - q.hp / q.max); if (!L.length) return 0;
+    let left = amt, got = 0, low = L[0].hp / L[0].max; for (const p of spread ? L : L.slice(0, 1)) { const miss = (p.max - Math.max(0, p.hp)) * Math.max(1, DN().srdHP(p.merc)) / p.max, h = Math.min(miss, left); got += h; left -= h; if (left <= 0) break; }
+    const dying = (C.x.rt.party || []).some(p => p.dying && who.includes(p));
+    return C.toE(got) * (low < 0.25 ? 3 : low < 0.5 ? 1.5 : 0.4) + (dying ? C.pDPR / Math.max(1, C.ps.length) * C.R : 0);
+  }
+  // ── 효과표로 매기는 값 (2026-11-20, 사용자: 「같은 직업이라도 스킬 구성이 달라질텐데 … universe한 방식으로」) ──
+  // 효과는 기술 코드를 돌려 기록한 표(G.SkillEff — test/gen_skill_eff.js)에서 읽고, 여기엔 효과 종류마다 식 하나씩만 둔다. 기술마다 따로 계산하지 않는다
+  const atkN = t => (DN().ebOf(t.merc) && !DN().melee(t) ? DN().tier(t) : DN().caster(t) && !DN().melee(t) ? 1 : DN().attacks(t));
+  const onT = (C, t) => { if (t === C.a) return onMe(C); const adj = C.foes.filter(o => Math.hypot(o.x - t.x, o.y - t.y) <= 1.8); return adj.length ? adj.reduce((s, o) => s + C.fDPR(o), 0) : incoming(C) * 0.5; };
+  const pOf = (C, t) => (t === C.a ? C.ph : C.allyP(t));
+  // 이점이 기습을 여는 몫 (SRD 로그: 이점이 있거나 표적 곁에 동료가 있을 때) — 엔진의 기습 판정을 이점 있음/없음으로 두 번 물어 그 차이만 (판정이 남기는 '이번 턴에 썼다'는 되돌린다)
+  const sneakGain = (C, t, p) => { if (!t.merc) return 0; const o = C.foes.slice().sort((a, b) => Math.hypot(a.x - t.x, a.y - t.y) - Math.hypot(b.x - t.x, b.y - t.y))[0]; if (!o) return 0; const s0 = t.sneakN; let n1 = 0, n0 = 0; try { n1 = DN().sneak(C.x.rt, t, o, 1); t.sneakN = s0; n0 = DN().sneak(C.x.rt, t, o, 0); } finally { t.sneakN = s0; } return Math.max(0, n1 - n0) * 3.5 * C.g * Math.min(0.95, 1 - (1 - p) * (1 - p)); };
+  // 버프 속성 하나가 그 사람에게 라운드당 주는 값 (명중 · 피해 · 이점 · 추가 공격 · AC · 맞는 쪽 불리/이점 · 영감)
+  const PROP = {
+    hit: (C, t, v) => C.dprOf(t) * (v / 20) / Math.max(0.05, pOf(C, t)),
+    hitD: (C, t, v) => C.dprOf(t) * ((v + 1) / 2 / 20) / Math.max(0.05, pOf(C, t)),
+    inspD: (C, t, v) => C.dprOf(t) * ((v + 1) / 2 / 20) / Math.max(0.05, pOf(C, t)),
+    dmgB: (C, t, v) => v * C.g * atkN(t) * pOf(C, t),
+    adv: (C, t) => { const p = pOf(C, t); return C.dprOf(t) * (Math.min(0.95, 1 - (1 - p) * (1 - p)) - p) / Math.max(0.05, p) + sneakGain(C, t, p); },
+    extraAtk: (C, t, v) => C.dprOf(t) / Math.max(1, atkN(t)) * v, // 공격 하나의 몫 (주문 직업은 소마법 한 번)
+    ac: (C, t, v) => C.toE(onT(C, t) * 0.05 * v),
+    hitDis: (C, t) => C.toE(onT(C, t) * 0.4),
+    hitDisVs: (C, t, v) => { const ok = C.all.filter(o => (v || []).includes(String(o.stat?.ty || o.ty || '').split(' ')[0])), share = ok.reduce((s, o) => s + C.fDPR(o), 0) / Math.max(1e-6, C.all.reduce((s, o) => s + C.fDPR(o), 0)); return C.toE(onT(C, t) * 0.4) * share; }, // 그 종류의 적이 치는 몫만
+    hitAdv: (C, t) => -C.toE(onT(C, t) * 0.25 * (t.bf?.rage ? 0.5 : 1)),
+    hideDC: (C, t) => PROP.adv(C, t) + C.toE(onT(C, t) * 0.2), // 숨음: 다음 공격에 이점 · 그동안 나를 치는 공격에 불리 (치면 드러난다)
+  };
+  const ONCE = new Set(['inspD', 'hideDC']); // 한 번 쓰고 끝나는 것 (지속 라운드와 상관없이 한 라운드 몫)
+  // 버프 이름에 붙은 엔진 규칙: 격노 = 베기 · 찌르기 · 때리기 저항 · 생명의 오라 = 쓰러진 아군이 차례마다 일어난다 (그 사람의 공격이 돌아온다)
+  const KEY = { rage: (C, t) => C.toE(onT(C, t) * 0.5), 'sp_Aura of Life': (C, t) => (t.dying ? C.dprOf(t) : C.toE(onT(C, t) * 0.03)) };
+  // 적에게 건 버프 (감속의 AC −2): 아군이 그 적을 더 맞힌다
+  const FOE = { ac: (C, o, v) => (v < 0 ? C.pDPR * C.share(o) * (-v * 0.05) / HIT_P : 0) };
+  const diceList = s => String(s || '').split('+').map(x => /^(\d+)d(\d+)$/.exec(x.trim())).filter(Boolean).map(m => [+m[1], +m[2]]);
+  // own = 이 기술의 피해 · 상태 이상을 SRD DB나 수치표가 세지 않는다 (직업 기능 · DB에 효과가 없는 주문) — 그때만 효과표의 cond · dmg · 장판을 센다
+  function effValue(E, C, S, o, own) {
+    let v = 0; const cc = S.conc ? CONC : 1, R = C.R, ab0 = (E.cond || []).find(q => q.ab)?.ab;
+    const foeBuf = new Map();
+    // 버프: 같은 버프를 여러 사람에게 — 아군 몫은 그 효과가 가장 값진 사람부터
+    const used = new Map();
+    for (const b of E.buf || []) {
+      if (b.to === 'foe') { // 적에게 건 버프: 아직 그것이 없는 적부터 (내성이 있으면 실패할 몫만)
+        const taken = foeBuf.get(b.k) || new Set(), o2 = C.foes.filter(q => !taken.has(q) && !DN().bon(q, b.k)).sort((p, q) => q.hp - p.hp)[0]; if (!o2) continue; taken.add(o2); foeBuf.set(b.k, taken);
+        // 그 적이 덜 치게 되는 몫은 엔진에 직접 묻는다: 버프를 잠깐 걸고 그 적의 라운드당 피해(G.Foe.attacks)를 다시 잰다 (감속의 공격 하나 · 앞으로 생길 약화도 그대로)
+        const d0 = C.fDPR(o2), bf = o2.bf || (o2.bf = {}), had = bf[b.k]; bf[b.k] = Object.assign({ until: G.S.runTime + 1e9 }, b.p); let d1 = d0; try { d1 = C.fDPR(o2); } finally { if (had) bf[b.k] = had; else delete bf[b.k]; }
+        let w = C.toE(Math.max(0, d0 - d1)); for (const q in b.p) if (FOE[q]) w += FOE[q](C, o2, b.p[q]);
+        v += w * Math.min(R, b.r) * cc * (ab0 ? C.pf(o2, ab0) : 1); continue; }
+      const keys = Object.keys(b.p).filter(q => PROP[q]), off = keys.some(q => /hit|dmg|adv|extra|insp/.test(q));
+      let t = C.a; if (b.to === 'ally') { const taken = used.get(b.k) || new Set(), cand = C.ps.filter(p => !taken.has(p) && !DN().bon(p, b.k)).sort((p, q) => (off ? C.dprOf(q) - C.dprOf(p) : onT(C, q) - onT(C, p))); t = cand[0]; if (!t) continue; taken.add(t); used.set(b.k, taken); } else (used.get(b.k) || used.set(b.k, new Set()).get(b.k)).add(t);
+      if (b.to === 'self' && DN().bon(t, b.k)) continue; // 이미 걸려 있다 (같은 효과는 겹치지 않는다)
+      const rounds = Math.min(R, Math.max(1, b.r));
+      for (const q of keys) v += PROP[q](C, t, b.p[q]) * (ONCE.has(q) ? 1 : rounds) * cc;
+      if (KEY[b.k]) v += KEY[b.k](C, t) * rounds * cc;
+    }
+    // 치유 (치유 주문이 아닌 기능 — 재기 · 안수 · 생명 보존): 자기만 / 한 사람 / 여럿에게 나눠
+    if (E.heal && !(S.heal || o?.heal)) v += healV(C, E.healSelf ? [C.a] : C.ps, E.heal, (E.healN || 1) > 1);
+    // 덧붙은 공격 (행동 쇄도): 공격 행동 한 번 더
+    if (E.atk) v += E.atk * F().allyAtk(C.x.f, C.a) * atkN(C.a) * C.ph;
+    // 공격에 붙는 주사위 (헥스 · 표식): 이번 라운드는 그 눈, 이어지면 다음 라운드부터 평균
+    if (E.hit) { const L = diceList(E.hit), now = L.reduce((s, [n, d]) => s + n * face(C.a, d), 0), avg = L.reduce((s, [n, d]) => s + n * (d + 1) / 2, 0); v += (S.conc ? (now + avg * (R - 1)) * CONC : now) * C.g * C.ph; }
+    // 라운드마다 굴리는 주사위 (영적 무기 · 자리 피해): 범위면 한 대상 몫 × 범위 안의 적
+    if (E.tick) { const L = diceList(E.tick), per = o?.area ? (L[0] ? L[0][0] * (L[0][1] + 1) / 2 : 0) : L.reduce((s, [n, d]) => s + n * (d + 1) / 2, 0), tg = o?.area ? (o.rng === 0 ? C.near(o.area) : AI.best(C.x, o.area)) : C.foes.slice(0, 1);
+      v += tg.reduce((s, q) => s + per * C.g * (o?.save ? C.pf(q, o.save) + (o.half ? (1 - C.pf(q, o.save)) * 0.5 : 0) : o?.atk ? pHit(C.a, q) : 1), 0) * R * cc; }
+    // 불러낸 생물: 그 공격 × 라운드
+    if (E.sum) v += E.sum.n * E.sum.d * C.g * SUM_HIT * R * cc;
+    // 분신: 나를 치는 공격을 분신이 받아 준다 (분신 수만큼의 라운드) · 임시 체력: 받을 피해만큼까지
+    if (E.img) v += C.toE(onMe(C) * 0.6) * Math.min(R, E.img);
+    if (E.thp) v += C.toE(Math.min(E.thp, onMe(C) * R));
+    // 이동: 붙어 있는 적에게서 빠져나온다 (주문 직업 · 다친 사람일수록) / 멀리 있는 적에게 붙는다 (근접 직업이 이번 차례에 칠 수 있게)
+    const mv = [].concat(E.move || []);
+    if (mv.includes('away') && C.near(1.8).length) v += DN().melee(C.a) && C.a.hp > C.a.max * 0.5 ? 0 : C.toE(onMe(C)); // 멀쩡한 근접은 빠질 까닭이 없다
+    if (mv.includes('to') && DN().melee(C.a) && !C.near(1.8).length) v += C.dprOf(C.a) * 0.5;
+    // 어둠: 안의 적은 못 본다 — 나는 악마의 시야로 보면 내 공격에 이점 + 그 적의 공격에 불리 (아군도 못 보니 아군 몫은 없다)
+    if (E.dark && G.Opt?.has(C.a, 'iv_dsight')) v += (PROP.adv(C, C.a) + AI.best(C.x, E.dark).reduce((s, q) => s + C.toE(C.fDPR(q)) * 0.3, 0)) * R * cc;
+    if (!own) return v;
+    // ── 여기부터는 DB · 수치표가 세지 않는 기술만 ──
+    // 무기 공격에 붙는 기술 (기절 타격 · 연타 · 잔혹한 일격 · 교활한 일격): 그 공격의 피해 × 맞을 확률 — 행동 쇄도처럼 공격 행동을 더 하는 것은 위에서 셌다
+    const reach = E.wpn ? C.foes.filter(q => Math.hypot(q.x - C.a.x, q.y - C.a.y) <= Math.max(1.8, DN().rng(C.a) || 0) + 0.3) : C.foes, tgt = (reach.length ? reach : C.foes)[0];
+    if (E.wpn && !E.atk && !S.bonus) v += atkAll(C); // 행동으로 쓰는 무기 기술은 공격 행동 그대로 + 더 준 몫 (E.dmg는 보통 공격보다 더 준 피해)
+    if (E.dmg && !E.atk && tgt) v += E.dmg * C.g * (E.wpn ? pBasic(C.a, tgt) * crit2(C.a) : 1);
+    // 상태 이상: 한 대상이면 가장 값진 적, 여럿이면 값 순으로 n까지. 무기에 붙은 것은 맞아야 걸린다 · 언데드에게만 쓰이는 것은 언데드만
+    if (E.cond && !E.atk) {
+      const cs = E.cond.map(q => q.c), w = condW(cs), n = Math.max(...E.cond.map(q => q.n || 1)), r = Math.max(...E.cond.map(q => q.r || 1)), only = E.only === 'undead' ? q => DN().undead(q) || /undead/.test(q.stat?.ty || '') : () => true;
+      const per = q => (cs.every(c => DN().has(q, c)) ? 0 : dis(C, q, w, S.conc ? (ab0 ? repeat(C, q, ab0) : R) : r) * (ab0 ? C.pf(q, ab0) : 1) * (E.wpn ? pBasic(C.a, q) : 1));
+      v += (n > 1 ? C.foes : reach).filter(only).map(per).sort((p, q) => q - p).slice(0, n).reduce((s, x) => s + x, 0) * (S.conc ? CONC : 1);
+    }
+    // 자리 장판 (주사위가 DB에 없을 때): 범위 안의 적 × 주사위 × 라운드
+    if (E.field) v += AI.best(C.x, E.field.r).length * diceAvg(E.field.d) * C.g * R * cc;
+    return v;
+  }
+  // DB만으로 매기는 값: 피해(한 번 · 자리에 깔리면 라운드마다) + 상태 이상(묶는 값). 집중 주문은 차례마다 다시 내성을 굴린다고 본다
+  function fromDB(o, C, res, noDice) {
+    const d = noDice ? 0 : dbDice(o, C, res), dA = noDice ? 0 : dbDice(o, C, res, true), dN = noDice ? 0 : dbDice(o, C, res, false, true), w = condW(o.conds), fct = w[0] + w[1], extra = o.upR?.n ? C.up(res, o.lv) : 0, ok = typeOk[o.en] || (() => true);
+    const zone = o.conc && o.area && d > 0, keep = o.conc && !o.area && d > 0; // 자리 피해 (영혼 수호자 · 월광) · 한 대상에 이어지는 피해 (흡혈의 손길 · 금속 달구기)
+    const per = q => { const p = o.save ? C.pf(q, o.save) : o.atk ? pHit(C.a, q) : 1, once = !zone && !keep, dmg = C.g * (p + (o.half ? (1 - p) * 0.5 : 0)) * (zone ? (d + (C.R >= 2 ? dN + dA * (C.R - 2) : 0)) * CONC : keep ? (d + (C.R >= 2 ? dN + dA * (C.R - 2) : 0)) * CONC * 0.6 : d * (o.atk ? crit2(C.a) : 1)), raw = d * C.g * (o.atk ? crit2(C.a) : 1), hold = fct && ok(q) && !(o.conds || []).every(c => DN().has(q, c)) /* 이미 그 상태다 */ ? dis(C, q, w, o.conc ? (o.save ? repeat(C, q, o.save) : C.R) : 1) * (o.save ? C.pf(q, o.save) : HIT_P) : 0; return (once ? Math.min(q.hp, dmg) + killV(C, q, raw * (o.half && o.save ? 0.5 : 1), o.half && o.save ? 1 : p) : dmg) + hold; };
+    const L = o.area ? (o.rng === 0 ? C.near(o.area) : AI.best(C.x, o.area)) : C.foes;
+    return o.area ? L.reduce((s, q) => s + per(q), 0) : L.map(per).sort((p, q) => q - p).slice(0, 1 + extra).reduce((s, v) => s + v, 0);
+  }
+  const AI = {
+    // 위협: 파티가 이 전투를 끝내는 데 드는 라운드 ÷ 3, 체력이 낮거나 보스면 더 높다
+    threat(a, x) {
+      const foes = x.rt.mons.filter(o => o.hp > 0 && (o.aggro || x.seen.includes(o))), ps = alive(x); if (!foes.length || !ps.length) return 0;
+      const hp = foes.reduce((s, o) => s + o.hp, 0), dpr = Math.max(1, ps.reduce((s, p) => s + F().allyAtk(x.f, p) * DN().attacks(p) * 0.65, 0)), hpK = ps.reduce((s, p) => s + p.hp / p.max, 0) / ps.length;
+      return Math.max(0, hp / dpr / PARTY_ROUNDS) + (1 - hpK) + (foes.some(o => o.boss) ? 0.5 : 0);
+    },
+    // 범위 안에 가장 많이 잡히는 적
+    best(x, r) { let top = []; for (const o of x.seen) { const q = x.seen.filter(t => Math.hypot(t.x - o.x, t.y - o.y) <= r); if (q.length > top.length) top = q; } return top; },
+    // 기본 공격 한 번의 피해 (넘치는 몫은 뺀다)
+    // 워락의 기본 공격은 섬뜩한 폭발 — 광선이 단계만큼 나간다 (근접 계약 무기가 아니면). 한 줄기로 세면 다른 소마법이 더 좋아 보여 폭발을 안 쓴다
+    basic(a, x) { const t = x.seen[0]; if (!t) return 1; const n = !DN().caster(a) ? DN().attacks(a) : DN().ebOf(a.merc) ? (DN().melee(a) ? DN().attacks(a) : DN().tier(a)) : DN().tier(a) * DN().attacks(a); const p = pBasic(a, t), w = DN().weapon(a) || { n: 1, d: 6, b: 0 }, avgW = w.n * (w.d + 1) / 2 + (w.b || 0), fw = w.n * face(a, w.d), k = avgW > 0 ? (fw + (w.b || 0)) / avgW : 1, cr = crit2(a) > 1 ? fw / Math.max(1, avgW) : 0; // 무기 주사위도 그 눈 · 눈 20이면 첫 공격 치명타
+      const raw = F().allyAtk(x.f, a) * (n * k + cr), rd = AI.rider(a, x, n, 1); // 기본 공격(+ 강타)으로 확실히 쓰러뜨리면 그 값 — 강타 팔라딘은 그 슬롯을 강타에
+      return Math.max(1, Math.min(t.hp, raw * p + rd * (fateV(a) ? p : 1 - Math.pow(1 - p, n))) + (p >= 0.9 && raw + rd >= t.hp ? killV(AI.ctx(a, x), t, raw + rd, p) : 0)); },
+    // 무기로 맞히면 붙는 기술(신성 강타 · 섬뜩한 강타 · 작열 강타): 그 슬롯을 주문에 쓰면 이것을 잃는다 — 무기 공격의 값에 더한다 (근접 팔라딘이 화염구보다 강타를 고르게)
+    rider(a, x, n, p = 0.65) { if (!a.merc || a.slotUsed || (DN().caster(a) && !DN().melee(a))) return 0; let best = 0; for (const k of G.Guild.active(a.merc)) { const S = SK()[k]; if (!S?.rider || !G.Res.can(a.merc, k, S.res)) continue; const num = G.SkillNum_at?.(k, a.merc.cls, a.merc.lv); best = Math.max(best, (rollAvg(a, num?.d) || 9) * crit2(a) * (H().G0 ? H().G0(x, a) : 1)); } return best * (fateV(a) ? p : 1 - Math.pow(1 - p, n)); }, // 운명판: 그 라운드 공격은 모두 같은 눈 — 하나가 맞으면 다 맞는다
+    // 전술 판단의 재료 (그 차례 · 그 기술의 사거리 안 적 x.seen): 남은 라운드 R · 아군 · 적의 라운드당 피해 · 내성 실패 확률
+    ctx(a, x) {
+      const ps = alive(x), foes = x.seen.filter(o => o.hp > 0), all = x.rt.mons.filter(o => o.hp > 0 && (o.aggro || x.seen.includes(o))), g = H().G0 ? H().G0(x, a) : 1;
+      const acs = all.map(o => DN().ac(o)), acF = acs.length ? acs.reduce((s, v) => s + v, 0) / acs.length : 13, allyP = p => P20(acF - DN().hit(p)); // 아군의 명중 (운명판 눈은 그 사람 것이라 아군 값엔 쓰지 않는다)
+      const dprOf = p => F().allyAtk(x.f, p) * (!DN().caster(p) ? DN().attacks(p) : DN().ebOf(p.merc) && !DN().melee(p) ? DN().tier(p) : DN().caster(p) ? DN().tier(p) : 1) * allyP(p);
+      const pDPR = Math.max(1, ps.reduce((s, p) => s + dprOf(p), 0)), eHP = Math.max(1, all.reduce((s, o) => s + o.hp, 0));
+      const pHP = Math.max(1, ps.reduce((s, p) => s + Math.max(1, DN().srdHP(p.merc)) * Math.max(0, p.hp) / p.max, 0)); // 우리 체력 (SRD 단위 — 적의 SRD 주사위와 견준다)
+      const acP = ps.length ? ps.reduce((s, p) => s + DN().ac(p), 0) / ps.length : 15, fDPR = o => { let d = 0; try { for (const q of G.Foe.attacks(o) || []) d += ((q.n || 1) * ((q.d || 4) + 1) / 2 + (q.b || 0)) * P20(acP - (q.hit ?? 4)); } catch (e) { d = 4 * 0.5; } return d; }; // 적이 우리를 칠 확률은 우리 AC로
+      const pf = (o, ab) => pFail(a, o, ab), ph = foes.length ? foes.reduce((s, o) => s + pHit(a, o), 0) / foes.length : 0.6; // 그 적이 내성에 실패할 확률 · 내 공격이 맞을 확률 (운명판의 눈까지)
+      // 이번 라운드에 내 뒤로 차례가 남은 아군의 몫 (한 라운드짜리 효과의 이점을 쓸 수 있는 사람) — 차례 정보가 없으면 null
+      const T = x.rt.turn, order = T?.order?.map(q => q.e) || null, me = order ? order.indexOf(a) : -1, after = order && me >= 0 ? ps.filter(p => p !== a && order.indexOf(p) > me).length / Math.max(1, ps.length - 1) : null;
+      return { a, x, ps, foes, all, g, pDPR, eHP, dprOf, fDPR, pf, ph, allyP, after, R: Math.max(1, Math.min(6, eHP / pDPR)),
+        toE: d => d / pHP * eHP, // 우리가 덜 받은 피해(SRD) → 적 체력으로 (싸움은 경주 — 우리 체력의 몫 = 적 체력의 몫)
+        share: o => o.hp / eHP, near: r => foes.filter(o => Math.hypot(o.x - a.x, o.y - a.y) <= r), up: (res, b) => Math.max(0, G.Res.castLevel(a.merc, res) - (b || 1)),
+        mod: () => DN().mod(DN().ab(a.merc)[G.SrdX?.castAb?.(a.merc) || ({ cleric: 'wis', scout: 'wis', archer: 'wis', archmage: 'int' })[a.merc.cls] || 'cha'] || 10) };
+    },
+    // 한 수 내다보기 (2026-11-20, 사용자: 「다음라운드정도는 예측 해도 괜찮을거같기도… 한 두수 정도는 사람도 예측하잖아」):
+    // 슬롯 주문은 다음 라운드 눈으로도 값을 잰다. 다음 라운드가 훨씬 좋으면 지금 값을 깎는다 — 이번엔 굴림 없는 기술 · 소마법, 큰 주문은 다음 라운드에.
+    // 다음 라운드는 적이 움직이거나 전투가 끝날 수 있어 NEXT_K로 깎아서 본다
+    score(k, a, x, threat) {
+      const v = AI.scoreNow(k, a, x, threat), S = SK()[k], vn = fateNext(a);
+      if (!S?.res?.slot || !vn || FORCE) return v;
+      // 미룰 이유는 슬롯이 모자랄 때뿐: 그 레벨 슬롯이 마지막 하나이거나 이번 전투의 몫을 다 썼다 (넉넉하면 지금 쓰고 다음 라운드에 또 쓴다)
+      { const m = a.merc, fr = G.Res.slotFrac ? G.Res.slotFrac(m) : 1, f0 = m.frac0 ?? fr, share = f0 / Math.max(1, G.Res.fightsLeft ? G.Res.fightsLeft() : 3); if (G.Res.left(m, S.res, k) > 1 && f0 - fr < share) return v; }
+      const b0 = AI.basic(a, x); FORCE = { a, v: vn }; let w = v, b1 = b0; try { w = AI.scoreNow(k, a, x, threat); b1 = AI.basic(a, x); } catch (e) { w = v; } finally { FORCE = null; }
+      return v - Math.max(0, NEXT_K * w * b1 - v * b0) * 0.6 / b0; // 값은 그 라운드 기본 공격 대비라 절대량(× 기본 공격)으로 견준다
+    },
+    scoreNow(k, a, x, threat) {
+      const S = SK()[k], M = D.MSKILLS[k], m = a.merc, o = meta(k), num = G.SkillNum_at?.(k, m.cls, m.lv), res = S.res; if (S.prio) return 2 + S.prio; // 우선 기술
+      let v;
+      const ps = alive(x), tot = Math.max(1, x.seen.reduce((s, q) => s + q.hp, 0)), base = AI.basic(a, x);
+      // 값 매기기: 피해 · 상태 이상은 SRD DB와 코드 기록표(skill_nums), 그 밖의 효과는 효과표(skill_eff — test/gen_skill_eff.js). 기술마다 따로 쓴 식은 없다 (2026-11-20)
+      const E = G.SkillEff_at?.(k, m.cls, m.lv);
+      const useDB = o && !S.heal && !o.heal && ((o.conds?.length && !E?.cond) || (o.dice && (o.conc || !num?.d))); // 상태 이상은 코드가 실제로 건 것(효과표)이 DB 본문보다 먼저
+      const own = !useDB && !(num?.d && !E?.wpn), hasEff = E && (E.buf || E.atk || E.hit || E.tick || E.sum || E.img || E.thp || E.move || E.dark || (E.heal && !(S.heal || o?.heal)) || (own && (E.cond || E.dmg || E.field)));
+      let effV = 0; if (hasEff && x.seen.length) { try { effV = effValue(E, AI.ctx(a, x), S, o, own) / base; } catch (e) { effV = 0; } } // 효과표의 몫 — 아래 계산과 더한다 (지속 피해는 효과표가 세면 DB에서 빼고)
+      if (useDB && x.seen.length) { let t = 0; try { const C = AI.ctx(a, x); t = fromDB(o, C, res, !!(E?.hit || E?.tick || E?.sum)); } catch (e) { t = 0; } v = t / base + effV; }
+      else if (hasEff && E.wpn) v = effV; // 무기 공격에 붙는 기술 — 피해는 효과표의 그 공격 (아래 주문 피해식이 아니라)
+      else if (S.heal || o?.k === 'heal' || o?.heal) {
+        const hurt = ps.filter(p => p.hp < p.max).sort((p, q) => p.hp / p.max - q.hp / q.max), n = o?.n || 1, g = H().G0 ? H().G0(x, a) : 1, each = rollAvg(a, num?.d) * (p => p.max / Math.max(1, DN().srdHP(p.merc)))(a), healed = hurt.slice(0, n).reduce((s, p) => s + Math.min(p.max - p.hp, each || p.max * 0.2), 0), whole = Math.max(1, ps.reduce((s, p) => s + p.max, 0)), low = hurt[0] ? hurt[0].hp / hurt[0].max : 1, dying = (x.rt.party || []).some(p => p.dying);
+        v = effV + (hurt.length ? (healed / whole) * HEAL_K * (dying ? 6 : low < 0.25 ? 4 : low < 0.5 ? 2 : 0.6) + (dying ? 12 : low < 0.25 ? 8 : low < 0.5 ? 2 : 0) : 0);
+      } else if (num?.d && !S.heal) { let kill = 0;
+        // 명중 굴림도 내성도 없는 피해 주문(마법 화살 · 금속 달구기 — SRD DB에 atk · save가 없다)은 자동 명중
+        const r = o?.area || (M.d && /반경 (\d+)칸|곁 (\d+)칸/.exec(M.d)?.slice(1).find(Boolean)) || 0, list = r ? AI.best(x, +r) : o?.n > 1 ? x.seen.slice(0, o.n) : x.seen.slice(0, 1), ab = o?.save || num.sv, half = o?.half, auto = o && !o.atk && !ab && GD().spLv(k) > 0, pt = q => (ab ? pFail(a, q, ab) * (half ? 0.5 : 1) + (half ? 0.5 : 0) : auto ? 1 : pHit(a, q)), g = H().G0(x, a), ty = G.Skill.spellType(k), upD = res?.slot && G.Skill.UP?.[k] ? rollAvg(a, G.Skill.UP[k]) * Math.max(0, G.Res.castLevel(m, res) - (S.base || 1)) : 0, dmg = list.reduce((s, q) => s + Math.min(q.hp, (rollAvg(a, num.d) * (!ab && !auto ? crit2(a) : 1) + upD) * g * pt(q) * (ty ? G.Foe.dealK(a, q, ty) : 1)), 0);
+        { const C = AI.ctx(a, x); for (const q of list) { const one = (rollAvg(a, num.d) * (!ab && !auto ? crit2(a) : 1) + upD) * g * (ty ? G.Foe.dealK(a, q, ty) : 1), sure = ab ? (half ? one * 0.5 : pFail(a, q, ab) >= 0.9 ? one : 0) : one; kill += killV(C, q, sure, ab ? 1 : auto ? 1 : pHit(a, q)); } } // 확실히 쓰러뜨리는 적 /* 높은 슬롯으로 쓰면 주사위가 는다 (SRD) — 예전 스킬 레벨 배율 대신 */
+        v = (dmg + kill) / base + effV;
+        if (GD().spLv(k) === 0 && (!DN().caster(a) || (DN().ebOf(a.merc) && k !== 'sr_eb'))) v *= 0.5; // 고통의 폭발이 있는 워락도 섬뜩한 폭발이 먼저 // 무기 직업이 재주 · 종족으로 얻은 소마법: 무기를 먼저 쓴다 (강타 · 암습 · 표식이 무기에 붙는다 — 그 값은 위 계산에 없다)
+        if (num.t && x.seen.every(q => G.Foe.typeK(q, num.t, a) <= 0)) v = -1; // 다 면역이면 쓰지 않는다
+      } else if (hasEff) v = effV; // 효과표만으로 (격노 · 축복 · 행동 쇄도 …)
+      else if (o?.k === 'cond' || num?.c?.length) {
+        const r = o?.area || 0, list = r ? AI.best(x, r) : x.seen.slice(0, 1), share = list.reduce((s, q) => s + q.hp, 0) / tot; v = COND_K * (list.length ? list.reduce((s, q) => s + pFail(a, q, o?.save || num?.sv || 'wis'), 0) / list.length : 0.6) * share * Math.min(1, threat) * Math.min(4, Math.max(1, list.length));
+      } else if (o?.k === 'buff' || /축복|방패|신앙/.test(M.n)) v = BUFF_K * Math.min(1, threat) * (o?.props?.self ? 0.7 : 1);
+      else if (o?.k === 'summon' || o?.k === 'field') v = SUMMON_K * Math.min(1, threat);
+      else if (!res) v = DEFAULT_K; else v = DEFAULT_K * Math.min(1.5, 0.5 + threat);
+      if (!useDB && !hasEff && S.conc && !S.heal) v *= 0.5; // 값을 모르는 집중 주문(선악 보호 · 저항 …)이 집중을 차지해 축복 · 헥스를 막지 않게
+      // 슬롯 값: 이번 전투의 몫 = 전투를 시작할 때 남은 슬롯 ÷ 다음 긴 휴식까지 남은 전투(G.Res.fightsLeft). 몫 안에서는 과감하게, 넘으면 아낀다. 쉬운 전투일수록 아끼는 것은 그대로 (위협이 크면 몫과 상관없이 쓴다)
+      if (res?.slot) { const L = G.Res.castLevel(m, res), left = G.Res.left(m, res, k), fr = G.Res.slotFrac ? G.Res.slotFrac(m) : 0.5, f0 = m.frac0 ?? fr, share = f0 / Math.max(1, G.Res.fightsLeft ? G.Res.fightsLeft() : 3), spent = Math.max(0, f0 - fr), keep = spent < share ? 0.2 : spent < share * 1.6 ? 0.7 : 1.5, need = Math.max(0, 1.2 - Math.min(1, threat)) * keep; v -= SLOT_K * L * need * (left <= 1 ? 1.5 : 1); }
+      else if (res) v -= 0.1 * Math.max(0, 1 - threat);
+      if (S.conc && a.concK && !G.Res.concSpent(a)) v -= 0.5;
+      return v;
+    },
+    // 스킬 순서와 값: 값이 낮으면 쓰지 않는다 (행동은 기본 공격보다 높아야)
+    // ── 차례 계획 (2026-11-20, 사용자: 「내가 가지고 있는 기술들 중에 지금 가장 효율적인 기술을 고르게 하려면 개별 기술마다 계산을 하면 안될거같아서」) ──
+    // 행동 하나 + 추가 행동 하나를 함께 고른다. 규칙: 슬롯 주문은 차례에 하나 (주문 가속도) · 집중은 하나.
+    // 맞물림: 내 공격을 키우는 추가 행동(헥스 · 표식 · 격노 · 정밀 조준 · 신의 은총)은 이번 행동이 공격일 때만 이번 라운드 몫이 산다.
+    // 행동이 슬롯을 안 쓰면 추가 행동 슬롯 주문을 먼저 건다 (헥스 → 섬뜩한 폭발). 고른 계획은 a.plan — G.Skill.tick이 따른다
+    plan(f, rt, a, seen) {
+      if (!a.merc || !seen.length) return null;
+      const all = G.Guild.active(a.merc), x0 = { f, rt, c: a, seen }, threat = AI.threat(a, x0), val = k => { const reach = D.SK_RANGE[k], x = { ...x0, reach, seen: reach == null ? seen : seen.filter(o => Math.hypot(o.x - a.x, o.y - a.y) <= Math.max(reach, 1.5) + 0.5) }; try { return AI.score(k, a, x.seen.length ? x : x0, threat); } catch (e) { return 0; } };
+      const U = (k, kind, slotOk) => G.Skill.usable(f, rt, a, k, seen, kind, slotOk, true), slot = k => !!SK()[k]?.res?.slot, conc = k => !!SK()[k]?.conc;
+      // 집중 갈아타기: 집중 중이면 집중 주문의 값은 「새것 − 지금 집중의 값 × 1.3」 (비슷한 값끼리 라운드마다 갈아타지 않게). 지금 집중의 값은 지금 다시 건다면의 값으로 잰다
+      const held = a.concK && !G.Res.concSpent(a) ? a.concK.k : null, keepV = held && SK()[held] ? Math.max(0, val(held)) * 1.3 : 0, cv = k => (held && conc(k) ? (k === held ? -1 : val(k) - keepV) : val(k));
+      const acts = [['basic', 1]].concat(all.filter(k => U(k, 'action')).map(k => [k, cv(k)]).filter(q => q[1] > 0.9 || SK()[q[0]].heal));
+      const bons = [[null, 0]].concat(all.filter(k => U(k, 'bonus', true)).map(k => [k, cv(k)]).filter(q => q[1] > 0.05));
+      const R = AI.ctx(a, x0).R, atkType = k => k === 'basic' || !!meta(k)?.atk || /^(sr_stun|sr_brutal|sr_cstrike|sr_flurry|sr_eb|sr_firebolt|sr_rof|sr_pflame|sr_sflame|sr_mock)$/.test(k);
+      const booster = k => { const E = k && G.SkillEff_at?.(k, a.merc.cls, a.merc.lv); if (!E) return 0; const self = (E.buf || []).filter(b => b.to === 'self' && Object.keys(b.p).some(q => /^(hit|hitD|dmgB|adv|extraAtk)$/.test(q))); return E.hit ? 1 : self.length ? (self.every(b => b.r <= 1) ? 2 : 1) : 0; }; // 1 = 이어지는 강화 · 2 = 이번 공격 하나에만 (정밀 조준)
+      let best = null;
+      for (const [ka, va] of acts) for (const [kb, vb0] of bons) {
+        if (kb && kb === ka) continue; if (kb && slot(kb) && slot(ka)) continue; if (kb && conc(kb) && conc(ka)) continue;
+        let vb = vb0; const bt = booster(kb); if (bt && !atkType(ka)) vb = bt === 2 ? 0 : vb0 * Math.max(0, R - 1) / Math.max(1, R); // 행동이 공격이 아니면 이번 라운드 몫은 없다
+        const v = va + vb; if (!best || v > best.v) best = { v, action: ka, bonus: kb, slotOk: !!kb && slot(kb) && !slot(ka) };
+      }
+      if (!best) return null; const sw = held ? [best.action, best.bonus].find(k => k && conc(k) && k !== held) || null : null;
+      return { turn: G.Turn.no(), action: best.action, bonus: best.bonus, slotOk: best.slotOk, swap: sw, v: best.v };
+    },
+    // 공격(걸어가 치기)을 마친 뒤 추가 행동이 남았으면 그 자리에서 다시 고른다 — 공격 행동 뒤 연타처럼. 내 공격을 키우는 것은 이번 라운드 몫이 끝났다
+    planBonus(f, rt, a, seen) {
+      if (!a.merc || !seen.length || a.lastBonus) return null;
+      const all = G.Guild.active(a.merc), x0 = { f, rt, c: a, seen }, threat = AI.threat(a, x0), R = AI.ctx(a, x0).R, slot = k => !!SK()[k]?.res?.slot;
+      const val = k => { const reach = D.SK_RANGE[k], x = { ...x0, reach, seen: reach == null ? seen : seen.filter(o => Math.hypot(o.x - a.x, o.y - a.y) <= Math.max(reach, 1.5) + 0.5) }; try { return AI.score(k, a, x.seen.length ? x : x0, threat); } catch (e) { return 0; } };
+      const later = k => { const E = G.SkillEff_at?.(k, a.merc.cls, a.merc.lv); if (!E) return 1; const self = (E.buf || []).filter(b => b.to === 'self' && Object.keys(b.p).some(q => /^(hit|hitD|dmgB|adv|extraAtk)$/.test(q))); return E.hit || self.length ? (self.length && self.every(b => b.r <= 1) ? 0 : Math.max(0, R - 1) / Math.max(1, R)) : 1; };
+      let best = null; for (const k of all) { if (!G.Skill.usable(f, rt, a, k, seen, 'bonus', !a.slotUsed)) continue; const v = val(k) * later(k); if (v > 0.05 && (!best || v > best.v)) best = { k, v }; }
+      return best ? { turn: G.Turn.no(), action: 'basic', bonus: best.k, slotOk: !a.slotUsed && slot(best.k), v: best.v } : null;
+    },
+    // 조종 화면의 미리보기 (G.Ctrl — 2026-11-21): 이번 라운드 그 사람의 눈으로 잰다. p = 맞을(내성이면 실패할) 확률 — 눈을 알면 0.95 · 0.05로 갈린다,
+    // dmg = 기본 공격의 기대 피해 (넘치는 몫은 뺀다), v = 기술의 값 (기본 공격 한 번 = 1). tg가 없으면(치유 · 강화) p 없이
+    preview(f, rt, a, k, tg) {
+      const x = { f, rt, c: a, seen: tg ? [tg] : [] };
+      if (k === 'basic') return tg ? { p: pBasic(a, tg), dmg: AI.basic(a, x) } : null;
+      const o = meta(k), num = G.SkillNum_at?.(k, a.merc.cls, a.merc.lv), ab = o?.save || num?.sv || null;
+      let v = 0; try { v = AI.scoreNow(k, a, x, AI.threat(a, x)); } catch (e) { v = 0; }
+      return { p: tg ? (ab ? pFail(a, tg, ab) : o?.atk ? pHit(a, tg) : null) : null, ab, v };
+    },
+    rank(list, a, x0, bonus) {
+      const threat = AI.threat(a, x0), base = bonus ? 0 : 1, out = [];
+      // 주문 가속 · 헥스 같은 맞물림은 차례 계획(plan)이 고른다 — 여기선 그 단계의 후보 순서만
+      for (const k of list) { const S = SK()[k]; if (!S || S.rider) continue; const reach = D.SK_RANGE[k], x = { ...x0, reach, seen: reach == null ? x0.seen : x0.seen.filter(o => Math.hypot(o.x - a.x, o.y - a.y) <= Math.max(reach, 1.5) + 0.5) }; let v; try { v = AI.score(k, a, x.seen.length ? x : x0, threat); } catch (e) { v = 0; } out.push([k, v]); }
+      out.sort((p, q) => q[1] - p[1]); AI.last = { threat, base, out: out.slice(0, 6) };
+      return out.filter(q => (bonus ? q[1] > 0.05 : q[1] > base * 0.9) || !x0.seen.length || SK()[q[0]].heal).map(q => q[0]); // 추가 행동 · 자유 행동도 값이 있을 때만 (예전엔 문턱이 없어 값 없는 기술 — 적이 멀 때의 바람의 발걸음 — 이 남는 칸을 채웠다)
+    },
+  };
+  return AI;
+})();

@@ -1,0 +1,33 @@
+'use strict';
+// 전투 세우기 (화면 없이): 탐사의 적 무리 → 옛 엔진 몬스터를 그 방에 세운다.
+// 문 앞 준비(js/game/prep.js)가 만든 전투 조건(시작 자리 · 지형 · 적의 상태)은 여기서 적용한다.
+G.Encounter = (() => {
+  // 탐사 규칙의 몬스터 이름 → 옛 엔진의 몬스터 (없으면 이름이 겹치는 것, 그래도 없으면 고블린 졸개)
+  const ALIAS = { 고블린: '고블린 전사' }; // SRD 고블린 전사(체력 10) — 이름이 먼저 걸리는 「졸개」(체력 7)로 서지 않게
+  const monName = n => { const M = G.D.F.mon; if (ALIAS[n] && M[ALIAS[n]]) return ALIAS[n]; return M[n] ? n : Object.keys(M).find(k => k.includes(n)) || Object.keys(M).find(k => k.includes(n.slice(0, 2))) || '고블린 졸개'; };
+  // 방 칸들(cells: 타일 좌표) 중 from에서 먼 곳부터 세 칸 걸러 적을 세운다. units = [[이름, 수], …]
+  // major: 옛 G.Flow가 층 시작에 major 아닌 몬스터를 치운다 · aggro · spotted: 바로 싸운다 (문 앞 준비가 있으면 그쪽이 상태를 정한다)
+  function spawnRoom(R, cells, units, from, opts = {}) {
+    const order = cells.slice().sort((a, b) => Math.hypot(b[0] - from.x, b[1] - from.y) - Math.hypot(a[0] - from.x, a[1] - from.y));
+    // opts.spots: 손으로 짠 방의 몬스터 자리 [{ tx, ty, k: 1 앞줄 · 2 뒷줄 · 3 우두머리 }] — 첫 종류(앞장서는 놈)는 3 · 1 · 2 차례로, 나머지는 2 · 1 · 3. 모자라면 예전처럼 흩어 놓는다
+    const spots = opts.spots || [], used = new Set(), take = ks => { for (const q of ks) { const s = spots.find(p => p.k === q && !used.has(p)); if (s) { used.add(s); return [s.tx, s.ty]; } } return null; };
+    const out = []; let k = 0;
+    units.forEach(([name, cnt], ui) => { for (let i = 0; i < cnt; i++) {
+      const [x, y] = (spots.length && take(ui === 0 ? [3, 1, 2] : [2, 1, 3])) || order[(k++ * 3) % Math.max(1, order.length)] || [from.x + 3, from.y], nm = monName(name);
+      out.push(G.Fantasy.spawnMon(R, 1, { n: nm, ...G.D.F.mon[nm] }, x, y, false, { aggro: !opts.hidden, spotted: !opts.hidden, major: true, boss: !!opts.boss && !out.length })); // 우두머리 표시는 무리의 첫 놈만 (문지기 · 우두머리와 그 졸개)
+    } });
+    // hidden: 닫힌 문 너머 — 방 안에서 안 보이고(문이 열릴 때까지), 잠들었거나 모른다
+    if (opts.hidden) G.Prep.prime(out, opts.rng);
+    G.Fantasy.refreshEnts(R); if (G.Sight?.update) G.Sight.update(R);
+    return out;
+  }
+  // 문 열기의 결과(G.Prep.setup)를 전투에: 모두 싸운다 · 잠든 적은 첫 차례를 넘기고 맞으면 깬다(SRD 무의식처럼)
+  // · 모든 적이 몰랐으면 기습(SRD: 선제권 굴림에 불리 — bridge.js가 옛 엔진의 기습 판정에 건다)
+  const ROUND = 6; // 옛 G.Turn의 한 라운드 (정지 시간은 차례마다 이만큼 준다)
+  function applyPrep(R, S) {
+    for (const m of R.mons) if (m.hp > 0) { m.aggro = true; m.spotted = true; }
+    for (const m of S.asleep) { m.stop = ROUND; m.koHit = true; }
+    R.prepSurprise = S.surprise;
+  }
+  return { monName, spawnRoom, applyPrep };
+})();
