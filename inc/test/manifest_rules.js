@@ -10,16 +10,16 @@ const throws = f => { try { f(); return false; } catch (e) { return true; } };
 
 // 정리 전 index.html · run.html에서 뽑아 굳힌 목록
 const OLD_GAME = ['core', 'data', 'srd_gen', 'srd_base', 'srd_mons', 'grid', 'juice', 'old_stubs', 'fantasy', 'guild', 'create', 'dnd', 'fate', 'feats', 'trinkets', 'skills', 'srd', 'srd_spells', 'srd_upcast', 'spells', 'traits', 'options', 'pools', 'utilspell', 'srd_species', 'multiclass', 'srd_range', 'srd_items', 'items', 'skill_ai', 'team', 'camp', 'skill_fx', 'events', 'skill_nums', 'skill_eff', 'check', 'explore', 'sight', 'tactics', 'foe', 'summon', 'light', 'monact', 'signature', 'actions', 'lore', 'region', 'mons_extra', 'res', 'turn', 'flow', 'story', 'state', 'feed', 'floor', 'noise', 'ground', 'prep', 'party', 'tavern', 'reward', 'gear', 'encounter', 'bridge', 'builds', 'ctrl', 'dive']; // 2026-11-17 2단계: 옛 흐름 13개를 old로, check · old_stubs · mons_extra를 그 자리에
-const OLD_ISO = ['core', 'models', 'bake', 'voxel', 'voxchar', 'sprites', 'dragon', 'qpx', 'itemart', 'ui', 'pmap', 'fight', 'side', 'fx', 'prep_ui', 'reward_ui', 'check_ui', 'title_ui', 'gear_ui', 'tavern_ui', 'hud', 'crawl', 'dive_map', 'dive_inn', 'dive_ui', 'boot', 'fxlayer', 'pfx', 'vfx', 'hdbg', 'dice', 'actors', 'props', 'main']; // 2026-11-17 2단계: 옛 화면(legacy/iso)을 빼고 game 자리에 app/* · app/boot, 끝에 app/main (2026-11-18: crawl을 ui · pmap · fight · crawl로 나눔 · 2026-11-19: 운명판 칸 side)
+const OLD_ISO = ['core', 'models', 'bake', 'voxel', 'voxchar', 'sprites', 'dragon', 'minidoll', 'qpx', 'ui', 'pmap', 'fight', 'side', 'fx', 'prep_ui', 'reward_ui', 'check_ui', 'title_ui', 'gear_ui', 'tavern_ui', 'hud', 'crawl', 'dive_map', 'dive_inn', 'dive_ui', 'boot', 'fxlayer', 'pfx', 'vfx', 'hdbg', 'dice', 'actors', 'props', 'main']; // 2026-11-17 2단계: 옛 화면(legacy/iso)을 빼고 game 자리에 app/* · app/boot, 끝에 app/main (2026-11-18: crawl을 ui · pmap · fight · crawl로 나눔 · 2026-11-19: 운명판 칸 side)
 const OLD_RUN = ['core', 'data', 'rooms', 'combat', 'gen', 'rules', 'layout', 'draw', 'ui'];
 
 const M = require('../js/manifest.js'), L = require('./_load.js');
 
 t('game 순서가 옛 index.html과 같다', eq(M.game.map(base), OLD_GAME), JSON.stringify(M.game.map(base)));
-t('render 앞 셋은 artset · dcss map · pixelfx', eq(M.render.slice(0, 3).map(base), ['artset', 'map', 'pixelfx.bundle']));
-t('render 나머지 순서 (그리기 → app/boot → 그리기 → app/main)', eq(M.render.slice(3).map(base), OLD_ISO));
+t('render 앞 넷은 artset · dcss map · pixelfx · paperdoll', eq(M.render.slice(0, 4).map(base), ['artset', 'map', 'pixelfx.bundle', 'paperdoll']));
+t('render 나머지 순서 (그리기 → app/boot → 그리기 → app/main)', eq(M.render.slice(4).map(base), OLD_ISO));
 t('explore 순서가 옛 run.html과 같다', eq(M.explore.map(base), OLD_RUN));
-t('fixed는 render 앞 셋 (캐시를 쓰는 큰 정적 파일)', eq(M.fixed, M.render.slice(0, 3)));
+t('fixed는 render 앞 넷 (캐시를 쓰는 큰 정적 파일)', eq(M.fixed, M.render.slice(0, 4)));
 t('unused는 sfx 하나', eq(M.unused.map(base), ['sfx']));
 
 // 대소문자까지: 경로 조각마다 실제 디렉터리 항목과 맞춰 본다 (Pages는 대소문자를 가린다)

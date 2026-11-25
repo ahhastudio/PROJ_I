@@ -93,7 +93,7 @@ const DIVEUI = (() => {
     const revT = (r.rev || []).reduce((a, q) => a + q[1], 0);
     box.innerHTML = `<header><h2 class="rp-why rp-${r.why}">${UI.px(w[0])} ${w[1]}${w[2] ? ` <small>${w[2]}</small>` : ''}</h2></header>`
       + `<div class="dv-res rp-head"><span class="chip">${r.start === r.floor ? `${r.floor}층` : `${r.start}→${r.floor}층`}</span><span class="chip">${r.min < 1 ? `${Math.round(r.min * 60)}초` : `${r.min}분`}</span><span class="chip">방 +${r.rooms}</span><span class="chip">탐사 ${r.ex}%</span><span class="chip">전투 ${r.fights}</span><span class="chip">처치 ${r.foes}</span></div>`
-      + `<h4>${r.chest ? `<img class="rp-chest" src="assets/ui/chest_${r.chest}_open.png" alt="" onerror="this.remove()">` : ''}얻은 것</h4><div class="dv-res"><span class="chip c-gold">${UI.px('coin')} +${r.g}</span>${(r.gems || []).map(([n, c, g, id]) => `<span class="chip">${ico(id ? { gem: id } : null) || UI.px('gem')} ${esc(n)} ×${c} <small>${UI.px('coin')} ${g * c}</small></span>`).join('')}${sup}</div>`
+      + `<h4>${r.chest ? `<img class="rp-chest" src="assets/ll/chest_${r.chest}_open.png" alt="" onerror="this.remove()">` : ''}얻은 것</h4><div class="dv-res"><span class="chip c-gold">${UI.px('coin')} +${r.g}</span>${(r.gems || []).map(([n, c, g, id]) => `<span class="chip">${ico(id ? { gem: id } : null) || UI.px('gem')} ${esc(n)} ×${c} <small>${UI.px('coin')} ${g * c}</small></span>`).join('')}${sup}</div>`
       + ((r.items || []).length ? `<p class="dv-items">${r.items.map(e => `${ico(itemX(e))}<span class="r${e.r}">${D.RARITY[e.r]} · ${esc(e.n)}</span>${e.to ? ` → ${esc(e.to)}` : e.dropped ? ' · 두고 감' : ''}`).join('<br>')}</p>` : '')
       + ((r.lost || []).length ? `<h4 class="dv-bad">${UI.px('skull')} 잃은 것</h4><p class="rp-lost">${r.lost.map(([n, c, q]) => `<span class="r${q}">${esc(n)}${c > 1 ? ` ×${c}` : ''}</span>`).join(' · ')}</p>` : '')
       + (revT ? `<p class="rp-rev">${UI.px('skull')} ${r.rev.map(([n, c]) => `${esc(n)} <small>부활 ${UI.px('coin')} ${c}</small>`).join(' · ')}${revT > Math.max(0, r.gold) ? ` <b class="dv-bad">빚 ${revT - Math.max(0, r.gold)}</b>` : ''}</p>` : '')
@@ -187,7 +187,7 @@ const DIVEUI = (() => {
   const planCamp = () => { let n = 0; for (const f of Object.keys(S.campPlan || {}).map(Number)) if (f >= D.startFloor(S)) n += (S.campPlan[f] || []).filter(id => (S.plan[f] || []).includes(id)).length; return n; };
   const backSum = () => [S.endMode === 'back' && '경로 완주', S.fullBack && '짐 가득', S.risk !== false && '파티 위험'].filter(Boolean).join(' · ') || '직접';
   // 메뉴 아이콘 (흰 실루엣): CSS mask로 버튼 글자색을 입힌다
-  const mi = n => `<span class="dv-mi" style="--mi:url(assets/ui/icon_${n}.png)"></span>`;
+  const mi = n => `<span class="dv-mi" style="--mi:url(assets/ll/icon_${n}.png)"></span>`;
   const bagLine = t => `<button class="dv-bagb">${mi('inventory')} 짐 ${bagUse()}/${D.bagCap(S, t)} <small>${UI.px('coin')} ${D.supCost(D.bagPlan(S))} · 귀환 ${backSum()}</small></button>`;
   function bagPanel() {
     const box = panel('dv-bag'), t = D.team(S), cap = D.bagCap(S, t), mx = D.supMax(S), b = D.bagPlan(S), used = bagUse(), cost = D.supCost(b), pt = planTorch();
@@ -282,8 +282,8 @@ const DIVEUI = (() => {
   // 상자: 보물 방 = 나무 · 정예 = 은 · 우두머리 = 금. 닫힌 것 → 열린 것, 그 위로 얻은 물건 그림이 떠오른다 (물건 그림은 상자가 열린 뒤)
   const CHEST_R = { wood: 1, silver: 2, gold: 3 };
   function chestShow(k) { if (!run || !R) return; if ((CHEST_R[k] || 0) > (CHEST_R[run.chest] || 0)) run.chest = k; const ps = R.party.filter(q => !q.dead), fl = $('floats'); if (!ps.length || !fl) return;
-    const cx = ps.reduce((a, q) => a + (q._dx ?? q.x), 0) / ps.length, cy = ps.reduce((a, q) => a + (q._dy ?? q.y), 0) / ps.length, el = document.createElement('div'); el.className = 'dv-chest'; el.innerHTML = `<img src="assets/ui/chest_${k}.png" alt="" onerror="this.parentNode.remove()">`; fl.append(el); UI.place(el, cx, cy, 1.4);
-    setTimeout(() => { const im = el.querySelector('img'); if (im) im.src = `assets/ui/chest_${k}_open.png`; el.classList.add('open'); }, 300); setTimeout(() => el.remove(), 1200); run.popAt = performance.now() + 380; }
+    const cx = ps.reduce((a, q) => a + (q._dx ?? q.x), 0) / ps.length, cy = ps.reduce((a, q) => a + (q._dy ?? q.y), 0) / ps.length, el = document.createElement('div'); el.className = 'dv-chest'; el.innerHTML = `<img src="assets/ll/chest_${k}.png" alt="" onerror="this.parentNode.remove()">`; fl.append(el); UI.place(el, cx, cy, 1.4);
+    setTimeout(() => { const im = el.querySelector('img'); if (im) im.src = `assets/ll/chest_${k}_open.png`; el.classList.add('open'); }, 300); setTimeout(() => el.remove(), 1200); run.popAt = performance.now() + 380; }
   function lootPop(e) { const wait = Math.max(0, (run?.popAt || 0) - performance.now()); if (wait > 0) return void setTimeout(() => lootPop(e), wait); const h = ico(itemX(e)); if (!h || !R) return; const ps = R.party.filter(q => !q.dead), fl = $('floats'); if (!ps.length || !fl) return; const cx = ps.reduce((a, q) => a + (q._dx ?? q.x), 0) / ps.length, cy = ps.reduce((a, q) => a + (q._dy ?? q.y), 0) / ps.length; const el = document.createElement('div'); el.className = 'dv-lootpop'; el.innerHTML = h; fl.append(el); UI.place(el, cx, cy, 2.2); /* 파티 가운데 머리 위 (카메라가 보는 곳) */ setTimeout(() => el.remove(), 850); }
   function toast(html, cls = '') {
     let box = $('dv-toasts'); if (!box) { box = document.createElement('div'); box.id = 'dv-toasts'; $('stage').append(box); }

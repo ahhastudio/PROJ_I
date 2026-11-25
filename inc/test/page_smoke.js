@@ -56,7 +56,7 @@ const PAGES = {
 
 // 요청 검사 (로컬 서버일 때만): 목록 파일은 ?v=로 매번 새로 받고(바뀌면 옛 경로로 404가 나지 않게),
 // 큰 정적 파일 셋(artset · DCSS 지도 · pixelfx 묶음)은 정리 전처럼 ?v 없이 받아 캐시를 쓴다.
-const NOCACHE = ['/js/render/artset.js', '/assets/dcss/map.js', '/js/render/pixelfx/pixelfx.bundle.js'];
+const NOCACHE = ['/js/render/artset.js', '/assets/dcss/map.js', '/js/render/pixelfx/pixelfx.bundle.js', '/js/render/paperdoll.js'];
 const REQS = {
   'index.html': urls => [
     urls.some(u => u.startsWith('/js/legacy/iso/')) && '옛 화면 파일(legacy/iso)을 불러온다',

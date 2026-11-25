@@ -17,10 +17,10 @@
     // 새 게임 규칙 (화면 없이 — 고돗으로 옮길 부분): 층 변환 · 전투 세우기, 옛 엔진에 거는 고리는 맨 끝
     'js/game/feed', 'js/game/floor', 'js/game/noise', 'js/game/ground', 'js/game/prep', 'js/game/party', 'js/game/tavern', 'js/game/reward', 'js/game/gear', 'js/game/encounter', 'js/game/bridge', 'js/game/builds', 'js/game/ctrl', 'js/game/dive',
   ],
-  // 쿼터뷰 화면: 그림 표 · DCSS 타일 지도 · pixelfx · 구운 픽셀 인물 → 그리기 코드 → 새 게임 시작(app/boot — 그리기 파일 사이, 옛 game.js 자리) → 루프(app/main)
+  // 쿼터뷰 화면: 그림 표 · DCSS 타일 지도 · pixelfx · LAYERLAB 인형 → 그리기 코드 → 새 게임 시작(app/boot — 그리기 파일 사이, 옛 game.js 자리) → 루프(app/main)
   render: [
-    'js/render/artset', 'assets/dcss/map', 'js/render/pixelfx/pixelfx.bundle', 'js/render/core', 'js/render/models',
-    'js/render/bake', 'js/render/voxel', 'js/render/voxchar', 'js/render/sprites', 'js/render/dragon', 'js/render/qpx', 'js/render/itemart', 'js/app/ui', 'js/app/pmap', 'js/app/fight', 'js/app/side', 'js/app/fx', 'js/app/prep_ui', 'js/app/reward_ui', 'js/app/check_ui', 'js/app/title_ui', 'js/app/gear_ui', 'js/app/tavern_ui', 'js/app/hud', 'js/app/crawl', 'js/app/dive_map', 'js/app/dive_inn', 'js/app/dive_ui', 'js/app/boot', 'js/render/fxlayer', 'js/render/pfx',
+    'js/render/artset', 'assets/dcss/map', 'js/render/pixelfx/pixelfx.bundle', 'js/render/paperdoll', 'js/render/core', 'js/render/models',
+    'js/render/bake', 'js/render/voxel', 'js/render/voxchar', 'js/render/sprites', 'js/render/dragon', 'js/render/minidoll', 'js/render/qpx', 'js/app/ui', 'js/app/pmap', 'js/app/fight', 'js/app/side', 'js/app/fx', 'js/app/prep_ui', 'js/app/reward_ui', 'js/app/check_ui', 'js/app/title_ui', 'js/app/gear_ui', 'js/app/tavern_ui', 'js/app/hud', 'js/app/crawl', 'js/app/dive_map', 'js/app/dive_inn', 'js/app/dive_ui', 'js/app/boot', 'js/render/fxlayer', 'js/render/pfx',
     'js/render/vfx', 'js/render/hdbg', 'js/render/dice', 'js/render/actors', 'js/render/props',
     'js/app/main',
   ],
@@ -30,7 +30,7 @@
     'js/explore/draw', 'js/explore/ui',
   ],
   // ?v= 캐시 깨기 없이 불러오는 큰 정적 파일 (정리 전 index.html이 그렇게 불렀다 — pixelfx 묶음은 884KB)
-  fixed: ['js/render/artset', 'assets/dcss/map', 'js/render/pixelfx/pixelfx.bundle'],
+  fixed: ['js/render/artset', 'assets/dcss/map', 'js/render/pixelfx/pixelfx.bundle', 'js/render/paperdoll'],
   // 어디서도 불리지 않는 파일 (목록에만 적어 둔다)
   unused: ['js/core/sfx'],
   };

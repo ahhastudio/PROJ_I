@@ -102,7 +102,7 @@ function prep(e, r, t, dt) {
   const hq = e._hit ? (n - e._hit) / 260 : 1;
   if (hq < 1) { const sx = ((e._kx || 0) - (e._ky || 0)) / R2, sy = ((e._kx || 0) + (e._ky || 0)) / R2 * SIN, kb = (1 - hq) * (1 - hq) * 6; ox += sx * kb + Math.sin(n / 18) * (1 - hq) * 1.4; oy += sy * kb; if (hq < .3) { if (n - (e._flT || 0) > 400) e._flT = n; flash = n - e._flT < 80; } } // 잇달아 맞을 때 몸이 내내 하얗지 않게 0.4초에 한 번만
   if (moving && !DCSS) oy -= Math.abs(Math.sin(t * 13 + e.x)) * 2;
-  const down = e.dying || e.dead;
+  const down = e.dying || e.dead || (e.kind === 'mon' && !!e.down); // down: 쓰러져 재생을 기다리는 몸 (트롤)
   const key = e.t, hitKey = key + '_hit', runKey = key + '_run';
   e._ph = e._ph == null ? Math.random() * 4 : e._ph;
   const k2 = hq < .5 && G.ARTSET[hitKey] ? hitKey : moving && G.ARTSET[runKey] ? runKey : key, fr = Math.floor(t * (k2 === runKey ? 11 : 6) + e._ph);
@@ -159,7 +159,9 @@ function drawRec(R0, t) {
   if (DCSS) {
     // DCSS 그림은 왼쪽을 본다: 오른쪽을 볼 때 뒤집는다
     const fl = sp.qpx ? false : !e._flipS; // 구운 8방향 그림은 뒤집지 않는다
-    if (!(VCH.on && VCH.draw(sp, sx, sy, d, { flip: fl, flash, sc, xray: true }, e))) blit(sp, sx, sy, d, { flip: fl, flash, sc, xray: true }); // 복셀 층: 배경과 같은 빛 · 색으로 다시 칠한다 (voxchar.js, ?vchar=0이면 원래 색)
+    if (sp.mini) MD.enqueue(R0, fl, flash); // 용병 인형: 고해상도 층에 원본 그대로 (minidoll.js)
+    else if (MINI_ON && !VOXON && typeof HDBG !== 'undefined' && HDBG.on && !f.town) MD.enqueue(R0, fl, flash); // 선 그림 배경: 픽셀 몬스터도 고해상도 층에
+    else if (!(VCH.on && VCH.draw(sp, sx, sy, d, { flip: fl, flash, sc, xray: true }, e))) blit(sp, sx, sy, d, { flip: fl, flash, sc, xray: true }); // 복셀 층: 배경과 같은 빛 · 색으로 다시 칠한다 (voxchar.js, ?vchar=0이면 원래 색)
     if (sp.weapon) {
       const Wp = sp.weapon, ranged = isRanged(e), sign = fl ? 1 : -1, of = [0, 0];
       let ang = 0, lift = 0;

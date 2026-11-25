@@ -1,10 +1,9 @@
 'use strict';
 // 인물 · 몬스터 그림: 구워 둔 8방향 픽셀 (2026-11-25, assets/qpx/ — Quaternius 3D를 Blender로 구운 것, px_lab.html에서 정했다)
-//  인물은 모두 이 그림이다(MD). 구운 그림이 없는 몬스터(짐승 · 정령 …)는 DCSS 타일 그대로. ?art=dcss 이면 쓰지 않는다.
+//  기본은 LAYERLAB 인형이다 (2026-11-25 사용자: 「그래픽이 너무 안어울린다」). ?art=px 일 때만 MD(minidoll.js)의 frame · pix · pixMon · isMon을 감싸 이 그림을 쓴다.
 //  그림표 한 장 = 인물 하나: 줄 = 방향 8 (0 = 앞, 1 = 오른쪽 아래, … 반시계), 칸 = 대기 4 · 걷기 8 · 공격 n · 맞기 3 · 쓰러짐 6. 그림자는 없다(게임이 그린다).
-const MINI_ON = DCSS && q.get('art') !== 'dcss', MINI_READY = MINI_ON;
 const QPX = (() => {
-  const on = MINI_ON;
+  const on = MINI_ON && q.get('art') === 'px';
   const CW = 82, FOOT = 59, PXM = CW / 3, SINB = Math.sin(38 * Math.PI / 180); // 칸 한 변 · 발 자리 · 1m의 px · 구운 카메라 각도
   // 공격 묶음: n = 장 수 · adv = 장마다 앞으로 나간 거리(m — 게임이 자리를 옮기므로 되돌린다) · seg = 한 번 칠 때 쓰는 토막들 [모으는 장들, 치는 장들] (칠 때마다 다음 토막)
   const SSA = [0, -.06, -.1, .14, .28, .29, .27, .26, .38, .46, .46, .46, .58, .74, .82, .82, .8, .55, .22, 0];
@@ -115,10 +114,13 @@ const QPX = (() => {
     }
     return out;
   }
-  if (on) for (const k in CLS_ART) sheet(CLS_ART[k][0]);
-  const isMon = e => e.kind === 'mon' && !!artOf(e) && sheet(artOf(e).n) !== false;
-  const pix0 = (m, t) => (on ? pix(m, t) || null : null);
-  return { on, has: e => on && !!artOf(e), artOf, corpses, frame, isMon, pix: pix0 };
+  if (on) {
+    const f0 = MD.frame, p0 = MD.pix, m0 = MD.pixMon, i0 = MD.isMon, isMon = e => e.kind === 'mon' && !!artOf(e) && sheet(artOf(e).n) !== false;
+    MD.isMon = e => isMon(e) || i0(e);
+    MD.frame = (e, st) => frame(e, st) || (e.kind !== 'mon' || i0(e) ? f0(e, st) : null);
+    MD.pix = (m, t) => { const sp = pix(m, t); return sp === undefined ? p0(m, t) : sp; };
+    MD.pixMon = e => { const sp = pix(e, 0); return sp === undefined ? m0(e) : sp; };
+    for (const k in CLS_ART) sheet(CLS_ART[k][0]);
+  }
+  return { on, artOf, corpses };
 })();
-// 다른 화면이 부르는 이름 (선술집 · 초상 · 제목 · 싸움판): 물건 그림은 itemart.js
-const MD = { frame: QPX.frame, isMon: QPX.isMon, pix: QPX.pix, pixMon: e => (QPX.isMon(e) ? QPX.pix(e, 0) : null), itemUrl: x => (typeof ITEMART !== 'undefined' ? ITEMART.url(x) : null) };

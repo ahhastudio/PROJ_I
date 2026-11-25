@@ -83,7 +83,7 @@ for (const R of rows.sort((a, b) => (b.dmg / (b.fired || 1)) - (a.dmg / (a.fired
   console.log([R.k.padEnd(13), (R.n || '').padEnd(10), R.cls.padEnd(9), 'R' + String(R.range ?? '-').padEnd(4), `발동${R.fired}/${N}`.padEnd(9), `피해x${(R.dmg / (R.fired || 1)).toFixed(1)}`.padEnd(10), `치유${Math.round(R.heal / (R.fired || 1) * 100)}%`.padEnd(8), `최대${R.far.toFixed(1)}`.padEnd(8), [...R.state].slice(0, 5).join(','), '|', [...R.fx].join(','), fl.length ? '  ✗ ' + fl.join(' ') : '', R.err.size ? JSON.stringify([...R.err.keys()]) : ''].join(' '));
 }
 // 패시브: 코드 어디서도 읽지 않는 것
-const src = [...LOAD.NAMES.game, 'sfx', 'artset'].filter(n => n !== 'data').map(n => fs.readFileSync(LOAD.jsPath(n), 'utf8')).join('\n'), dataSrc = fs.readFileSync(LOAD.jsPath('data'), 'utf8');
+const src = [...LOAD.NAMES.game, 'sfx', 'artset', 'paperdoll'].filter(n => n !== 'data').map(n => fs.readFileSync(LOAD.jsPath(n), 'utf8')).join('\n'), dataSrc = fs.readFileSync(LOAD.jsPath('data'), 'utf8');
 const pas = Object.keys(D.MSKILLS).filter(k => D.MSKILLS[k].passive), deadP = pas.filter(k => !src.includes("'" + k + "'"));
 const unlisted = (Object.keys(D.MSKILLS).filter(k => !G.Skill.SK[k] && !D.MSKILLS[k].passive)).filter(k => !D.MSKILLS[k].explore);
 const bad = rows.filter(R => flag(R).length);

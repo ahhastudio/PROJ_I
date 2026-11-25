@@ -884,7 +884,7 @@ body.dive #pmapbox.big { height:min(72vh, 560px) !important; background:#e6cf9c;
 @keyframes dvlootpop { 0% { opacity:0; margin-top:6px; } 15% { opacity:1; } 70% { opacity:1; } 100% { opacity:0; margin-top:-26px; } }
 /* 메뉴 아이콘(흰 실루엣 → 글자색 mask) · 상자 */
 .dv-mi { display:inline-block; width:15px; height:15px; margin-right:4px; vertical-align:-2px; background:currentColor; -webkit-mask:var(--mi) center / contain no-repeat; mask:var(--mi) center / contain no-repeat; flex:0 0 auto; }
-.dv-chest { position:absolute; left:0; top:0; pointer-events:none; z-index:6; animation:dvchest 1.2s ease-out forwards; } .dv-chest img { image-rendering:pixelated; width:66px; height:auto; display:block; }
+.dv-chest { position:absolute; left:0; top:0; pointer-events:none; z-index:6; animation:dvchest 1.2s ease-out forwards; } .dv-chest img { width:56px; height:auto; display:block; }
 .dv-chest.open img { animation:dvchestpop .2s ease-out; }
 @keyframes dvchest { 0% { opacity:0; margin-top:8px; } 12% { opacity:1; margin-top:0; } 80% { opacity:1; } 100% { opacity:0; } } @keyframes dvchestpop { 0% { transform:scale(1.15); } 100% { transform:scale(1); } }
 #dv-rep h4 .rp-chest { width:26px; height:auto; vertical-align:middle; margin-right:6px; }
