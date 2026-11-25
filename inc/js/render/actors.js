@@ -100,7 +100,7 @@ function prep(e, r, t, dt) {
     ox += sx / l * k; oy += sy / l * k; if (!far && lq > .22 && lq < .5) oy -= 2;
   }
   const hq = e._hit ? (n - e._hit) / 260 : 1;
-  if (hq < 1) { const sx = ((e._kx || 0) - (e._ky || 0)) / R2, sy = ((e._kx || 0) + (e._ky || 0)) / R2 * SIN, kb = (1 - hq) * (1 - hq) * 6; ox += sx * kb + Math.sin(n / 18) * (1 - hq) * 1.4; oy += sy * kb; flash = hq < .3; }
+  if (hq < 1) { const sx = ((e._kx || 0) - (e._ky || 0)) / R2, sy = ((e._kx || 0) + (e._ky || 0)) / R2 * SIN, kb = (1 - hq) * (1 - hq) * 6; ox += sx * kb + Math.sin(n / 18) * (1 - hq) * 1.4; oy += sy * kb; if (hq < .3) { if (n - (e._flT || 0) > 400) e._flT = n; flash = n - e._flT < 80; } } // 잇달아 맞을 때 몸이 내내 하얗지 않게 0.4초에 한 번만
   if (moving && !DCSS) oy -= Math.abs(Math.sin(t * 13 + e.x)) * 2;
   const down = e.dying || e.dead;
   const key = e.t, hitKey = key + '_hit', runKey = key + '_run';

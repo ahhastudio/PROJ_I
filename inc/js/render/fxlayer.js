@@ -50,6 +50,7 @@ function drawMini(r) {
 addEventListener('resize', fit);
 const toScreen = (x, y, z) => { const p = project(x, y, z), r = canvas.getBoundingClientRect(), st = $('stage').getBoundingClientRect(); return [r.left - st.left + p.sx * fit.s, r.top - st.top + p.sy * fit.s]; };
 const fxSeen = new WeakSet();
+const words = []; // 떠 있는 글자 (겹침 막기)
 function drawFx(r) {
   for (const o of r.fx || []) {
     o._seen = 1; // 화면이 한 번은 봤다 (G.fxTick이 그 전에는 지우지 않는다 — 빠른 배속에서 그리기 전에 사라지던 것)
@@ -68,7 +69,9 @@ function drawFx(r) {
       if (!inWin(o.x, o.y + 1)) continue;
       const num = /^([+\-]?)([\d,.]+)$/.exec(String(o.s).trim());
       if (SPR && num) {
-        const n0 = now(), val = Math.round(parseFloat(num[2].replace(/,/g, ''))), s0 = dispAt(o.x, o.y + 1, r), p = project(wx(s0[0]), wy(s0[1]), 2.7), c = rgb(...hexRgb(o.col || '#ffffff'));
+        const n0 = now(), val = Math.round(parseFloat(num[2].replace(/,/g, '')));
+        if (!val) continue; // 0은 띄우지 않는다
+        const s0 = dispAt(o.x, o.y + 1, r), p = project(wx(s0[0]), wy(s0[1]), 2.7), c = rgb(...hexRgb(o.col || '#ffffff'));
         // 같은 대상 · 같은 색이 짧은 사이에 또 뜨면 숫자를 더한다. 가까이 다른 숫자가 있으면 위로 쌓는다
         const same = nums.find(u => u.c === c && u.sign === num[1] && Math.abs(u.x0 - p.sx) < 12 && Math.abs(u.y0 - p.sy) < 12 && n0 - u.t0 < 450);
         if (same) { same.v += val; same.s = num[1] + same.v; same.t0 = n0 - 60; same.bump = n0; continue; }
@@ -76,7 +79,11 @@ function drawFx(r) {
         nums.push({ v: val, sign: num[1], s: num[1] + val, x: p.sx, y, x0: p.sx, y0: p.sy, c, t0: n0 });
         continue;
       }
-      const [sx, sy] = toScreen(wx(o.x), wy(o.y + (o.ent ? 0 : 1)), 3.1), el = document.createElement('div');
+      let [sx, sy] = toScreen(wx(o.x), wy(o.y + (o.ent ? 0 : 1)), 3.1); const el = document.createElement('div');
+      // 겹치지 않게: 같은 말이 같은 자리에 0.5초 안에 또 뜨면 하나만 · 다른 말은 위로 쌓는다
+      { const t1 = now(), word = String(o.s); while (words.length && t1 - words[0].t > 900) words.shift();
+        if (words.some(q => q.s === word && t1 - q.t < 500 && Math.hypot(q.x - sx, q.y0 - sy) < 46)) continue;
+        const y0 = sy; for (let g = 0; g < 4 && words.some(q => Math.abs(q.x - sx) < 48 && Math.abs(q.y - sy) < 15); g++) sy -= 16; words.push({ s: word, x: sx, y: sy, y0, t: t1 }); }
       el.className = 'fl'; el.textContent = o.s; el.style.left = sx + 'px'; el.style.top = sy + 'px'; el.style.color = o.col === '#fff' || o.col === '#ffffff' ? 'var(--ink)' : o.col; el.style.fontSize = 13 + (o.sz || 1) * 4 + 'px';
       floats.append(el); const t0 = now();
       const tick = () => { const q = (now() - t0) / 900; if (q >= 1) { el.remove(); return; } el.style.transform = `translate(-50%,calc(-100% - ${q * 22}px))`; el.style.opacity = q > .7 ? (1 - q) / .3 : 1; requestAnimationFrame(tick); }; tick();

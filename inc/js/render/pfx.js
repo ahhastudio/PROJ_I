@@ -8,7 +8,8 @@ function pfx(id, x, y, z = 0, o = {}) {
   const { e, body, under, k = 1, to, clip = 0, ...opt } = o, meta = PFX.mods[id].meta, rec = { fx: PFX.createFx(PFX.mods[id], { seed: 1 + (Math.random() * 9999 | 0), x: -999, y: -999, actor: actorOf(body || e), ...opt }), x, y, z, e, under: !!under, k, to, clip, age: 0, loop: !!meta.loop };
   // 칠할 영역: 원본 크기 + 여유 (회전하면 정사각형)
   const [sw, sh] = meta.size, [ox, oy] = meta.origin; rec.rw = opt.angle ? Math.max(sw, sh) : Math.max(ox, sw - ox) + 12; rec.ru = opt.angle ? rec.rw : oy + 24; rec.rd = opt.angle ? rec.rw : sh - oy + 12;
-  fxLive.push(rec); return rec;
+  if (e && !under && !to && fxLive.some(q => q.e === e && q.id === id && q.age < .2)) return null; // 같은 사람에게 같은 이펙트가 겹쳐 하얗게 타던 것
+  rec.id = id; fxLive.push(rec); return rec;
 }
 // 기술 이펙트 (G.SkillFx): 어떤 이펙트든 한 번 쓰는 데 CAST_T초 안에 끝낸다. 도는 이펙트는 LOOP_T초 뒤 멈춘다
 const CAST_T = 1.4, LOOP_T = 1.1, FLY_T = .28, MISSILE_HIT = .82, NEAR_E = .7;
@@ -71,13 +72,16 @@ function dollBody(e) {
 }
 function paintFx(under) {
   const Cc = fxFrame.color, Ll = fxFrame.light;
+  // 한꺼번에 많이 뜨면 하나하나를 옅게: 빛은 2개까지 그대로, 그 뒤로는 나눠 갖고(최소 0.3) 색은 조금만 비친다(최소 0.6) — 난전에서 인물이 묻히지 않게
+  const nv = under ? 0 : fxLive.reduce((n, q) => n + (q.vis && !q.vec && !q.under ? 1 : 0), 0), kl = nv > 2 ? Math.max(.3, 2 / nv) : 1, kc = nv > 3 ? Math.max(.6, 3 / nv) : 1;
+  const dimL = l => (kl === 1 ? l : ((l >> 16 & 255) * kl << 16 | (l >> 8 & 255) * kl << 8 | (l & 255) * kl) >>> 0), dimC = c => (kc === 1 ? c : ((c & 0xffffff) | ((c >>> 24) * kc << 24)) >>> 0);
   for (const q of fxLive) {
     if (!q.vis || q.vec || q.under !== under) continue;
     const hd = !under && typeof VFX !== 'undefined' && VFX.on; // 바닥 위 이펙트는 고해상도 선 그림 층으로
     try { q.fx.draw(fxFrame); } catch (err) { fxFail(q, err); }
     const X = q.fx.options.x, Y = q.fx.options.y, x0 = Math.max(0, X - q.rw), x1 = Math.min(VW, X + q.rw), y0 = Math.max(0, Y - q.ru), y1 = Math.min(VH, Y + q.rd);
     for (let iy = y0; iy < y1; iy++) for (let i = iy * VW + x0, e0 = iy * VW + x1; i < e0; i++) {
-    const c = Cc[i], l = Ll[i] & 0xffffff; if (!c && !l) continue;
+    const c = under ? Cc[i] : dimC(Cc[i]), l = under ? Ll[i] & 0xffffff : dimL(Ll[i] & 0xffffff); if (!Cc[i] && !Ll[i]) continue;
     Cc[i] = 0; Ll[i] = 0;
     if (hd) { VFX.put(i, i - iy * VW, iy, c, l, q.clip && iy > Y - q.clip); continue; }
     let d = pix[i];

@@ -73,7 +73,7 @@ const QPX = (() => {
     if (e._fv) { const l = Math.hypot(e._fv[0], e._fv[1]); if (l > .05) e._qd8 = dir8(e._fv[0], e._fv[1]); }
     const d = e._qd8 ?? (e.kind === 'mon' ? 7 : 1), K = ATK[a.k]; let col, adv = 0;
     if (st.lq < 1) e._qa = true; else if (e._qa) { e._qa = false; e._qn = (e._qn || 0) + 1; }
-    if (st.down) { const k = Math.min(5, Math.floor((now() - (e._qdown ||= now())) / 110)); col = 12 + s.na + 3 + k; }
+    if (st.down || (e.kind === 'mon' && e.down)) { const k = Math.min(5, Math.floor((now() - (e._qdown ||= now())) / 110)); col = 12 + s.na + 3 + k; }
     else {
       e._qdown = 0;
       if (st.lq < 1) { const [pre, post] = K.seg[(e._qn || 0) % K.seg.length], i = st.lq < .22 ? wrap(pre, st.lq / .22) : wrap(post, (st.lq - .22) / .78); col = 12 + Math.min(i, s.na - 1); adv = K.adv[i] || 0; }
@@ -101,7 +101,7 @@ const QPX = (() => {
   function corpses(r, recs) {
     if (!on) return [];
     const alive = new Set(r.mons), n = now();
-    for (const [e, R0] of last) if (!alive.has(e) || e.hp <= 0) { last.delete(e); if (e.hp <= 0 && R0.map === r.map) bodies.push({ R0: R0.rec, t0: n, map: r.map }); }
+    for (const [e, R0] of last) if (!alive.has(e) || e.hp <= 0) { last.delete(e); if (e.hp <= 0 && R0.map === r.map) bodies.push({ R0: R0.rec, t0: e._qdown ? n - 600 : n, map: r.map }); } // 이미 누워 있던 몸(재생 중 쓰러진 트롤)은 다시 쓰러지지 않는다
     for (const R0 of recs) if (R0.e.kind === 'mon' && R0.sp.qpx && R0.e.hp > 0) last.set(R0.e, { rec: R0, map: r.map });
     const out = [];
     for (let i = bodies.length - 1; i >= 0; i--) {

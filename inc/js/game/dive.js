@@ -397,10 +397,11 @@ G.Dive = (() => {
       Lt.sources = function (rt) { const o = src0.apply(this, arguments); return rt?.dvDark ? o.filter(q => !q.held?.merc && !(rt.map?.lights || []).includes(q)) : o; };
       Lt.level = function (rt, x, y) { if (!rt?.dvDark || !rt.map) return lv0.apply(this, arguments); if (Lt.inDark(rt, x, y)) return -1; let v = 0; for (const q of Lt.sources(rt)) { const d = Math.hypot(x - q.x, y - q.y); if (d > q.d + 0.5) continue; if (d <= q.b + 0.5) return 2; v = 1; } return v; }; }
     { const F = G.Fantasy, hu0 = F.hurt, hm0 = F.hurtMember, kl0 = F.kill; // 결과 집계 (위)
-      F.hurt = function (f, rt, m, dmg, src, from) { if (G.Turn.rt && rt?.turn && dmg > 0) arguments[3] = dmg = dmg * (TUNE.RT_DMG ?? 1); /* 실시간: 양쪽 피해 같은 배율 (아래 hurtMember도) */ const c = cur?.stat && m ? ownerOf(from) : null, b = m?.hp; if (c) m._dvBy = c;
+      const rtDmg = d => Math.max(1, Math.round(d * (TUNE.RT_DMG ?? 1))); // 실시간 피해 배율: 반올림 · 맞았으면 1 이상 (엔진은 소수를 버려서 3 피해가 0.9 → 0이 되던 것)
+      F.hurt = function (f, rt, m, dmg, src, from) { if (G.Turn.rt && rt?.turn && dmg > 0) arguments[3] = dmg = src === 'dot' ? dmg * (TUNE.RT_DMG ?? 1) : rtDmg(dmg); /* 실시간: 양쪽 피해 같은 배율 (아래 hurtMember도) · 지속 피해는 엔진이 소수를 모은다 */ const c = cur?.stat && m ? ownerOf(from) : null, b = m?.hp; if (c) m._dvBy = c;
         if (c && m.kind === 'mon' && m.stat && b > 0) { const dt = G.Skill.dtOver || G.Foe.dtype || (from?.merc ? G.Dnd.weapon(from).t : null), k = G.Foe.typeK(m, dt, from), w = tkWord(k); if (curS && m.n) affMark(curS, m.n); if (w) { const q = statOf(cur, c); q.tk = q.tk || {}; q.tk[w] = (q.tk[w] || 0) + 1; tkQ.push([from?.merc?.name || from?.by?.merc?.name || '', w]); if (tkQ.length > 8) tkQ.shift(); } } // 상성: 싸워 본 몬스터는 도감에 · 배율 기록
         const out = hu0.apply(this, arguments); if (c && b > 0) statOf(cur, c).dmg += b - Math.max(0, m.hp); return out; };
-      F.hurtMember = function (f, rt, p, dmg, mo) { if (G.Turn.rt && rt?.turn && dmg > 0) arguments[3] = dmg * (TUNE.RT_DMG ?? 1); const b = p?.hp, out = hm0.apply(this, arguments); if (cur?.stat && p?.merc && b > 0) { const q = statOf(cur, p.merc.cls); q.took += b - Math.max(0, p.hp); if (p.hp <= 0) q.downs++; hpSeen.set(p, { hp: Math.max(0, p.hp), max: p.max }); } return out; };
+      F.hurtMember = function (f, rt, p, dmg, mo) { if (G.Turn.rt && rt?.turn && dmg > 0) arguments[3] = rtDmg(dmg); const b = p?.hp, out = hm0.apply(this, arguments); if (cur?.stat && p?.merc && b > 0) { const q = statOf(cur, p.merc.cls); q.took += b - Math.max(0, p.hp); if (p.hp <= 0) q.downs++; hpSeen.set(p, { hp: Math.max(0, p.hp), max: p.max }); } return out; };
       F.kill = function (f, rt, m, src, from) { if (cur?.stat && m?.kind === 'mon' && !m._dvDead) { m._dvDead = true; cur.stat.foes++; const c = ownerOf(from) || m._dvBy; if (c) statOf(cur, c).kills++; } return kl0.apply(this, arguments); }; }
     const m0 = G.Guild.mult; G.Guild.mult = function (m, k) { const v = m0.apply(this, arguments); return k === 'xp' ? v * XP_K * (curS ? catchK(m.lv, Math.max(...live.map(x => x.lv))) / pace(m.lv) : 1) : v; };
     const k0 = G.Guild.onKill; G.Guild.onKill = function (f, rt, mo) { if (cur && mo) cur.gold += killGold(mo); if (curS && mo?.n) { const e = curS.dex.m[mo.n] = curS.dex.m[mo.n] || { met: 1, kill: 0 }; e.kill++; }
@@ -409,11 +410,9 @@ G.Dive = (() => {
     if (typeof RUN !== 'undefined') { RUN.SPECS = SPECS; RUN.FIXDOORS = true; RUN.X = XRUN; RUN.SMALL = TUNE.SMALL_ROOMS; } // SMALL: 작은 방 (폰 화면 — 줌아웃 없이 전투 방이 들어오게) // 설계서 · 문 잇기 · 탐험 판정(영웅 수치)은 원정 페이지에서만 // 설계서 · 문 잇기는 원정 페이지에서만
     if (typeof RUN !== 'undefined' && RUN.ZONES) for (const z of ZONES) if (!RUN.ZONES.some(q => q.id === z.id)) RUN.ZONES.push(z);
     // 원정 화면의 떠오르는 글자: 피해 숫자(치명타 포함) · 빗나감 · 회복 · 레벨 업 · 면역 · 저항 · 약점만 (버프 · 「방에 들어선다!」 · 「차례를 넘긴다」 · 금화 · 경계 표시 ! ?는 띄우지 않는다)
-    // 남는 글자끼리 겹치지 않게: 같은 자리(0.8칸 안)에 0.7초 안에 잇달아 뜨면 0.45칸씩 위로 (「빗나감」이 피해 숫자 위에 겹치던 것)
-    const recent = [];
+    // 겹침은 화면 쪽(render/fxlayer.js)이 화면 픽셀로 쌓아 푼다 (여기서 칸을 밀면 많이 맞을수록 숫자가 적에게서 멀어졌다)
     const fx0 = G.fx; G.fx = function (rt, o) {
-      if (curS && o && o.k === 'text') { if (!TEXT_OK.test(String(o.s).trim())) return; const now = Date.now(); while (recent.length && now - recent[0].t > 700) recent.shift();
-        const n = recent.filter(q => Math.hypot(q.x - o.x, q.y - o.y) < 0.8).length; recent.push({ x: o.x, y: o.y, t: now }); if (n) o.y -= 0.45 * n; }
+      if (curS && o && o.k === 'text' && !TEXT_OK.test(String(o.s).trim())) return;
       return fx0.apply(this, arguments); };
     // 소생술 (SRD Revivify, 3레벨 슬롯): 엔진은 금화 300을 요구한다 — 원정에서는 금화 없이 주문 슬롯만 (금화를 잠깐 채웠다가 되돌린다). 기록: 「소생 · 시전자 → 대상」
     const rv0 = G.Skill.revivify; if (rv0) G.Skill.revivify = function (f, rt, p) { if (!curS) return rv0.apply(this, arguments); const c = rt.party.find(q => q !== p && q.merc && !q.dead && !q.dying && G.Guild.picks(q.merc).includes('sr_revive')), g0 = f.gold || 0; f.gold = g0 + 300; const ok = rv0.apply(this, arguments); f.gold = g0; if (ok && cur) cur.log.push({ t: `소생 · ${c?.merc?.name || '?'} → ${p.merc?.name || '?'}`, k: 'dv' }); return ok; };
