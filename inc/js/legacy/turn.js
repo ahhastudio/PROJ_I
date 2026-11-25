@@ -451,7 +451,7 @@ G.Turn = (() => {
       if (L.ph === 'idle') { if (L.clk > 0) continue; L.clk += RT; rt.turn = L; startTurn(f, rt, L, { e, init: 0 }); if (rt.turn === L && T.laneCmd) T.laneCmd(f, rt, L, RT, true); if (rt.turn === L) rt.turn = st; }
       else { rt.turn = L; step(f, rt, L, dt); if (rt.turn === L) rt.turn = st; }
       if (rt.turn === null) return; // finish
-      if (!foes(rt).length) { rt.lanes = null; finish(f, rt, st); return; }
+      if (!foes(rt).length) { if (T.refill && T.refill(f, rt, st)) return; rt.lanes = null; finish(f, rt, st); return; }
     }
   }
   function laneEnd(f, rt, L) {
@@ -460,7 +460,7 @@ G.Turn = (() => {
     L.ph = 'idle'; L.ov = null; L.path = []; if (L.cur) L.cur.longNow = false;
   }
   function finish(f, rt, st) {
-    if (st.main) st = st.main; rt.lanes = null; rt.tele = null; // 실시간: 차선 · 예고 동작을 접는다
+    if (st.main) st = st.main; if (!foes(rt).length && T.refill && T.refill(f, rt, st)) { rt.turn = st; if (!T.rt) { st.i = st.order.length; st.ph = 'wait'; st.t = 0.3; } return; } /* 다음 무리 (원정) */ rt.lanes = null; rt.tele = null; // 실시간: 차선 · 예고 동작을 접는다
     if (st.round >= 5 || st.downs) dm(rt, `전투 끝 · ${st.round}라운드`);
     G.Story.endFight(f, rt);
     G.Foe.endFight(rt);

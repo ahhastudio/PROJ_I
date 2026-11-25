@@ -89,7 +89,7 @@ RUN.gen = (() => {
     // 입구
     const start = mkRoom(TP.length ? 'tmpl' : 'rect', RUN.SMALL ? 5 : 7, RUN.SMALL ? 3 : 5, Math.max(2, Math.min(CW - 9, Math.round(F.sx * CW) - 3)), CH - 8); start.id = 0; start.parent = -1; rooms.push(start); mark(start.cells, 1, 0);
     start.tried = {};
-    for (let guard = 0; guard < 500 && rooms.length < 11; guard++) {
+    for (let guard = 0; guard < 500 && rooms.length < (S.grow || 11); guard++) {
       // 위쪽(앞으로) 방을 더 자주 고른다
       const open = rooms.filter(r => !r.tried || Object.keys(r.tried).length < 3);
       if (!open.length) break;
@@ -279,7 +279,7 @@ RUN.gen = (() => {
   }
   function build(seed, F, floor) {
     const Z = RUN.zone(floor), fi = floor - Z.floors[0];
-    const SP = RUN.SPECS && RUN.SPECS[floor], TP = RUN.SMALL ? [] : tplsOf(Z.id), g = grow(seed, F, Z.shape, TP, !!SP); if (!g) return null;
+    const SP = RUN.SPECS && RUN.SPECS[floor], TP = RUN.SMALL ? [] : tplsOf(Z.id), g = grow(seed, F, SP?.grow ? { ...Z.shape, grow: SP.grow } : Z.shape, TP, !!SP); if (!g) return null;
     const fit = SP ? fitSpec(g, SP, RUN.rng(seed * 29 + 3), TP) : null; if (SP && !fit) return null;
     if (fit) { g.rooms = fit.order; g.links = fit.keep; g.depth = fit.row; g.rank = new Map(fit.order.map((r, i) => [r.id, i])); }
     // 그 종류의 손으로 짠 방이 이 방 크기에 (돌려서라도) 들어가나 — 하나뿐인 특별한 방(야영 · 상점 · 보물 · 정예)은 맞는 크기의 방에 먼저

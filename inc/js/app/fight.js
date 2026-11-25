@@ -201,7 +201,7 @@ const FIGHT = (() => {
     F.acc += dt; let n = 0; while (F.acc >= 0.1 && n++ < 4) { G.tick(0.1); F.acc -= 0.1; }
     const foes = R.mons.filter(m => m.hp > 0), ps = R.party.filter(p => !p.dead && p.hp > 0);
     document.body.dataset.fight = `${F.round}r:${foes.length}foes:${ps.length}ps`;
-    if (!ps.length) end(false); else if (!foes.length || F.t > 600) end(true);
+    if (!ps.length) end(false); else if ((!foes.length && !(G.Turn.refill && G.Turn.refill(G.S.w.fantasy, R, R.turn))) || F.t > 600) end(true);
     return true;
   }
   function end(win) {

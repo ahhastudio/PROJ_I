@@ -86,7 +86,11 @@ G.Dive = (() => {
       9: { main: [ST, fork(heavy, EV), F_, fork(light, EL), CP, BS], sides: [bare('vault', { at: 'front' }), bare('seal', { at: 'back' }), bare('trapway', { at: 'mid' }), bare('darkroom', { at: 'mid' })] },
       10: { main: [ST, fork(heavy, EV), bare('darkcave'), fork(light, EL), CP, BS], sides: [bare('sleepers', { at: 'mid' }), bare('rubble', { at: 'front' }), bare('bars', { at: 'mid' }), bare('seal', { at: 'back' })] },
     };
-    Object.assign(SPECS, DEEP); }
+    Object.assign(SPECS, DEEP);
+    // 층을 길게 (2026-11-26 사용자: 「탐험과 전투가 너무 짧아」): 야영 앞에 방을 더한다 — 1층 전투 하나 · 2~4층 갈래와 전투 · 5~8층 전투 둘 · 9~10층 전투 하나. grow = 키울 방의 수 (생성기)
+    for (const k in SPECS) { const fl = +k, L = SPECS[k].main, i = L.findIndex(q => q.t === 'camp'), fk = { fork: [{ ...light, c: FIGHTS, enc: ENC[fl]?.a }, { ...EV, c: EVENTS_T }] }, ft = { ...F_, c: FIGHTS, enc: ENC[fl]?.mid || ENC[fl]?.b };
+      for (const q of [fk.fork[0], fk.fork[1], ft]) { if (fl > 2) delete q.c; if (!q.enc) delete q.enc; }
+      SPECS[k] = { ...SPECS[k], grow: 15, main: [...L.slice(0, i), ...(fl === 1 || fl > 8 ? [ft] : fl < 5 ? [fk, ft] : [ft, { ...ft }]), ...L.slice(i)] }; } }
 
 
   // 직업이 열리는 차례 (파이터 · 클레릭으로 시작). 엔진 직업 id — js/game/party.js CLASSES
@@ -105,7 +109,7 @@ G.Dive = (() => {
   const BRANCH = [{ id: 'supply', n: '보급' }, { id: 'party', n: '원정대' }]; // 해금 갈래 (전술 갈래는 정해지면 — 2026-11-23)
   // ── 죽음의 값 · 파티 짐 (2026-11-23) — 시험값은 이 표 하나 ──
   //   REVIVE_K: 부활 값 = 이것 × 레벨 · BAG_BASE: 짐 기본 칸 · BAG_STEP: 「짐 칸」 해금 한 단계 · SUP: 물자 하나 값(출발 때) · 힘 수정치(0 이상)만큼 영웅마다 칸이 는다
-  const TUNE = { REVIVE_FREE_LV: 3, REVIVE_K: 25, BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 30 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, FIT_W: 1, FIT_H: 0.95, PACE: 0.7, RT_ROUND: 4.2, RT_WALK: 2.4, RT_LUNGE: 700, RT_DMG: 0.3, /* 전투 빠르기 (2026-11-25 사용자: 「너무 빨리 걷고 너무 빨리 때려」) — 게임 초 기준, 화면의 ×1은 1.4배라 한 라운드 3.0초 · 걷기 초당 3.4칸 · 휘두르기 0.5초 */ TELE: 1, /* TELE: 실시간 예고 동작의 준비 (라운드 — G.MonAct.teleTick) */ // RT_DMG: 실시간에서만 양쪽이 주고받는 피해 배율 (2026-11-24 시험값 — 사용자: 「한 방에서 싸움은 15초 정도로」, 라운드 박자는 그대로 두고 라운드 수를 늘린다)
+  const TUNE = { REVIVE_FREE_LV: 3, REVIVE_K: 25, BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 30 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, FIT_W: 1, FIT_H: 0.95, PACE: 0.7, RT_ROUND: 4.2, RT_WALK: 2.4, RT_LUNGE: 700, RT_DMG: 0.3, WAVE: { fight: 2, elite: 1.5, max: 4, pay: 1.2 }, /* 전투 빠르기 (2026-11-25 사용자: 「너무 빨리 걷고 너무 빨리 때려」) — 게임 초 기준, 화면의 ×1은 1.4배라 한 라운드 3.0초 · 걷기 초당 3.4칸 · 휘두르기 0.5초 */ TELE: 1, /* TELE: 실시간 예고 동작의 준비 (라운드 — G.MonAct.teleTick) */ // RT_DMG: 실시간에서만 양쪽이 주고받는 피해 배율 (2026-11-24 시험값 — 사용자: 「한 방에서 싸움은 15초 정도로」, 라운드 박자는 그대로 두고 라운드 수를 늘린다)
     VIEW_K: 0.87 }; /* VIEW_K: 작은 방 모드의 화면 배율 (2026-11-24 사용자: 「캐릭터는 조금 더 줄여야」 — 인형 45px → 39px쯤, 예전 전투 33px와의 사이) */ // SMALL_ROOMS: 작은 방 · PACE: ×1의 빠르기 배율 (2026-11-24 — 0.7 = 30% 느리게) // HIT: 원정의 명중 보정 (d20에 더함) — 실측 영웅 60% · 몬스터 40%라 빗나감이 절반이었다 (2026-11-24, 시험값) // 물자는 야영 물자 · 횃불 둘 (치유 물약은 원정에서 없앴다) · RAID: 안전하지 않은 방에서 야영할 때 이웃한 안 치운 적 무리마다 습격 확률 // 도둑 도구 · 열림 두루마리는 없앴다 (자물쇠 따기 = 로그의 스킬, 열림 = 주문 스킬)
   const SUP_KEYS = ['torch', 'camp']; // 계단 야영: 살아 있는 사람의 최대 체력 대비 회복 (4단계는 주문 슬롯 · 기술 횟수도 — 긴 휴식)
   const byId = id => TREE.find(t => t.id === id);
@@ -116,7 +120,7 @@ G.Dive = (() => {
   // trail · fail: 층 → 지난 판에 간 방 줄 · 못 연 길 번호 · shown: 층 → 지도 화면에서 마지막으로 보여 준 기억 (새로 밝힌 방을 한 번만 그려 보이려고)
   // mapSeed: 층 지도의 기준 씨앗 (층 N의 지도 = floorSeed(이것, N)) · maps: 층 → 지도 기억 { n: 방마다 16진 한 자(정보 0~3 | 들어감 4 | 종류 봄 8), e: 길마다 32진 한 자(지나감 1 | 잠김 2 | 어두움 4 | 함정 8 | 숨은 통로 16) } · plan: 층 → 경로(방 번호 줄)
   // fv: 층 설계서 판 — 설계서가 생긴(바뀐) 층(SPEC_FL)의 지도 기억 · 경로를 옛 저장에서 비운다 (나머지는 그대로)
-  const FV = 3, SPEC_FL = [1, 2]; // FV 3 (2026-11-24): 작은 방의 1칸 = 2타일 (지도 칸은 같지만 방 안 위치 · 문이 달라진다) — 다시 모든 층을 비운다 // FV 2 (2026-11-24): 작은 방으로 모든 층의 지도가 바뀌었다 — 옛 지도 기억 · 경로 · 사건 · 야영 계획을 모든 층에서 비운다
+  const FV = 4, SPEC_FL = [1, 2]; // FV 4 (2026-11-26): 층을 길게 — 모든 층의 지도가 바뀌었다. // FV 3 (2026-11-24): 작은 방의 1칸 = 2타일 (지도 칸은 같지만 방 안 위치 · 문이 달라진다) — 다시 모든 층을 비운다 // FV 2 (2026-11-24): 작은 방으로 모든 층의 지도가 바뀌었다 — 옛 지도 기억 · 경로 · 사건 · 야영 계획을 모든 층에서 비운다
   const newSeed = () => (Math.random() * 4294967296) >>> 0;
   // 기본 설정 (2026-11-25 사용자: 「기본 옵션들을 배틀하트방식으로」): 실시간 · 넷 모두 끌어 조종 · 스킬은 손으로 · 한 판 끝나면 길드로(자동 재출발 끔) · 그린 경로를 다 돌면 귀환 · 위험해도 저절로 물러나지 않는다
   const BASE = { rt: true, rtAuto: false, hand: false, autoOn: false, endMode: 'back', risk: false, bh: 1 };
@@ -247,6 +251,7 @@ G.Dive = (() => {
   const CD_EX = { sr_revive: 30 };
   const cdOf = (k, res) => { if (CD_EX[k] != null) return CD_EX[k]; if (!res) return 0; return res.slot ? Math.min(10, res.slot + 1) : res.focus ? 2 : res.rage ? 10 : res.short ? 6 : res.long ? 8 : 0; };
   let cdHooked = false;
+  const USED = []; // 방금 자원을 쓴 스킬 (화면이 이름 · 아이콘을 띄우고 비운다)
   function cdHook() {
     if (cdHooked || !G.Res) return; cdHooked = true; const Rs = G.Res, R0 = { can: Rs.can, pay: Rs.pay, left: Rs.left, usesOf: Rs.usesOf, castLevel: Rs.castLevel, slotFrac: Rs.slotFrac, longRest: Rs.longRest };
     Rs.cdOn = false; Rs.clock = 0; Rs.cdOf = (k, res = G.Skill.resOf(k)) => cdOf(k, res);
@@ -255,7 +260,7 @@ G.Dive = (() => {
     // 옛 기본 치유(엔진 healTurn · 쓰러진 동료 일으키기 — 자원 이름 'cure')는 치유 스킬을 칸에 든 영웅만 (2026-11-23, 사용자: 「스킬 6칸에 해당 스킬이 있어야」)
     Rs.can = function (m, k, res) { if (!Rs.cdOn || !res) return R0.can.apply(this, arguments); if (k === 'cure' && (!G.Guild.active(m).some(q => G.Skill.SK[q]?.heal) || (HAND.on && !aiSk(m) && (HAND.multi || HAND.uid === m.uid)))) return false; /* 직접 조종하는 영웅도 옛 기본 치유 없이 (눌러야) */ return ready(m, k, res); };
     Rs.left = function (m, res, k) { if (!Rs.cdOn || !res) return R0.left.apply(this, arguments); return ready(m, k, res) ? 1 : 0; };
-    Rs.pay = function (m, k, res) { if (!Rs.cdOn || !res) return R0.pay.apply(this, arguments); [k, res] = sh(k, res); (m.cdK = m.cdK || {})[k] = Rs.clock; return res.slot || 0; };
+    Rs.pay = function (m, k, res) { if (!Rs.cdOn || !res) return R0.pay.apply(this, arguments); if (USED.length < 40) USED.push({ m, k }); [k, res] = sh(k, res); (m.cdK = m.cdK || {})[k] = Rs.clock; return res.slot || 0; };
     Rs.usesOf = function (m, res, k) { if (!Rs.cdOn) return R0.usesOf.apply(this, arguments); return res ? 1 : 99; };
     Rs.castLevel = function (m, res) { if (!Rs.cdOn) return R0.castLevel.apply(this, arguments); return res.slot; }; // 올려 쓰기 없음 — 그 주문의 레벨로
     Rs.slotFrac = function (m) { if (!Rs.cdOn) return R0.slotFrac.apply(this, arguments); return 1; }; // 남은 전투 수를 보고 아끼는 계산을 끈다
@@ -403,6 +408,7 @@ G.Dive = (() => {
         const out = hu0.apply(this, arguments); if (c && b > 0) statOf(cur, c).dmg += b - Math.max(0, m.hp); return out; };
       F.hurtMember = function (f, rt, p, dmg, mo) { if (G.Turn.rt && rt?.turn && dmg > 0) arguments[3] = rtDmg(dmg); const b = p?.hp, out = hm0.apply(this, arguments); if (cur?.stat && p?.merc && b > 0) { const q = statOf(cur, p.merc.cls); q.took += b - Math.max(0, p.hp); if (p.hp <= 0) q.downs++; hpSeen.set(p, { hp: Math.max(0, p.hp), max: p.max }); } return out; };
       F.kill = function (f, rt, m, src, from) { if (cur?.stat && m?.kind === 'mon' && !m._dvDead) { m._dvDead = true; cur.stat.foes++; const c = ownerOf(from) || m._dvBy; if (c) statOf(cur, c).kills++; } return kl0.apply(this, arguments); }; }
+    { const h0 = G.Story.heat; G.Story.heat = function (f, list) { h0.apply(this, arguments); for (const o of list) if (o.wvK && !o.wvDone) { o.wvDone = true; o.gold *= o.wvK; o.xpK = (o.xpK || 1) * o.wvK; } }; } // 늘어난 적의 값
     const m0 = G.Guild.mult; G.Guild.mult = function (m, k) { const v = m0.apply(this, arguments); return k === 'xp' ? v * XP_K * (curS ? catchK(m.lv, Math.max(...live.map(x => x.lv))) / pace(m.lv) : 1) : v; };
     const k0 = G.Guild.onKill; G.Guild.onKill = function (f, rt, mo) { if (cur && mo) cur.gold += killGold(mo); if (curS && mo?.n) { const e = curS.dex.m[mo.n] = curS.dex.m[mo.n] || { met: 1, kill: 0 }; e.kill++; }
       const out = k0.apply(this, arguments); if (curS) for (const a of rt.party || []) if (a.merc) { if (G.Reward.pending(a.merc)) autoPick(a.merc); if (curS.cardOn === false) cardAuto(a.merc); } return out; }; // 레벨업 카드를 끄면 빌드대로 // 원정 중에만 저절로 고른다 (기존 게임은 레벨업 창)
@@ -710,6 +716,24 @@ G.Dive = (() => {
   // 계단을 내려갔다: 계단 야영 (살아 있는 사람 체력 % · 4단계면 엔진 자원도 긴 휴식)
   function descend(st, s, members) { if (cur && cur !== st) { st.stat = cur.stat; cur = st; } recall(st, s); } // 처치 금화 · 짐 · 집계가 새 층의 상태로 (전에는 1층 상태에 남았다) // 계단: 회복 없음 (야영뿐 — 2026-11-23)
 
+  // ── 차례로 몰려오는 적 (2026-11-26 사용자: 「한마리 두마리 세마리 같이 순차적으로 늘려서」): 무리를 늘려 셋까지 나눈다. 약한 것부터, 센 것 · 우두머리는 마지막에.
+  //   TUNE.WAVE: fight · elite = 적 수의 배율 · max = 한 번에 나오는 수 · pay = 늘어난 만큼 나눈 경험치 · 금화에 곱하는 값
+  const monXp = n => G.Region.XP[G.D.F.mon[G.Encounter.monName(n)]?.stat?.cr] || G.Region.XP[G.D.F.mon[G.Encounter.monName(n)]?.cr] || 0;
+  function waveSizes(n, max) {
+    if (n <= 1) return [1]; if (n === 2) return [1, 1]; const k = n < 6 ? 2 : 3, out = Array(k).fill(0); let left = n;
+    for (let i = 0; i < k; i++) { out[i] = i + 1; left -= i + 1; } for (let i = k - 1; left > 0; i = (i + k - 1) % k) { if (out.every(v => v >= max)) { out.push(Math.min(left, max)); left -= out[out.length - 1]; continue; } if (out[i] < max) { out[i]++; left--; } }
+    return out.sort((a, b) => a - b);
+  }
+  function waves(g, type, size, floor) {
+    const W = TUNE.WAVE, us = (g.units || [[g.name, g.count]]), flat = us.flatMap(([n, c]) => Array(c).fill(n)), tally = L => { const o = new Map(); for (const n of L) o.set(n, (o.get(n) || 0) + 1); return [...o]; };
+    if (!W || !flat.length) return { list: [us], k: 1 };
+    const boss = type === 'boss' ? flat.shift() : null, cost = RUN.zone(floor)?.cost || {}, weak = flat.slice().sort((a, b) => monXp(a) - monXp(b))[0] || (boss && Object.keys(cost).sort((a, b) => cost[a] - cost[b])[0]);
+    const n0 = flat.length, want = size < 2 ? n0 + (type === 'fight' ? 1 : 0) : boss ? Math.max(n0 + 1, Math.min(6, size + 1)) : Math.max(n0 + 1, Math.round(n0 * (type === 'elite' ? W.elite : W.fight)));
+    const all = flat.concat(Array(Math.max(0, want - n0)).fill(weak)).sort((a, b) => monXp(a) - monXp(b));
+    let i = 0; const list = waveSizes(all.length, W.max).map(s => all.slice(i, i += s)).filter(L => L.length);
+    if (boss) { if (list.length > 1) list[list.length - 1].unshift(boss); else list.push([boss]); } // 우두머리는 마지막 무리의 맨 앞
+    return { list: list.map(tally), k: Math.min(1, (n0 + (boss ? 1 : 0)) / (all.length + (boss ? 1 : 0)) * W.pay) };
+  }
   // ── 자동 정책 (탐사가 묻는 곳마다 하나를 고른다 — 화면 없이). 돌려주는 것은 고른 번호 (없으면 -1 = 「두고 간다 · 둘러본다」) ──
   const hurt = st => { const a = st.party.filter(m => !m.dead); return a.length ? a.reduce((x, m) => x + m.hp / m.max, 0) / a.length : 1; };
   // 갈림길 기록 (화면 아래 로그): 「갈림길 · 계획 → 보물 창고」
@@ -779,5 +803,5 @@ G.Dive = (() => {
     const f = r => (!r ? [] : [r.gold ? `금화 +${r.gold}` : '', r.ally ? '동료 +1' : '', r.healAll ? `체력 +${r.healAll}` : '', r.hurt ? `체력 −${r.hurt}` : '', r.fight ? '싸움' : '', r.mapPiece || r.revealRow || r.scoutAhead ? '지도' : '', r.bless ? '가호' : '', r.curse ? '저주' : '', r.warn || r.alert ? '경보' : ''].filter(Boolean));
     return { ok: f(o.ok), no: o.sk ? f(o.no) : [], cost: o.cost || 0 }; }
   function toggleCamp(s, fl, id) { const pl = s.plan[fl] || []; if (!pl.includes(id) || id === pl[0]) return false; const c = s.campPlan[fl] = s.campPlan[fl] || []; const i = c.indexOf(id); if (i >= 0) c.splice(i, 1); else c.push(id); if (!c.length) delete s.campPlan[fl]; return true; }
-  return { soloBuilds, sheetOf, firstLineOf, HAND, handIs, handLock, handSet, handPick, handTick, handCd, handWait, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, toggleCamp, raidRisk, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, planLines, drawState, segPts, reward, planReward, SPECS, FV, torches, sideEnter, planSides, torchUse, isSide, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, STARTS, starts, autoStart, startFloor, floorSeed, remember, recall, explored, view, pathTo, planTo, doorVals, planBlocked, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, descend, POL };
+  return { USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, HAND, handIs, handLock, handSet, handPick, handTick, handCd, handWait, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, toggleCamp, raidRisk, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, planLines, drawState, segPts, reward, planReward, SPECS, FV, torches, sideEnter, planSides, torchUse, isSide, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, STARTS, starts, autoStart, startFloor, floorSeed, remember, recall, explored, view, pathTo, planTo, doorVals, planBlocked, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, descend, POL };
 })();

@@ -139,6 +139,7 @@ const CRAWL = (() => {
   // 갈림길 번호: 창의 길과 지도 위 표지에 같은 번호 (방향이 겹쳐도 — 출구 넷인 방에서 「왼쪽 위」가 둘이던 것)
   const NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'];
   function fork(opts) {
+    if (POL?.forkWin) { closeSign(); const inf = x => ({ ar: dirOf(x.door), k: FL.kindOf(x.e), kn: KIND[FL.kindOf(x.e)] || '통로', ic: ICON[FL.kindOf(x.e)] || 'arrow', bt: beyond(st.map.nodes[x.to]) }); opts.forEach((x, i) => { const mk = marks.find(q => q.ex && q.ex.e.id === x.e.id); if (mk) mk.el.querySelector('b').textContent = NUM[i] || '›'; }); if (POL.forkWin(st, opts, opts.map(inf), i => takeExit(opts[i]), () => POL.fork(st, opts))) return; } // 원정: 플레이어가 고른다
     closeSign(); const box = document.createElement('div'); box.id = 'exitsign';
     opts.forEach((x, i) => { const mk = marks.find(q => q.ex && q.ex.e.id === x.e.id); if (mk) mk.el.querySelector('b').textContent = NUM[i] || '›'; });
     box.innerHTML = '<h4>갈림길</h4><p>어느 길로 갈까 — 번호는 지도 위 표지와 같다</p>' + opts.map((x, i) => { const k = FL.kindOf(x.e), [ar, dw] = dirOf(x.door); return `<button data-i="${i}"><b class="fk-n">${NUM[i] || ''}</b> ${ar} ${esc(dw)} · ${esc(KIND[k] || '통로')} <small>너머: ${esc(beyond(st.map.nodes[x.to]))}</small></button>`; }).join('') +
@@ -306,7 +307,7 @@ const CRAWL = (() => {
   function syncToRUN() { for (const [p, m] of pair()) { const hp = Math.max(0, p.hp); m.hp = Math.round(m.max * hp / p.max); if (p.dead || hp <= 0) { m.hp = 0; m.dead = true; } } st.items.potion = bag()[POT] || 0; }
   function startFight(n, mod) {
     clearMarks(); closeSign(); syncToG();
-    G.Encounter.spawnRoom(R, st.map._lay.room[n.id].cells.map(FL.tile), units(n.g), lead(), { boss: n.type === 'boss', spots: st.map._lay.room[n.id].spawns }); // spots: 손으로 짠 방의 몬스터 자리
+    G.Encounter.spawnRoom(R, st.map._lay.room[n.id].cells.map(FL.tile), wave0(n), lead(), { boss: n.type === 'boss' && !R.wave?.list.length, spots: st.map._lay.room[n.id].spawns }).forEach(wvMark); // spots: 손으로 짠 방의 몬스터 자리
     FIGHT.start(R, { n, mod, log: t => { st.log.push({ t }); say(); }, purse, done: fightDone, quiet: !!POL, calm: !!POL });
     st.log.push({ t: `${n.g.label} — 전투가 시작된다.` }); say();
   }
@@ -320,7 +321,8 @@ const CRAWL = (() => {
     const n = st.map.nodes[ex.to], door = ex.path[ex.path.length - 1], lane = ex.path.slice(0, -1), dts = cellTiles(door);
     openCor(ex.e.id); refreshSeen(); // 문은 벽으로 굽지 않는다 — 다시 굽기는 화면이 깜빡이고 인물 · 카메라가 튄다(main.js). 방 안은 시야가 가린다
     syncToG();
-    const mons = G.Encounter.spawnRoom(R, st.map._lay.room[n.id].cells.map(FL.tile), units(n.g), { x: door[0], y: door[1] }, { boss: n.type === 'boss', hidden: true, spots: st.map._lay.room[n.id].spawns });
+    const mons = G.Encounter.spawnRoom(R, st.map._lay.room[n.id].cells.map(FL.tile), wave0(n), { x: door[0], y: door[1] }, { boss: n.type === 'boss' && !R.wave?.list.length, hidden: true, spots: st.map._lay.room[n.id].spawns });
+    mons.forEach(wvMark);
     if (n.alert) for (const m of mons) m.aware = 'alert'; // 이미 우리를 기다린다
     else if (POL && n.sleepy) for (const m of mons) m.aware = 'sleep'; // 원정 부품 「잠든 무리」
     // 다른 방의 적도 소리를 듣는다 (쫓아오면 전투 중에 증원)
@@ -371,6 +373,17 @@ const CRAWL = (() => {
   }
   // 적 무리: 구역 규칙표가 그 층의 기준 인원으로 정한 그대로 (파티 수로 깎거나 불리지 않는다)
   const units = g => g.units || [[g.name, g.count]];
+  // 원정: 적이 차례로 몰려온다 (POL.waves — G.Dive). R.wave = { list: 남은 무리들, i: 지금 몇째, n: 모두, k: 값 배율, node }
+  const wvMark = m => { if (R.wave) m.wvK = R.wave.k; };
+  function wave0(n) { R.wave = null; if (!POL?.waves) return units(n.g); const w = POL.waves(n.g, n.type === 'boss' ? 'boss' : n.type === 'elite' ? 'elite' : 'fight', R.party.filter(p => p.merc && !p.dead).length, st.floor); R.wave = { list: w.list.slice(1), i: 1, n: w.list.length, k: w.k, node: n, all: w.list }; return w.list[0]; }
+  G.Turn.refill = (f, rt) => {
+    const w = R?.wave; if (!FIGHT.on || rt !== R || !w || !w.list.length || !R.party.some(p => !p.dead && p.hp > 0)) return false;
+    const us = w.list.shift(), boss = w.node.type === 'boss' && !w.list.length; w.i++;
+    const live = R.party.concat(R.mons.filter(m => m.hp > 0)), cells = st.map._lay.room[w.node.id].cells.map(FL.tile).filter(([x, y]) => !live.some(e => Math.abs(e.x - x) < 1 && Math.abs(e.y - y) < 1)), L = lead();
+    const ms = G.Encounter.spawnRoom(R, cells.length ? cells : st.map._lay.room[w.node.id].cells.map(FL.tile), us, { x: L.x, y: L.y }, { boss });
+    for (const m of ms) { wvMark(m); G.fx(R, { k: 'text', x: m.x, y: m.y - 1.1, s: '!', col: '#ffd45a', t: 0.8 }); } G.Story.heat(f, ms); G.Lore.meet(f, R, ms);
+    return ms.length > 0;
+  };
   // 전투가 끝났다: 졌으면 판 끝, 이겼으면 금화 · 경험치 · 전리품 → 레벨업 고르기 → 정예 · 보스 3택1 (설계 5-12)
   function fightDone(win, F) {
     R.dvDark = false;

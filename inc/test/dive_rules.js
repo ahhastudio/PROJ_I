@@ -7,6 +7,11 @@ const G = ctx.G, D = G.Dive, RUN = ctx.RUN; G.quiet = true; G.Reward.on = true;
 const fresh1 = D.fresh; D.fresh = () => Object.assign(fresh1(), { cls0: 2 });
 let ok = 0, bad = 0; const t = (name, v, extra = '') => { if (v) ok++; else { bad++; console.log('  실패:', name, extra); } };
 
+// 차례로 몰려오는 적
+{ const cnt = w => w.list.map(L => L.reduce((a, u) => a + u[1], 0)), g = { units: [['고블린', 2], ['홉고블린', 1]] }, w = D.waves(g, 'fight', 4, 1), b = D.waves({ units: [['홉고블린', 1]] }, 'boss', 4, 1), last = b.list[b.list.length - 1];
+  t('무리 나누기: 1 · 2 · 3 차례로 늘고 합이 같다', [1, 2, 3, 4, 5, 6, 7, 9, 12].every(n => { const L = D.waveSizes(n, 4); return L.reduce((a, v) => a + v, 0) === n && L.every((v, i) => !i || v >= L[i - 1]); }) && D.waveSizes(6, 4).join() === '1,2,3');
+  t('보통 방: 셋 → 여섯, 값은 나눠서', cnt(w).join() === '1,2,3' && w.k > 0.5 && w.k < 1, JSON.stringify(w));
+  t('우두머리는 마지막 무리의 맨 앞 · 혼자면 졸개를 더하지 않는다', last[0][0] === '홉고블린' && b.list.length > 1 && D.waves({ units: [['홉고블린', 1]] }, 'boss', 1, 1).list.length === 1, JSON.stringify(b)); }
 t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i === 0 || c > x.cost[i - 1])), JSON.stringify(D.TREE.map(x => x.cost)));
 { const s = D.fresh(); s.gold = D.total(); let n = 0;
   for (let k = 0; k < 200; k++) { const can = D.TREE.filter(x => D.cost(s, x.id) != null); if (!can.length) break; if (D.buy(s, can[0].id)) n++; }
@@ -180,7 +185,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
     t('보상: 보물 방 = 물건 1 · 등급은 그 층 희귀도 표(보물은 한 구역 깊게)', JSON.stringify(D.reward(tr, 1)) === JSON.stringify({ items: G.Gear.N_DROP.treasure, r: [1, 2, 3], gem: true }), JSON.stringify(D.reward(tr, 1)));
     t('보상: 정예 = 드롭 수 · 포로 구출 = 동료 +1 · 야영 = 회복 100%', D.reward(el, 1).items === G.Gear.N_DROP.elite && D.reward(cp, 1).ally === 1 && D.reward(N1.find(n => n.type === 'camp'), 1).heal === 100);
     t('1층 갈래: 입구 곁 두 방 = 관문 없이 거대 쥐 1 · 한쪽엔 상자', ch && !ch.side && lt && m1.edges.find(e => e.b === lt.id).kind === 'open' && m1.edges.find(e => e.b === ch.id).kind === 'open' && D.reward(ch, 1).items === 1 && !D.reward(lt, 1).items);
-    t('방 수: 1층 11개 · 2층 12개 (큰길 6 · 갈래 둘 중 하나 더 · 곁방 넷 / 다섯)', N1.length === 11 && RUN.gen.make(4242, 2).nodes.length === 12);
+    t('방 수: 1층 12개 · 2층 15개 (2026-11-26 층을 길게)', N1.length === 12 && RUN.gen.make(4242, 2).nodes.length === 15);
     t('경로로 얻는 것의 합', (() => { const p = [0, ch.id]; const r = D.planReward(m1, p, 1); return r.items === 1 && r.ally === 0; })()); }
   // 지도 경로 선: 모든 길에서 점들이 그 길의 복도 칸 + 양 끝 방 칸 안에만 (방 안은 칸 사이 걷기 — 벽을 가로지르지 않는다) · 문은 방 칸에 닿는다
   { const bad = []; for (const fl of [1, 2, 3, 5, 9]) for (let k = 0; k < 6; k++) { const m = RUN.gen.make(300 + k * 211, fl), Ly = m._lay;
@@ -210,7 +215,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   t('부활: 3레벨 미만은 0', (() => { const s5 = D.fresh(); G.newState(); s5.roster.dragoon = { m: D.member(G.S.w.fantasy, 'dragoon', 2), tr: [] }; return D.reviveCost(s5, 'dragoon') === 0 && (s5.roster.dragoon.m.lv = 3, D.reviveCost(s5, 'dragoon') === 75); })());
   // 옛 저장: 1 · 2층 기억 · 경로만 비운다
   const o = D.load(JSON.stringify({ v: 3, gold: 5, maps: { 1: { n: '4', e: '' }, 2: { n: '4', e: '' }, 3: { n: '44', e: '' } }, plan: { 1: [0, 1], 3: [0, 2] } }));
-  t('옛 저장(지도 판 2 전): 모든 층의 지도 기억 · 경로를 비우고(작은 방으로 지도가 바뀌었다) 나머지는 그대로', !o.maps[1] && !o.maps[2] && !o.maps[3] && !o.plan[1] && !o.plan[3] && o.gold === 5 && o.fv === 3 && D.load(D.dump(o)).fv === 3);
+  t('옛 저장(지도 판 2 전): 모든 층의 지도 기억 · 경로를 비우고(작은 방으로 지도가 바뀌었다) 나머지는 그대로', !o.maps[1] && !o.maps[2] && !o.maps[3] && !o.plan[1] && !o.plan[3] && o.gold === 5 && o.fv === 4 && D.load(D.dump(o)).fv === 4);
   { const o2 = D.load(JSON.stringify({ v: 3, fv: 3, maps: { 3: { n: '44', e: '' } } })); t('지도 판 3 저장은 그대로', o2.maps[3].n === '44'); }
 }
 
