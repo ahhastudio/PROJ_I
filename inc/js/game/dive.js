@@ -105,7 +105,7 @@ G.Dive = (() => {
   const BRANCH = [{ id: 'supply', n: '보급' }, { id: 'party', n: '원정대' }]; // 해금 갈래 (전술 갈래는 정해지면 — 2026-11-23)
   // ── 죽음의 값 · 파티 짐 (2026-11-23) — 시험값은 이 표 하나 ──
   //   REVIVE_K: 부활 값 = 이것 × 레벨 · BAG_BASE: 짐 기본 칸 · BAG_STEP: 「짐 칸」 해금 한 단계 · SUP: 물자 하나 값(출발 때) · 힘 수정치(0 이상)만큼 영웅마다 칸이 는다
-  const TUNE = { REVIVE_FREE_LV: 3, REVIVE_K: 25, BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 30 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, FIT_W: 1, FIT_H: 0.95, PACE: 0.7, RT_ROUND: 2.4, RT_DMG: 0.3, TELE: 1, /* TELE: 실시간 예고 동작의 준비 (라운드 — G.MonAct.teleTick) */ // RT_DMG: 실시간에서만 양쪽이 주고받는 피해 배율 (2026-11-24 시험값 — 사용자: 「한 방에서 싸움은 15초 정도로」, 라운드 박자는 그대로 두고 라운드 수를 늘린다)
+  const TUNE = { REVIVE_FREE_LV: 3, REVIVE_K: 25, BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 30 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, FIT_W: 1, FIT_H: 0.95, PACE: 0.7, RT_ROUND: 4.2, RT_WALK: 2.4, RT_LUNGE: 700, RT_DMG: 0.3, /* 전투 빠르기 (2026-11-25 사용자: 「너무 빨리 걷고 너무 빨리 때려」) — 게임 초 기준, 화면의 ×1은 1.4배라 한 라운드 3.0초 · 걷기 초당 3.4칸 · 휘두르기 0.5초 */ TELE: 1, /* TELE: 실시간 예고 동작의 준비 (라운드 — G.MonAct.teleTick) */ // RT_DMG: 실시간에서만 양쪽이 주고받는 피해 배율 (2026-11-24 시험값 — 사용자: 「한 방에서 싸움은 15초 정도로」, 라운드 박자는 그대로 두고 라운드 수를 늘린다)
     VIEW_K: 0.87 }; /* VIEW_K: 작은 방 모드의 화면 배율 (2026-11-24 사용자: 「캐릭터는 조금 더 줄여야」 — 인형 45px → 39px쯤, 예전 전투 33px와의 사이) */ // SMALL_ROOMS: 작은 방 · PACE: ×1의 빠르기 배율 (2026-11-24 — 0.7 = 30% 느리게) // HIT: 원정의 명중 보정 (d20에 더함) — 실측 영웅 60% · 몬스터 40%라 빗나감이 절반이었다 (2026-11-24, 시험값) // 물자는 야영 물자 · 횃불 둘 (치유 물약은 원정에서 없앴다) · RAID: 안전하지 않은 방에서 야영할 때 이웃한 안 치운 적 무리마다 습격 확률 // 도둑 도구 · 열림 두루마리는 없앴다 (자물쇠 따기 = 로그의 스킬, 열림 = 주문 스킬)
   const SUP_KEYS = ['torch', 'camp']; // 계단 야영: 살아 있는 사람의 최대 체력 대비 회복 (4단계는 주문 슬롯 · 기술 횟수도 — 긴 휴식)
   const byId = id => TREE.find(t => t.id === id);
@@ -495,7 +495,7 @@ G.Dive = (() => {
     const r = G.Fantasy.rt(f); G.Fantasy.syncAllies(f);
     f.town = false; r.phase = 'explore'; r.turn = null; r.mons = []; r.chests = []; r.fields = [];
     G.Trinket.sync?.(f); live = G.Party.members(f); xp0 = live.map(totalXp); // 앞장은 f.leader(사본)이라 명단 차례대로 엔진 쪽 사람을 잡아 둔다
-    f.turnX = speeds(s)[speeds(s).length - 1]; // 배속은 연 것 중 가장 빠른 것
+    f.turnX = s.rt ? (speeds(s).includes(s.spdX) ? s.spdX : speeds(s)[0]) : speeds(s)[speeds(s).length - 1]; // 실시간은 ×1에서 (고른 배속은 기억한다) · 턴제는 연 것 중 가장 빠른 것
     r.map = map; r.seen = new Uint8Array(map.w * map.h).fill(1); r.seenVer = (r.seenVer || 0) + 1;
     return { f, r };
   }

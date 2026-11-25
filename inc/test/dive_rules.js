@@ -473,7 +473,9 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   { const { f, r, ms } = rig(null, true), p = r.party[0], mo = ms[0], z = []; r.turn = r.turn || { cur: null }; mo.hp = mo.max = 500; p.hp = p.max = 500;
     for (const d of [1, 2, 3]) { const h = mo.hp; G.Fantasy.hurt(f, r, mo, d, 'hit', { merc: p.merc }); z.push(h - mo.hp); } for (const d of [1, 3]) { const h = p.hp; G.Fantasy.hurtMember(f, r, p, d, null); z.push(h - p.hp); }
     t('실시간: 맞았으면 피해가 1 이상 (배율 0.3의 소수를 버려 0이 되던 것)', z.every(v => v >= 1), z);
-    const h0 = mo.hp; for (let k = 0; k < 20; k++) G.Fantasy.hurt(f, r, mo, 9, 'hit', { merc: p.merc }); t('실시간: 피해 배율은 반올림 (9 × 0.3 = 2.7 → 3)', h0 - mo.hp === 60, h0 - mo.hp); }
+    const h0 = mo.hp; for (let k = 0; k < 20; k++) G.Fantasy.hurt(f, r, mo, 9, 'hit', { merc: p.merc }); t('실시간: 피해 배율은 반올림 (9 × 0.3 = 2.7 → 3)', h0 - mo.hp === 20 * Math.round(9 * D.TUNE.RT_DMG), h0 - mo.hp); }
+  { const s = D.fresh(); s.up = Object.fromEntries(D.TREE.map(q => [q.id, q.cost.length])); s.roster.dragoon = { m: D.member(G.S.w.fantasy, 'dragoon', 3), tr: [] }; const mk = () => ({ w: W, h: Hh, c, kindAt: new Uint8Array(W * Hh), poi: {}, passChars: '.>,', ver: 1, dist: {}, rooms: [RM], start: RM, end: RM, fixed: true });
+    s.rt = true; const a = D.world(s, mk()).f.turnX; s.spdX = 4; const b = D.world(s, mk()).f.turnX; s.rt = false; const cc = D.world(s, mk()).f.turnX; t('실시간은 ×1에서 시작 · 고른 배속은 기억 · 턴제는 가장 빠른 것', a === D.speeds(s)[0] && b === 4 && cc === 8, [a, b, cc]); G.Turn.rt = { round: RTs }; G.Turn.smooth = true; }
   // 실시간 명령 (2026-11-25): 누른 스킬은 시계를 기다리지 않는다 · 쿨타임이면 안 나간다 · 표적을 바꾸면 걸음이 바뀐다 · 바닥 명령
   { const { r } = rig(null, false), p = r.party[1]; for (let k = 0; k < 6; k++) G.tick(0.05); const L = r.lanes.get(p); L.clk = 2; L.ph = 'idle'; D.HAND.cmd[p.merc.uid] = { lock: null, res: { k: 'sr_bless' }, seq: 1 }; D.HAND.fired = null; G.tick(0.05);
     t('실시간: 누른 스킬은 그 틱에 나간다 (시계와 따로) · 행동 스킬은 시계를 처음으로', D.HAND.fired?.k === 'sr_bless' && Math.abs(L.clk - RTs) < 0.11, [D.HAND.fired, L.clk]); }

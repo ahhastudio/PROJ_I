@@ -79,9 +79,12 @@ const QPX = (() => {
       if (st.lq < 1) { const [pre, post] = K.seg[(e._qn || 0) % K.seg.length], i = st.lq < .22 ? wrap(pre, st.lq / .22) : wrap(post, (st.lq - .22) / .78); col = 12 + Math.min(i, s.na - 1); adv = K.adv[i] || 0; }
       else if (st.hq < 1) col = 12 + s.na + wrap([0, 1, 2], st.hq);
       else if (st.aim) col = 12 + (K.aim ?? K.seg[0][0][K.seg[0][0].length - 1]);
-      else if (st.moving) col = 4 + Math.floor(st.t * 15 + (e._ph || 0) * 2) % 8;
+      else if (st.moving) { // 발걸음: 움직인 거리만큼 (한 바퀴 8장 = 1.4칸, 초당 22장까지)
+        const mv = Math.hypot((e._dx ?? e.x) - (e._qx ?? e._dx ?? e.x), (e._dy ?? e.y) - (e._qy ?? e._dy ?? e.y)); e._qw = (e._qw || 0) + Math.min(mv * 5.7, Math.max(0, st.t - (e._qt ?? st.t)) * 22); col = 4 + Math.floor(e._qw) % 8;
+      }
       else col = Math.floor(st.t * 4 + (e._ph || 0)) % 4;
     }
+    e._qx = e._dx ?? e.x; e._qy = e._dy ?? e.y; e._qt = st.t;
     const sp = cut(a, col, d); if (!sp) return null;
     const th = d * Math.PI / 4; // 공격 그림이 앞으로 나간 만큼 되돌린다
     return Object.assign(Object.create(sp), { ox: -Math.sin(th) * adv * PXM, oy: -Math.cos(th) * adv * PXM * SINB, hh: headOf(a, d) });

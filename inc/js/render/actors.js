@@ -46,7 +46,7 @@ function settle(r, dt) {
     const dx = e.x - e._dx, dy = e.y - e._dy, d = Math.hypot(dx, dy);
     if (d > SNAP_D) { e._dx = e.x; e._dy = e.y; continue; } // 층 이동 · 소환 같은 진짜 이동만
     if (d < .001) continue;
-    const step = Math.min(d, DISP_V * X * dt); // 걷는 속도는 늘 같다 (초당 8칸 × 배속): 멀어도 빨라지지 않고, 끝에서 느려지지 않고 딱 선다 (2026-11-23 — 예전에는 가까울수록 느려져 미끄러지듯 보였고, 빠른 배속에서는 그림이 닿기 전에 공격이 나갔다)
+    const step = Math.min(d, (r.turn && G.Turn.rt?.walk || DISP_V) * X * dt); // 걷는 속도는 늘 같다 (초당 8칸 × 배속): 멀어도 빨라지지 않고, 끝에서 느려지지 않고 딱 선다 (2026-11-23 — 예전에는 가까울수록 느려져 미끄러지듯 보였고, 빠른 배속에서는 그림이 닿기 전에 공격이 나갔다)
     if (clear(e._dx, e._dy, e.x, e.y)) { e._dx += dx / d * step; e._dy += dy / d * step; continue; }
     const cells = GR.field(m, Math.round(e.x), Math.round(e.y))[Math.round(e._dy) * m.w + Math.round(e._dx)];
     if (cells < 0 || cells > SNAP_D * 1.5) { e._dx = e.x; e._dy = e.y; continue; }
@@ -69,7 +69,7 @@ const dispAt = (x, y, r) => { for (const e of r.party.concat(r.mons)) if (e._dx 
 // 길이는 배속만큼 짧아진다 (걷기와 같은 박자, 너무 짧아 안 보이지 않게 바닥을 둔다)
 const LUNGE_MS = QPX.on ? 430 : 300, LUNGE_0 = .22;
 function lungeQ(e, n, st) {
-  const X = G.Turn.speed(G.S.w.fantasy) || 1, q = e._lu ? (n - e._lu) / (Math.max(110, LUNGE_MS / X) * (1 - LUNGE_0)) : 1;
+  const X = G.Turn.speed(G.S.w.fantasy) || 1, q = e._lu ? (n - e._lu) / (Math.max(110, (st && G.Turn.rt?.lunge || LUNGE_MS) / X) * (1 - LUNGE_0)) : 1;
   if (q < 1) { e._wu = 0; return LUNGE_0 + q * (1 - LUNGE_0); }
   if (st && st.cur === e && st.ph === 'pre' && st.tg && !isRanged(e) && Math.hypot((e._dx ?? e.x) - e.x, (e._dy ?? e.y) - e.y) < .12) { if (!e._wu) e._wu = n; return LUNGE_0 * .999 * Math.min(1, (n - e._wu) / Math.max(40, 90 / X)); }
   e._wu = 0; return 1;

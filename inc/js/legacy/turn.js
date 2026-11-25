@@ -198,7 +198,7 @@ G.Turn = (() => {
     if (st.ph === 'show') { G.Tactics.snap(rt, st.cur); if ((st.t -= dt) <= 0) { st.ph = 'move'; st.t = 0; } return; }
     if (st.ph === 'pre') {
       if ((st.t -= dt) > 0) return;
-      if (T.smooth && st.t > -3.5 && st.cur && st.cur._dx != null && Math.hypot(st.cur._dx - st.cur.x, st.cur._dy - st.cur.y) > 0.12) return; // 그림이 다 걸어올 때까지 (3.5초까지 — 그림은 초당 8칸 × 배속으로 걷는다: render/actors settle. 가장 긴 질주 24칸 = 3초)
+      if (T.smooth && st.t > (T.rt?.walk ? -12 : -3.5) && st.cur && st.cur._dx != null && Math.hypot(st.cur._dx - st.cur.x, st.cur._dy - st.cur.y) > 0.12) return; // 그림이 다 걸어올 때까지 (3.5초까지 — 그림은 초당 8칸 × 배속으로 걷는다: render/actors settle. 가장 긴 질주 24칸 = 3초)
       const e = st.cur, tg = st.tg;
       if (gone(rt, e) || !tg || (tg.kind === 'mon' ? gone(rt, tg) : tg.dead)) { T.pre = null; pause(st, SKIP); return; }
       act(f, rt, st, e, tg); T.pre = null;

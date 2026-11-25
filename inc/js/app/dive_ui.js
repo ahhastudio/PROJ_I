@@ -579,7 +579,7 @@ const DIVEUI = (() => {
     const v = CRAWL.view(), st = CRAWL.st; if (!v || !st) return; let el = $('dv-bar');
     if (!el) { el = document.createElement('div'); el.id = 'dv-bar'; el.onpointerup = ev => ev.stopPropagation(); el.innerHTML = '<div class="dv-top"></div><div class="dv-ps"></div>'; $('stage').append(el);
       el.onclick = ev => { if (D.HAND.on && handClick(ev)) return; const b = ev.target.closest('button'); if (!b) return; const f = G.S.w.fantasy, sp = D.speeds(S);
-        if (b.classList.contains('dv-spd')) { f.turnX = sp[(sp.indexOf(f.turnX || sp[0]) + 1) % sp.length]; barK = ''; } // 단계는 f.turnX로 (G.Turn.speed에는 PACE가 곱해져 있다)
+        if (b.classList.contains('dv-spd')) { f.turnX = sp[(sp.indexOf(f.turnX || sp[0]) + 1) % sp.length]; S.spdX = f.turnX; put(S); barK = ''; } // 단계는 f.turnX로 (G.Turn.speed에는 PACE가 곱해져 있다)
         if (b.classList.contains('dv-quit') && !run.over) finish(CRAWL.st, 'quit');
         if (b.classList.contains('dv-bagchip')) bagPop(); }; } // 돌아가기: 여기까지 번 금화 · 깬 층으로 끝낸다
     if (v.fighting !== wasFight) { wasFight = v.fighting; } // 전투가 끝나면 기본 배율로 (전투 중은 fitZoom)
@@ -641,7 +641,7 @@ const DIVEUI = (() => {
   // ── 직접 조종 시험판 (2026-11-24, 흐름식 — 규칙은 D.HAND): 카드를 누르면 그 영웅을 조종 · 다시 누르면 전원 AI. 적을 누르면 표적 고정. 스킬을 누르면 다음 차례에 (치유는 누른 뒤 카드로 대상)
   const cdL = (m, k) => { const p = R?.turn && R.party.find(q => q.merc === m); return p ? D.handCd(R, p, k) : G.Res.cdLeftOf ? G.Res.cdLeftOf(m, k) : 0; }; // 남은 쿨타임 (라운드) — 전투 중엔 무기 기술 쿨타임까지
   const handM = () => (D.HAND.on && D.HAND.uid != null ? R?.party.find(p => p.merc?.uid === D.HAND.uid)?.merc || null : null);
-  function handInit() { const H = D.HAND, rtOn = /[?&]rt=0/.test(location.search) ? false : !!S.rt || /[?&]rt=1/.test(location.search); H.cmd = {}; H.multi = rtOn; H.auto = rtOn && S.rtAuto !== false; G.Turn.rt = rtOn ? { round: D.TUNE.RT_ROUND } : null; document.body.classList.toggle('rt', rtOn); // 실시간 시험판: 넷 모두 끌어서 조종 · 유닛마다 시계
+  function handInit() { const H = D.HAND, rtOn = /[?&]rt=0/.test(location.search) ? false : !!S.rt || /[?&]rt=1/.test(location.search); H.cmd = {}; H.multi = rtOn; H.auto = rtOn && S.rtAuto !== false; G.Turn.rt = rtOn ? { round: D.TUNE.RT_ROUND, walk: D.TUNE.RT_WALK, lunge: D.TUNE.RT_LUNGE } : null; document.body.classList.toggle('rt', rtOn); // 실시간 시험판: 넷 모두 끌어서 조종 · 유닛마다 시계
     H.on = rtOn || !!S.hand || /[?&]hand=1/.test(location.search); H.uid = H.on && !rtOn && S.handCls ? R.party.find(p => p.merc?.cls === S.handCls)?.merc?.uid ?? null : null; } // 원정이 다시 시작돼도 같은 직업을
   const handKey = () => { const m = handM(); const fr = D.HAND.fired && Date.now() - D.HAND.fired.t < 1200 ? D.HAND.fired.k : ''; const nk = D.HAND.ack && Date.now() - D.HAND.ack.t < 700 ? D.HAND.ack.t : 0; return D.HAND.on ? [fr, nk, D.HAND.uid, D.HAND.res?.k, D.HAND.res?.ally?.merc?.uid, m ? G.Builds.slots(m).filter(Boolean).map(k => cdL(m, k)) : 0] : 0; };
   function handClick(ev) {
