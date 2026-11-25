@@ -20,7 +20,7 @@ const TOP = (() => {
   // 화면
   const stage = $('stage'), cv = document.createElement('canvas'); cv.id = 'ct'; cv.style.cssText = 'position:absolute;left:0;top:0;image-rendering:pixelated;'; canvas.after(cv);
   const x = cv.getContext('2d'); canvas.style.visibility = 'hidden'; const hd0 = () => { const h = $('hd'); if (h) h.style.display = 'none'; };
-  const TS = 16; let Z = 3, cx = 0, cy = 0, cw = 0, ch = 0, ready = false;
+  const TS = 16, CY = 0.4; let Z = 3, cx = 0, cy = 0, cw = 0, ch = 0, ready = false;
   const zkOf = () => { try { return JSON.parse(localStorage.getItem('inc.dive') || '{}').zk || 1; } catch (e) { return 1; } };
   let zk = 1, zkT = 0;
   function size() {
@@ -29,13 +29,13 @@ const TOP = (() => {
     cw = cv.width; ch = cv.height; const n = performance.now(); if (n - zkT > 300) { zkT = n; zk = zkOf(); }
     Z = Math.max(1, Math.round(ch / (TS * 11) * zk)); // 화면 높이에 칸 11개쯤 (확대 · 축소는 원정의 배율 zk)
   }
-  const sx = tx => Math.round((tx - cx) * TS * Z + cw / 2), sy = ty => Math.round((ty - cy) * TS * Z + ch / 2);
+  const sx = tx => Math.round((tx - cx) * TS * Z + cw / 2), sy = ty => Math.round((ty - cy) * TS * Z + ch * CY);
   const dpr = () => cv.width / (stage.clientWidth || 1);
   // UI 좌표 바꿔 끼우기 (stage 기준 CSS px)
-  const toStage = (tx, ty, z = 0) => [((tx - cx) * TS * Z + cw / 2) / dpr(), ((ty - cy) * TS * Z + ch / 2 - z * TS * Z * 0.5) / dpr()];
+  const toStage = (tx, ty, z = 0) => [((tx - cx) * TS * Z + cw / 2) / dpr(), ((ty - cy) * TS * Z + ch * CY - z * TS * Z * 0.5) / dpr()];
   UI.toStage = toStage;
   UI.place = (el, tx, ty, z = 0) => { const [X, Y] = toStage(tx, ty, z * 0.9); el.style.transform = `translate(${Math.round(X)}px,${Math.round(Y)}px) translate(-50%,-100%)`; };
-  UI.tileAt = (clientX, clientY) => { const r = cv.getBoundingClientRect(), d = dpr(); return [cx + ((clientX - r.left) * d - cw / 2) / (TS * Z), cy + ((clientY - r.top) * d - ch / 2) / (TS * Z)]; };
+  UI.tileAt = (clientX, clientY) => { const r = cv.getBoundingClientRect(), d = dpr(); return [cx + ((clientX - r.left) * d - cw / 2) / (TS * Z), cy + ((clientY - r.top) * d - ch * CY) / (TS * Z)]; };
   const put = (n, ix, iy) => { const i = im(n); if (i) x.drawImage(i, ix, iy, i.naturalWidth * Z, i.naturalHeight * Z); };
   const FLOOR = ['floor_1', 'floor_1', 'floor_1', 'floor_2', 'floor_3', 'floor_1', 'floor_4', 'floor_1', 'floor_5', 'floor_6', 'floor_7', 'floor_8'];
   const hsh = (a, b) => { let h = Math.imul(a | 0, 73856093) ^ Math.imul(b | 0, 19349663); h = Math.imul(h ^ (h >>> 13), 1274126177); return (h >>> 0) % 1000; };
@@ -74,13 +74,44 @@ const TOP = (() => {
     x.restore();
     const max = e.max || 1; if (r.turn && e.hp < max) { const bw = Math.max(w * 0.8, 12 * Z), bx = sx(tx) - bw / 2, by = Y - h - 4 * Z; x.fillStyle = '#120a08'; x.fillRect(bx - Z, by - Z, bw + 2 * Z, 3 * Z); x.fillStyle = mon ? '#e04a3a' : '#5fd068'; x.fillRect(bx, by, bw * Math.max(0, e.hp) / max, Z); }
   }
+  // 주문 · 기술 이펙트: 쿼터뷰의 선 그림 이펙트(VFX.VEC — 원점 = 발밑, 단위 = 버퍼 화소)를 탑뷰 좌표에 그대로 그린다. 없는 이름은 색 고리
+  const live = [], VK = 0.75; // VK: 쿼터뷰 버퍼 화소 → 0x72 화소 (인형 38 ↔ 인물 28)
+  const tint = id => (/fire|flame|meteor/.test(id) ? '#ff8a3a' : /ice|frost|snow/.test(id) ? '#9fe0ff' : /holy|heal|light|bless/.test(id) ? '#ffe98a' : /nature|poison|acid/.test(id) ? '#8fe04a' : '#c9a0ff');
+  function vfx(id, tx, ty, t, o = {}) { const V = VFX.VEC?.[id]; if (!V) { words.push({ ring: 1, x: tx, y: ty, c: tint(id), t0: t }); return null; } const q = { vid: id, x: tx, y: ty, t0: t, dur: V.loop ? Math.min(1.2, (V.dur || 1) * 2) : V.dur || 0.6, loop: !!V.loop, seed: Math.random() * 6.283, ang: 0, flip: false, pal: false, ...o }; live.push(q); return q; }
+  function cast(o, r, t) {
+    const a = o.who, ax = a?._dx ?? o.x, ay = a?._dy ?? o.y, id = o.id || '', near = p => [...r.party, ...r.mons].find(e => !e.dead && e.hp > 0 && Math.hypot(e.x - p[0], e.y - p[1]) < 0.9) || null;
+    if (o.mode === 'me') { vfx(id, ax, ay, t, { e: a }); return; }
+    for (const p of (o.pts || []).slice(0, 8)) {
+      if (o.mode === 'to' || o.mode === 'all') { vfx(id, p[0], p[1], t, { e: near(p) }); continue; }
+      const ang = Math.atan2(p[1] - ay, p[0] - ax);
+      if (o.mode === 'fly') { const q = vfx(id, ax, ay, t, { ang, fly: { x0: ax, y0: ay, x1: p[0], y1: p[1], T: 0.3 }, z: 1 }); if (q) { q.dur = Math.max(q.dur, 0.3); q.hit = o.hit ? () => vfx(o.hit, p[0], p[1], t + 0.3, { e: near(p) }) : null; } continue; }
+      const q = vfx(id, ax, ay, t, p[0] < ax ? { flip: true, ang: -Math.atan2(p[1] - ay, ax - p[0]) } : { ang }); if (q && o.hit) { q.hitAt = 0.35; q.hit = () => vfx(o.hit, p[0], p[1], t, { e: near(p) }); }
+    }
+  }
+  function drawVfx(t) {
+    for (let i = live.length - 1; i >= 0; i--) {
+      const q = live[i], V = VFX.VEC[q.vid], age = t - q.t0; if (age < 0) continue;
+      if (q.hit && (q.fly ? age >= q.fly.T : age >= (q.hitAt || 0.35) * q.dur)) { const h = q.hit; q.hit = null; h(); }
+      if (age >= q.dur || (q.fly && age >= q.fly.T)) { live.splice(i, 1); continue; }
+      if (q.e && q.e._dx != null) { q.x = q.e._dx; q.y = q.e._dy; }
+      let tx = q.x, ty = q.y; if (q.fly) { const k = age / q.fly.T; tx = q.fly.x0 + (q.fly.x1 - q.fly.x0) * k; ty = q.fly.y0 + (q.fly.y1 - q.fly.y0) * k; }
+      const u = q.loop ? (age % (V.dur || 1)) / (V.dur || 1) : Math.min(1, age / q.dur), K = Z * VK, X = sx(tx), Y = sy(ty) + TS * Z * 0.45 - (q.fly ? TS * Z * 0.6 : 0);
+      try {
+        if (V.glow) { x.save(); x.globalCompositeOperation = 'lighter'; x.translate(X, Y); x.scale(K, K); x.filter = `blur(${Math.round(Z * 2)}px)`; V.glow(x, u, q); x.restore(); }
+        x.save(); x.translate(X, Y); x.scale(K * 1.25, K * 1.25); if (q.ang) x.rotate(q.ang); if (q.flip) x.scale(-1, 1); x.lineJoin = 'round'; x.lineCap = 'round'; x.globalAlpha = q.loop && age > q.dur - 0.25 ? (q.dur - age) / 0.25 : 1; V.draw(x, u, q, age); x.restore();
+      } catch (err) { live.splice(i, 1); }
+    }
+  }
   function drawFxTop(r, t) {
     for (const o of r.fx || []) { o._seen = 1; if (o._tv) continue; o._tv = 1;
       if (o.k === 'text') { const s = String(o.s).trim(), num = /^[+\-]?[\d,.]+$/.test(s); if (num && !Math.round(parseFloat(s.replace(/[^\d.]/g, '')))) continue; words.push({ s, x: o.x, y: o.y, c: o.col || (num ? (s[0] === '+' ? '#7dff8a' : '#ffffff') : '#ffe9b0'), t0: t, num, sz: o.sz || 1 }); }
       else if ((o.k === 'proj' || o.k === 'beam') && o.x2 != null) words.push({ beam: 1, x: o.x, y: o.y, x2: o.x2, y2: o.y2, c: o.col || '#ffd45a', t0: t });
-      else if (o.k === 'cast') for (const p of (o.pts || []).slice(0, 6)) words.push({ ring: 1, x: p[0], y: p[1], c: /fire|flame/.test(o.id || '') ? '#ff8a3a' : /ice|frost/.test(o.id || '') ? '#9fe0ff' : /holy|heal|light/.test(o.id || '') ? '#ffe98a' : '#c9a0ff', t0: t });
+      else if (o.k === 'cast') cast(o, r, t);
+      else if (o.k === 'slash' && o.x != null) vfx('slash', o.x, o.y, t, { flip: !!o.flip, ang: (o.rot || 0) * 0.6, crit: !!o.crit, z: 1 });
+      else if (o.k === 'impact' && o.x != null) vfx('impacts/hit-spark', o.x, o.y, t, { z: 1 });
+      else if (o.k === 'splat' && o.x != null) vfx('blood', o.x, o.y, t, { dir: (o.dx || o.dy) ? Math.atan2(o.dy || 0, o.dx || 0) : -1.57, n: o.n || 5, s: o.s || 1 });
     }
-    x.textAlign = 'center';
+    drawVfx(t); x.textAlign = 'center';
     for (let k = words.length - 1; k >= 0; k--) {
       const w = words[k], u = (t - w.t0) / (w.beam ? 0.25 : w.ring ? 0.5 : 0.9); if (u >= 1) { words.splice(k, 1); continue; }
       if (w.beam || w.ring) { x.strokeStyle = w.c; x.globalAlpha = 1 - u; x.lineWidth = 2 * Z; x.beginPath(); if (w.beam) { x.moveTo(sx(w.x), sy(w.y)); x.lineTo(sx(w.x2), sy(w.y2)); } else x.arc(sx(w.x), sy(w.y), (4 + u * 14) * Z, 0, 7); x.stroke(); x.globalAlpha = 1; continue; }
@@ -89,19 +120,19 @@ const TOP = (() => {
     }
   }
   function draw(r, dt) {
-    size(); hd0(); const t = performance.now() / 1000;
-    const dc = r.turn ? DIVEUI.camAt(r) : null, hf = DIVEUI.follow ? DIVEUI.follow(r) : null, live = r.party.filter(p => !p.dead);
+    size(); hd0(); const t = performance.now() / 1000; if (typeof settle === 'function') settle(r, dt); // 표시 위치(_dx · _dy)를 걸음에 맞춰 옮긴다 (쿼터뷰 그리기가 하던 일)
+    const pl = r.party.filter(p => !p.dead), pc = pl.length ? [pl.reduce((a, e) => a + (e._dx ?? e.x), 0) / pl.length, pl.reduce((a, e) => a + (e._dy ?? e.y), 0) / pl.length] : [cx, cy], seenM = r.mons.filter(m => m.hp > 0 && m.spotted && m.aggro && Math.hypot(m.x - pc[0], m.y - pc[1]) < 7), pts = pl.concat(seenM), dc = r.turn && pts.length ? [pts.reduce((a, e) => a + (e._dx ?? e.x), 0) / pts.length, pts.reduce((a, e) => a + (e._dy ?? e.y), 0) / pts.length] : null, hf = DIVEUI.follow ? DIVEUI.follow(r) : null, live = r.party.filter(p => !p.dead);
     const aim = hf || dc || (live.length ? [live.reduce((a, p) => a + (p._dx ?? p.x), 0) / live.length, live.reduce((a, p) => a + (p._dy ?? p.y), 0) / live.length] : [cx, cy]);
     const k = ready ? 1 - Math.exp(-dt * 5) : 1; cx += (aim[0] - cx) * k; cy += (aim[1] - cy) * k; ready = true;
     x.imageSmoothingEnabled = false; x.filter = 'none'; x.fillStyle = '#100c12'; x.fillRect(0, 0, cw, ch);
     drawMap(r);
     for (const P of r.map.props || []) { const n = PROP[P.kind || P.k || P.t]; if (!n || !r.seen?.[Math.round(P.y) * r.map.w + Math.round(P.x)]) continue; const I = im(n); if (I) x.drawImage(I, sx(P.x) - I.naturalWidth * Z / 2, sy(P.y) + TS * Z / 2 - I.naturalHeight * Z, I.naturalWidth * Z, I.naturalHeight * Z); }
     const foesOf = e => (e.kind === 'mon' ? r.party.filter(p => !p.dead) : r.mons.filter(m => m.hp > 0 && m.aggro));
-    const all = r.mons.filter(m => m.hp > 0 && !m.hidden && r.seen?.[Math.round(m.y) * r.map.w + Math.round(m.x)]).concat(r.party);
+    const all = r.mons.filter(m => m.hp > 0 && m.spotted && r.seen?.[Math.round(m.y) * r.map.w + Math.round(m.x)]).concat(r.party);
     all.sort((a, b) => (a._dy ?? a.y) - (b._dy ?? b.y)).forEach(e => drawEnt(e, r, t, dt, foesOf(e)));
     if (live.length) { const g = x.createRadialGradient(sx(aim[0]), sy(aim[1]), TS * Z * 4, sx(aim[0]), sy(aim[1]), Math.max(cw, ch) * 0.7); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(6,3,10,.7)'); x.fillStyle = g; x.fillRect(0, 0, cw, ch); } // 빛: 파티 둘레만
     drawFxTop(r, t);
     document.body.dataset.floor = 'ready';
   }
-  return { on: true, draw };
+  return { on: true, draw, dbg: e => { const a = artOf(e); return [a[0], frameOf(a[0], 'idle', 0), !!im(frameOf(a[0], 'idle', 0))]; }, get fx() { return live.map(q => q.vid); } };
 })();
