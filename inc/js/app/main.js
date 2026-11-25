@@ -6,6 +6,7 @@ function frame(tt) {
   const t = n / 1000, r = rt();
   (DIVEUI.on ? DIVEUI : CRAWL).frame(JU.gdt(dt)); // 원정 모드(dive.html)면 원정이 전투 · 화면을 돌린다. 게임 시간은 타격 경직(멈춤) · 느려짐을 탄다 — 예전에는 멈춤 값을 쓰지 않던 acc에만 걸어 히트스톱이 없었다 (2026-11-23)
   if (!r.map || !r.party) { requestAnimationFrame(frame); return; }
+  if (TOP.on) { TOP.draw(r, dt); requestAnimationFrame(frame); return; } // 탑뷰 시험 (?view=top — js/render/topview.js)
   const c0 = now();
   const ref = r.party.find(p => !p.dead) || r.hero;
   if (r.map?.redraw) { r.map.redraw = false; win.map = null; }

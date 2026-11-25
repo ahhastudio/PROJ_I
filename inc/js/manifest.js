@@ -21,7 +21,7 @@
   render: [
     'js/render/artset', 'assets/dcss/map', 'js/render/pixelfx/pixelfx.bundle', 'js/render/paperdoll', 'js/render/core', 'js/render/models',
     'js/render/bake', 'js/render/voxel', 'js/render/voxchar', 'js/render/sprites', 'js/render/dragon', 'js/render/minidoll', 'js/render/qpx', 'js/app/ui', 'js/app/pmap', 'js/app/fight', 'js/app/side', 'js/app/fx', 'js/app/prep_ui', 'js/app/reward_ui', 'js/app/check_ui', 'js/app/title_ui', 'js/app/gear_ui', 'js/app/tavern_ui', 'js/app/hud', 'js/app/crawl', 'js/app/dive_map', 'js/app/dive_inn', 'js/app/skill_ui', 'js/app/dive_ui', 'js/app/boot', 'js/render/fxlayer', 'js/render/pfx',
-    'js/render/vfx', 'js/render/hdbg', 'js/render/dice', 'js/render/actors', 'js/render/props',
+    'js/render/vfx', 'js/render/hdbg', 'js/render/dice', 'js/render/actors', 'js/render/props', 'js/render/topview',
     'js/app/main',
   ],
   // 탐사 지도 시제품 (run.html 순서)
