@@ -454,8 +454,19 @@ const MD = (() => {
     if (MINI_READY) go(); else PaperDoll.load('assets/chars/').then(go).catch(() => {});
   }
   // 선술집 등 전투 밖 화면: 그 사람의 32px 픽셀 인형 한 장 (가만히 선 모습, time = 초). 그림이 아직 안 왔으면 null
-  function pix(m, time = 0) { if (!MINI_READY) return null; const d = dollOf(m), fi = Math.round((time % PaperDoll.anims.Idle.len) * FPS), key = 'P' + fi; let sp = d.cache.get(key); if (!sp) { sp = px32(d, 'Idle', fi / FPS); d.cache.set(key, sp); } return sp; }
+  function pixOf(d, clip, time) { const A = PaperDoll.anims[clip], fi = Math.round((A.loop ? time % A.len : Math.min(time, A.len - 0.01)) * FPS), key = 'P' + (clip === 'Idle' ? '' : clip) + fi; let sp = d.cache.get(key); if (!sp) { if (d.cache.size > 160) d.cache.clear(); sp = px32(d, clip, fi / FPS); d.cache.set(key, sp); } return sp; }
+  // clip: PaperDoll의 동작 이름. 'Act' = 제 싸우는 동작 (주문 직업은 Skill)
+  function pix(m, time = 0, clip = 'Idle') { if (!MINI_READY) return null; const d = dollOf(m); return pixOf(d, clip === 'Act' ? (d.cast ? 'Skill' : 'Attack') : clip, time); }
+  // 마을 사람 (길드 술집의 손님 · 주인): 무기도 투구도 없는 평상복. i = 사람 번호
+  const folks = new Map();
+  function pixFolk(i, time = 0, clip = 'Idle') {
+    if (!MINI_READY) return null;
+    let d = folks.get(i);
+    if (!d) { const C0 = C(), h = hs('folk' + i), hair = pick(HAIR, h >> 6), L = { colors: { skin: pick(SKIN.human, h >> 3), hair, beard: hair, eye: '#ffffff' }, Eye: C0.Eye[0], Hair: pick(C0.Hair, h >> 12), Beard: i % 3 === 0 ? pick(C0.Beard, h >> 15) : null, Helmet: null, Chest: C0.Chest[pick(CHEST.cloth, i)], weapon: null, Shield: null, Sub_Item: null, Arrow: C0.Arrow[0] };
+      d = { doll: PaperDoll.create(L), cast: false, cache: new Map(), L }; folks.set(i, d); }
+    return pixOf(d, clip, time);
+  }
   // 몬스터의 서 있는 모습 (인형으로 그리는 몬스터만 — 아니면 null)
   function pixMon(e) { if (!MINI_READY || !isMon(e)) return null; const d = monDoll(e); let sp = d.cache.get('P0'); if (!sp) { sp = px32(d, 'Idle', 0); d.cache.set('P0', sp); } return sp; }
-  return { lookOf, frame, portrait, pix, pixMon, iconUrl, itemUrl, enqueue, snap, present, clear, isMon };
+  return { lookOf, frame, portrait, pix, pixFolk, pixMon, iconUrl, itemUrl, enqueue, snap, present, clear, isMon };
 })();
