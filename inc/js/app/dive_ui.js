@@ -134,7 +134,7 @@ const DIVEUI = (() => {
       if (ds.add || ds.out) { D.toggle(S, ds.add || ds.out); put(S); return guild(); }
       if (ds.hire) return buildPick(ds.hire);
       if (ds.rev) { D.raise(S, ds.rev); if (!S.party.includes(ds.rev) && !full) S.party.push(ds.rev); put(S); return guild(); } // 부활 (모자라면 빚)
-      if (ds.view != null) { try { localStorage.setItem('inc.view', viewTop() ? 'iso' : 'top'); } catch (e) { /* 기억 못 해도 */ } return guild(); } // 시점 (탑뷰 시험 — 다음 출발부터)
+      if (ds.view != null) { try { localStorage.setItem('inc.view', viewTop() ? 'iso' : 'top'); } catch (e) { /* 기억 못 해도 */ } location.href = location.pathname; return; } // 시점 (탑뷰 시험) — 다시 열어 그림을 바꾼다
       if (ds.hero) return hero(ds.hero);
       if (b.classList.contains('in-go')) return goStep('map');
       if (b.classList.contains('dv-repb')) return repWin(S.lastRep);

@@ -137,5 +137,18 @@ const TOP = (() => {
     drawFxTop(r, t);
     document.body.dataset.floor = 'ready';
   }
+  // 길드 · 초상 (MD.pix · MD.pixMon을 쓰는 화면): 0x72 인물 + 무기를 같은 꼴의 화소 묶음으로 ({ w, h, foot, top, px })
+  const spC = new Map();
+  function sprite(base, wpn, st, f) {
+    const n = frameOf(base, st, f), key = n + '|' + wpn; if (spC.has(key)) return spC.get(key); const I = im(n), WI = wpn ? im(wpn) : null; if (!I || (wpn && !WI)) return null;
+    const w = 40, h = 40, foot = 36, c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(I, Math.floor(w / 2 - I.naturalWidth / 2), foot - I.naturalHeight);
+    if (WI) { g.save(); g.translate(Math.floor(w / 2) + 3, foot - 8); g.rotate(/bow|staff/.test(wpn) ? 0 : 0.3); const ww = Math.round(WI.naturalWidth * 0.62), wh = Math.round(WI.naturalHeight * 0.62); g.drawImage(WI, -ww / 2, -wh * 0.82, ww, wh); g.restore(); }
+    const px = new Uint32Array(g.getImageData(0, 0, w, h).data.buffer); let top = 0; find: for (; top < h; top++) for (let i = 0; i < w; i++) if (px[top * w + i] >>> 24) break find;
+    const sp = { w, h, foot, px, top }; spC.set(key, sp); return sp;
+  }
+  if (typeof MD !== 'undefined') { const CL = { Walk: 'run', Run: 'run', Act: 'hit' };
+    MD.pix = (m, time = 0, clip = 'Idle') => { const [b, w] = CLS[m.cls] || ['knight_m', 'weapon_regular_sword']; return sprite(b, w, CL[clip] || 'idle', Math.floor(time * (clip === 'Idle' ? 6 : 10)) % 4); };
+    MD.pixMon = e => sprite(monArt(e), null, 'idle', 0); }
   return { on: true, draw, dbg: e => { const a = artOf(e); return [a[0], frameOf(a[0], 'idle', 0), !!im(frameOf(a[0], 'idle', 0))]; }, get fx() { return live.map(q => q.vid); } };
 })();

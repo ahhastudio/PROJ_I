@@ -135,7 +135,7 @@ const CRAWL = (() => {
   }
   // 화면에서 그 문이 어느 쪽인가 (쿼터뷰: 화면 x ∝ x − y, 화면 y ∝ (x + y) / 2) — 갈림길 창의 길을 지도와 맞춰 보게
   const DIRS = [['→', '오른쪽'], ['↘', '오른쪽 아래'], ['↓', '아래'], ['↙', '왼쪽 아래'], ['←', '왼쪽'], ['↖', '왼쪽 위'], ['↑', '위'], ['↗', '오른쪽 위']];
-  const dirOf = ([x, y]) => { const L = lead(), dx = x - L.x, dy = y - L.y; return DIRS[((Math.round(Math.atan2((dx + dy) / 2, dx - dy) / (Math.PI / 4)) % 8) + 8) % 8]; };
+  const dirOf = ([x, y]) => { const L = lead(), dx = x - L.x, dy = y - L.y, top = typeof TOP !== 'undefined' && TOP.on; return DIRS[((Math.round((top ? Math.atan2(dy, dx) : Math.atan2((dx + dy) / 2, dx - dy)) / (Math.PI / 4)) % 8) + 8) % 8]; }; // 탑뷰(TOP)는 칸 방향 그대로
   // 갈림길 번호: 창의 길과 지도 위 표지에 같은 번호 (방향이 겹쳐도 — 출구 넷인 방에서 「왼쪽 위」가 둘이던 것)
   const NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'];
   function fork(opts) {
