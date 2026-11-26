@@ -121,7 +121,7 @@ const DIVEUI = (() => {
   // 선술집: 장면 · 오른쪽 정보 · 아래 파티 줄 · 지도로
   function inn(box) {
     const team = D.team(S), open = D.classes(S), dc = D.dexCount(S), mini = window.name === MINI; if (!open.includes(inC)) inC = team[0] || open[0];
-    box.innerHTML = `<header><h2>원정대 길드</h2><div class="dv-res"><span class="chip c-gold${S.gold < 0 ? ' neg' : ''}">${UI.px('coin')} ${S.gold}</span><span class="chip">최고 ${S.deep}층</span>${S.lastRep ? '<button class="chip dv-repb">보고서</button>' : ''}${mini ? '' : `<button class="chip" data-tab="mini">${mi('map')}작은 창</button>`}${fsBtn()}</div></header>` + lastLine()
+    box.innerHTML = `<header><h2>원정대 길드</h2><div class="dv-res"><span class="chip c-gold${S.gold < 0 ? ' neg' : ''}">${UI.px('coin')} ${S.gold}</span><span class="chip">최고 ${S.deep}층</span>${S.lastRep ? '<button class="chip dv-repb">보고서</button>' : ''}<button class="chip" data-view>${viewTop() ? '탑뷰' : '쿼터뷰'}</button>${mini ? '' : `<button class="chip" data-tab="mini">${mi('map')}작은 창</button>`}${fsBtn()}</div></header>` + lastLine()
       + `<div class="in-main"><div class="in-scene"><canvas></canvas><nav class="dv-gtabs"><button data-tab="roster"><span>명단</span></button><button data-tab="tree"><span>${tabDot()}해금 <small>${D.TREE.reduce((a, t) => a + D.step(S, t.id), 0)}/${D.TREE.reduce((a, t) => a + t.cost.length, 0)}</small></span></button><button data-tab="dex"><span>도감 <small>${dc.got}/${dc.all}</small></span></button><button data-tab="go" class="in-go"${team.length ? '' : ' disabled'}><span>지도</span></button></nav><div class="in-who"></div></div><aside class="in-info">${DIVEINN.info(S, inC)}</aside></div>`
       + `<div class="in-bot">${DIVEINN.party(S, 'sel')}<button class="dv-go in-go"${team.length ? '' : ' disabled'}>${mi('map')}지도</button></div><p class="dv-dim dv-msg" hidden></p>`;
     DIVEINN.scene(box.querySelector('.in-scene'), S, inC); DIVEINN.faces(box, S); document.body.dataset.inn = open.length;
@@ -134,6 +134,7 @@ const DIVEUI = (() => {
       if (ds.add || ds.out) { D.toggle(S, ds.add || ds.out); put(S); return guild(); }
       if (ds.hire) return buildPick(ds.hire);
       if (ds.rev) { D.raise(S, ds.rev); if (!S.party.includes(ds.rev) && !full) S.party.push(ds.rev); put(S); return guild(); } // 부활 (모자라면 빚)
+      if (ds.view != null) { try { localStorage.setItem('inc.view', viewTop() ? 'iso' : 'top'); } catch (e) { /* 기억 못 해도 */ } return guild(); } // 시점 (탑뷰 시험 — 다음 출발부터)
       if (ds.hero) return hero(ds.hero);
       if (b.classList.contains('in-go')) return goStep('map');
       if (b.classList.contains('dv-repb')) return repWin(S.lastRep);
@@ -142,6 +143,7 @@ const DIVEUI = (() => {
       if (ds.tab === 'mini') { const w = window.open(location.pathname, MINI, POP), m = box.querySelector('.dv-msg'); if (w) { w.focus(); m.hidden = true; } else { m.hidden = false; m.textContent = '팝업 차단됨'; } }
     };
   }
+  const viewTop = () => { try { return localStorage.getItem('inc.view') === 'top'; } catch (e) { return false; } };
   const stopCd = box => { if (cd && !cd.stop) { cd.stop = true; const el = box.querySelector('.dv-cnt'); if (el) el.textContent = cntTxt(); } }; // 길드를 누르면 자동 재출발이 멈춘다
   let step = 'inn', inC = null; // 길드의 두 단계: 'inn' = 선술집 장면(파티 구성) → 'map' = 지도(경로 · 짐 · 출발) · inC: 장면에서 보고 있는 영웅
   const goStep = s => { step = s; guild(); const box = $('dv-guild'); box.classList.remove('fade'); void box.offsetWidth; box.classList.add('fade'); };
