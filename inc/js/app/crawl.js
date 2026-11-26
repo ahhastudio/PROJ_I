@@ -166,10 +166,19 @@ const CRAWL = (() => {
     if (prepable(ex)) return prepDoor(ex); // 적이 있는 방: 문을 저절로 연다
     const acts = RUN.moveActs(st, ex.ed);
     if (ex.e.kind === 'locked' && !ex.e.opened) return unlock(ex, acts);
+    if (POL?.costWin && ((ex.e.kind === 'dark' && !RUN.lit(st)) || (ex.e.kind === 'trap' && ex.e.seen.trap && !ex.e.disarmed && !acts.some(a => a.id === 'disarm')))) return costAsk(ex, acts, ex.e.kind === 'dark' ? '어두운 길' : '함정'); // 원정 열쇠: 빛 · 감각이 없으면 고른다
     choose(ex, acts.find(a => a.cost === '횃불 1') || acts[0]); // 어두운 길은 횃불이 있으면 켜고
   }
   // 잠긴 문 (적이 없는 방 — 보물 방 등): 따기 → 부수기를 저절로. 그래도 안 되면 대가가 있는 방법만 묻는다, 없으면 이 문은 두고 간다
+  // 원정 열쇠: 대가가 있는 방법을 카드로 (부수기 · 횃불 · 밟고 지나감 · 지나친다). 지나치면 이 길은 두고 간다
+  function costAsk(ex, acts, title) {
+    const leave = () => { ex.e.stuck = true; st.here.auto = false; showMarks(); }, other = ahead().some(x => x !== ex && x.e.id !== ex.e.id);
+    const opts = acts.map(a => ({ label: a.label, cost: a.cost || '', note: a.note || '', a })).concat(other || !acts.length ? [{ label: '지나친다', cost: '', note: '', a: null }] : []);
+    if (!opts.length) { st.log.push({ t: '이 길은 열 수 없다 — 다른 길로.' }); say(); return leave(); }
+    POL.costWin(st, title, ex, opts, i => { const o = opts[i]; if (!o || !o.a) return leave(); choose(ex, o.a); }, () => { const j = opts.findIndex(o => o.a && (o.a.cost === '횃불 1' || o.a.id === 'force')); return j >= 0 ? j : opts.findIndex(o => !o.a) >= 0 ? opts.findIndex(o => !o.a) : 0; });
+  }
   function unlock(ex, acts) {
+    if (RUN.X?.keyed && POL?.costWin) { const auto = acts.find(q => q.who); if (auto) return choose(ex, auto); return costAsk(ex, acts, ({ lock: '잠긴 문', bars: '창살', seal: '마법 봉인', rubble: '무너진 길' })[ex.e.lock || 'lock'] || '잠긴 문'); } // 원정 열쇠: 가진 사람이 열고, 없으면 카드
     const tries = acts.filter(q => q.id === 'pick' || q.id === 'break'), from = st.at;
     const step = i => (i < tries.length ? askWho(tries[i], () => { choose(ex, tries[i]); if (st.at === from) step(i + 1); }) : stuck());
     const stuck = () => {

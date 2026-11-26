@@ -36,7 +36,7 @@ const DIVEUI = (() => {
   function attach(r) {
     R = r; on = true; document.body.classList.add('dive'); if (typeof setZoom === 'function') setZoom(HUD.zoom(false), true); watch(); if (away?.gold) awayBox(away);
     if (!run) { FXUI.attach(R); PMAP.hide(); return guild(); }
-    CRAWL.policy = { ...D.POL, waves: D.waves, forkWin, chest: k => chestShow(k), tap: ev => handTap(ev), busy: () => !!$('dv-card') || !!$('dv-ev') || !!$('dv-fork') || gateBusy(), event: (st, sc) => D.evDecide(S, st, sc), eventWin: (st, sc, pick) => evWin(st, sc, pick), wait: () => 1500 / spd(), end: finish, note, seed: fl => D.floorSeed(S, fl), leave: st => { D.remember(S, st); run.blk[st.floor] = (run.blk[st.floor] || 0) + D.planBlocked(st); }, descend: st => D.descend(st, S, G.Party.members(G.S.w.fantasy)) };
+    CRAWL.policy = { ...D.POL, waves: D.waves, forkWin, costWin, chest: k => chestShow(k), tap: ev => handTap(ev), busy: () => !!$('dv-card') || !!$('dv-ev') || !!$('dv-fork') || !!$('dv-cost') || gateBusy(), event: (st, sc) => D.evDecide(S, st, sc), eventWin: (st, sc, pick) => evWin(st, sc, pick), wait: () => 1500 / spd(), end: finish, note, seed: fl => D.floorSeed(S, fl), leave: st => { D.remember(S, st); run.blk[st.floor] = (run.blk[st.floor] || 0) + D.planBlocked(st); }, descend: st => D.descend(st, S, G.Party.members(G.S.w.fantasy)) };
     PMAP.view = st => D.drawState(S, st); // 원정 중 지도 = 지도 기억 + 이번 판
     PMAP.render = (box, st, big) => { if (!box) return; box.querySelector('#pmap')?.style.setProperty('display', 'none'); let w = box.querySelector('.dvpmw'); if (!w) { w = document.createElement('div'); w.className = 'dvpmw'; box.append(w); const t = document.createElement('b'); t.className = 'dvpm-t'; box.append(t); }
       const V = D.drawState(S, st), ex = D.explored(S, st.floor); box.querySelector('.dvpm-t').textContent = `${RUN.zone(st.floor).n} · ${st.floor}층${ex ? ` · 탐사 ${ex[0]}/${ex[1]}` : ''}`; // 큰 지도 머리는 칸 밖(위)에 따로
@@ -557,7 +557,7 @@ const DIVEUI = (() => {
   }
   // 저절로 복귀 (원정 중): 「경로 끝 복귀」면 계획한 경로의 방을 다 지나 일이 끝났을 때, 「가득 차면 복귀」면 짐이 찼을 때 — 전투 · 창 · 걷는 중이 아닐 때만. 살아서 복귀로 친다
   function autoBack() {
-    const st = CRAWL.st, v = CRAWL.view(); if (!st || run.over || st.done || v?.fighting || $('crawlscene') || $('dv-fork') || $('exitsign') || REWARDUI.active) return;
+    const st = CRAWL.st, v = CRAWL.view(); if (!st || run.over || st.done || v?.fighting || $('crawlscene') || $('dv-fork') || $('dv-cost') || $('exitsign') || REWARDUI.active) return;
     for (const k of ['potion', 'knockScroll', 'seeScroll', 'tools']) if (st.items[k] > 0) { st.gold += 10 * st.items[k]; st.log.push({ t: `${{ potion: '치유 물약', knockScroll: '열림 두루마리', seeScroll: '투시 두루마리', tools: '도둑 도구' }[k]} → 금화 +${10 * st.items[k]}`, k: 'dv' }); st.items[k] = 0; } // 원정에는 물약 · 두루마리 · 도구가 없다 (얻으면 금화로)
     if (D.wantCamp(S, st)) { const ms = G.Party.members(G.S.w.fantasy), r0 = D.campHere(st, ms); if (r0 && !r0.raid) for (const p of R.party) if (!p.dead) p.hp = p.max; return; } // 야영 (계획한 지점 · 계획이 없으면 체력 절반 아래)
     const planDone = S.endMode === 'back' && st.plan && st.plan.length > 1 && st.plan.every(id => st.map.nodes[id].visited) && st.at === st.plan[st.plan.length - 1];
@@ -685,14 +685,26 @@ const DIVEUI = (() => {
     if (run.over || S.autoOn || q.get('fork') === '0') return false; $('dv-fork')?.remove();
     const el = document.createElement('div'); el.id = 'dv-fork'; el.onpointerup = ev => ev.stopPropagation(); el.onpointerdown = ev => ev.stopPropagation();
     const TI = { fight: 'battle', elite: 'battle', boss: 'battle', treasure: 'gold', shop: 'shop', event: 'map', camp: 'inventory' };
-    el.innerHTML = `<div class="fk-t"><b>갈림길</b><i></i></div><div class="fk-l">${opts.map((x, i) => { const n = st.map.nodes[x.to], o = inf[i], known = n.visited || n.seenMap || n.info >= 1, g = n.hostile && (n.info >= 2 || n.visited) && n.g ? (n.g.units || [[n.g.name, n.g.count]]).map(([a, c]) => `${a} ${c}`).join(' · ') : '', gate = o.k === 'open' ? '' : D.gateTxt(S, st, x.e);
+    el.innerHTML = `<div class="fk-t"><b>갈림길</b><i></i></div><div class="fk-l">${opts.map((x, i) => { const n = st.map.nodes[x.to], o = inf[i], known = n.visited || n.info >= 2, g = n.hostile && (n.info >= 2 || n.visited) && n.g ? (n.g.units || [[n.g.name, n.g.count]]).map(([a, c]) => `${a} ${c}`).join(' · ') : '', gate = o.k === 'open' ? '' : D.gateTxt(S, st, x.e);
       const plan = st.plan && st.plan[(st.plan.indexOf(st.at, st.planI || 0)) + 1] === x.to && st.plan.includes(st.at);
-      return `<button data-i="${i}"${plan ? ' class="plan"' : ''}><em>${o.ar[0]}</em>${mi(known ? TI[n.type] || 'map' : 'map')}<b>${esc(/기척/.test(o.bt) ? '적' : /모른|모르/.test(o.bt) ? '?' : o.bt)}</b>${g ? `<small>${esc(g)}</small>` : ''}${gate ? `<small class="gate">${esc(gate)}</small>` : ''}</button>`; }).join('')}</div>`;
+      return `<button data-i="${i}"${plan ? ' class="plan"' : ''}><em>${o.ar[0]}</em>${mi(known ? TI[n.type] || 'map' : 'map')}<b>${esc(n.visited ? o.bt : n.info >= 2 ? (n.name || RUN.TYPE[n.type] || '방') : '?')}</b>${n.info >= 2 && !n.visited && n.sleepy && !n.alert ? '<small class="zz">잠듦 · 기습</small>' : ''}${g ? `<small>${esc(g)}</small>` : ''}${gate ? `<small class="gate">${esc(gate)}</small>` : ''}</button>`; }).join('')}</div>`;
     const t0 = performance.now(), end = i => { clearInterval(tm); if (!el.isConnected) return; el.remove(); if (run && !run.over) pick(i); };
     const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); const u = 1 - (performance.now() - t0) / 1000 / FORK_WAIT; el.querySelector('.fk-t i').style.width = `${Math.max(0, u * 100)}%`; if (u <= 0) end(auto()); }, 100);
     el.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; const i = +b.dataset.i; st.log.push({ t: `갈림길 · 선택 → ${st.map.nodes[opts[i].to].name || RUN.TYPE[st.map.nodes[opts[i].to].type] || '방'}`, k: 'fork' }); end(i); };
     $('stage').append(el); return true;
   }
+  // ── 열쇠가 없을 때 (2026-11-26): 대가 카드 — 부수기(체력 · 시끄럽게) · 횃불 · 밟고 지나감 · 지나친다. FORK_WAIT초 안에 답이 없으면 기본(auto)
+  function costWin(st, title, ex, opts, pick, auto) {
+    if (run.over) return pick(auto()); if (S.autoOn || q.get('fork') === '0') return pick(auto()); $('dv-cost')?.remove();
+    const need = D.gateInfo(S, D.view(S, st.floor), ex.e).filter(x => x.key), el = document.createElement('div'); el.id = 'dv-cost'; el.className = 'dv-fork'; el.onpointerup = ev => ev.stopPropagation(); el.onpointerdown = ev => ev.stopPropagation();
+    el.innerHTML = `<div class="fk-t"><b>${esc(title)}</b>${need.length ? `<span class="fk-need">${need.map(x => `<em class="${x.val ? 'on' : ''}">${UI.px(x.ic)}${esc(x.k)}</em>`).join('')}</span>` : ''}<i></i></div><div class="fk-l">${opts.map((o, i) => `<button data-i="${i}"${o.a ? '' : ' class="x"'}><b>${esc(o.label)}</b>${o.cost ? `<small class="gate">${esc(o.cost)}</small>` : ''}${o.note ? `<small>${esc(o.note)}</small>` : ''}</button>`).join('')}</div>`;
+    const t0 = performance.now(), end = i => { clearInterval(tm); if (!el.isConnected) return; el.remove(); if (run && !run.over) pick(i); };
+    const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); const u = 1 - (performance.now() - t0) / 1000 / FORK_WAIT; el.querySelector('.fk-t i').style.width = `${Math.max(0, u * 100)}%`; if (u <= 0) end(auto()); }, 100);
+    el.onclick = ev => { const b = ev.target.closest('button'); if (b) end(+b.dataset.i); };
+    $('stage').append(el);
+  }
+  // 열쇠를 쓴 순간: 그 영웅 머리 위에 열쇠 아이콘 · 이름
+  function keySee() { for (const u of D.KEYUSE.splice(0)) { const p = R.party.find(q => q.merc && u.who.hero && q.merc.uid === u.who.hero.uid); if (p) SKUI.castRaw(p, UI.px(D.KEYS[u.k].ic), D.KEYS[u.k].n); } }
   // ── 직접 조종 시험판 (2026-11-24, 흐름식 — 규칙은 D.HAND): 카드를 누르면 그 영웅을 조종 · 다시 누르면 전원 AI. 적을 누르면 표적 고정. 스킬을 누르면 다음 차례에 (치유는 누른 뒤 카드로 대상)
   const cdL = (m, k) => { const p = R?.turn && R.party.find(q => q.merc === m); return p ? D.handCd(R, p, k) : G.Res.cdLeftOf ? G.Res.cdLeftOf(m, k) : 0; }; // 남은 쿨타임 (라운드) — 전투 중엔 무기 기술 쿨타임까지
   const handM = () => (D.HAND.on && D.HAND.uid != null ? R?.party.find(p => p.merc?.uid === D.HAND.uid)?.merc || null : null);
@@ -766,7 +778,7 @@ const DIVEUI = (() => {
   function frame(dt) {
     if (!R) return;
     if (run && run.over) return; // 끝난 뒤에는 탐사를 멈춘다 (결과 창 아래)
-    CRAWL.frame(dt); if (run) { cardTick(); if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); teleDraw(); gateTick(); D.statTick(CRAWL.st, R); if (D.HAND.on) { D.handTick(R); handRing(); } bar(); cdTick(); skillSee(); waveSee(); logPoll(); logBox(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
+    CRAWL.frame(dt); if (run) { cardTick(); if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); teleDraw(); gateTick(); D.statTick(CRAWL.st, R); if (D.HAND.on) { D.handTick(R); handRing(); } bar(); cdTick(); skillSee(); keySee(); waveSee(); logPoll(); logBox(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
   }
   // 직접 조종: 조종 영웅이 있으면 카메라가 그 영웅(표시 위치 _dx · _dy)을 따라간다 — 없으면 null (지금 카메라 그대로)
   const follow = r => { if (!D.HAND.on || D.HAND.uid == null || !run || run.over) return null; if (r.turn && roomMid()) return null; /* 전투 중 작은 방은 방 전체가 들어오니 방 가운데 (영웅을 가운데 두면 방 한쪽이 밀려 나간다) */ const p = r.party.find(q => q.merc?.uid === D.HAND.uid && !q.dead); return p ? [p._dx ?? p.x, p._dy ?? p.y] : null; };

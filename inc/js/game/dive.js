@@ -577,6 +577,8 @@ G.Dive = (() => {
   function planLines(s, V, plan) {
     const out = [], N = V.map.nodes, seen = new Set([plan[0]]), fl = V.floor; let fights = 0, items = 0, ally = 0;
     const hs = team(s).map(c => s.roster[c]?.m).filter(Boolean), unitsOf = g => (g.units || [[g.name, g.count]]).map(([n, c]) => { const a = affTag(s, n, hs); return `${n} ${c}${a ? ` ${a}` : ''}`; }).join(' · ');
+    { const need = new Map(); for (let k = 1; k < plan.length; k++) { const q = V.map.edges.find(e => e.a === plan[k - 1] && e.b === plan[k]); if (q && !q.walked && ((q.kind === 'locked' && q.seen.lock) || (q.kind === 'trap' && q.seen.trap) || (q.kind === 'dark' && q.seen.dark))) for (const x of gateInfo(s, V, q)) if (x.key) need.set(x.key, x); }
+      if (need.size) out.push({ t: '열쇠 · ' + [...need.values()].map(x => `${x.k} ${x.val ? '✓' : '✗'}`).join(' · '), k: 'gate', no: [...need.values()].some(x => !x.val) }); } // 이 경로에 필요한 열쇠
     for (let k = 1; k < plan.length; k++) {
       const id = plan[k], q = V.map.edges.find(e => (e.a === plan[k - 1] && e.b === id)); // 돌아오는 길은 관문 없음
       if (q && !q.walked && ((q.kind === 'locked' && q.seen.lock) || (q.kind === 'trap' && q.seen.trap) || (q.kind === 'dark' && q.seen.dark))) { const gi = gateInfo(s, V, q); out.push({ t: gateTxt(s, V, q), k: 'gate', no: gi.length > 0 && gi.every(x => !x.val && !x.who.includes('누구나')) }); } // 관문: 지금 파티의 값 · 없으면 풀 수 있는 직업 · no = 지금 파티로는 못 연다
@@ -653,6 +655,11 @@ G.Dive = (() => {
   const GATE_N = { locked: { lock: '잠긴 문', bars: '창살', seal: '마법 봉인', rubble: '무너진 길' }, dark: '어두운 길', trap: '함정', hidden: '숨은 통로' };
   const gateTxt = (s, V, q) => { const nm = q.room != null ? '어두운 방' : q.kind === 'locked' ? GATE_N.locked[q.lock || 'lock'] : GATE_N[q.kind] || ''; const o = gateInfo(s, V, q).map(x => x.val || (x.who.length ? `${x.k} ${x.who.join('·')}` : '')).filter(Boolean); return `${nm}${o.length ? ` · ${o.join(' · ')}` : ''}`; };
   function gateInfo(s, V, q) {
+    { const have = k => team(s).some(c => keysOf(c).includes(k)), row = k => ({ k: KEYS[k].n, ic: KEYS[k].ic, key: k, who: CLS.filter(c => keysOf(c).includes(k)).map(clsName), val: have(k) ? `${KEYS[k].n} ✓` : null });
+      if (q.kind === 'locked') { const lt = q.lock || 'lock'; return lt === 'seal' ? [row('magic')] : lt === 'rubble' ? [row('str')] : [row('lock'), row('str')]; }
+      if (q.kind === 'dark') return [row('light'), { k: '횃불', who: ['누구나'], val: null }];
+      if (q.kind === 'hidden' || q.kind === 'trap') return [row('sense')];
+      return []; } // 열쇠 (2026-11-26) — 아래는 옛 판정 방식
     const lv = c => s.roster[c]?.m?.lv || newLv(s), who = id => CLS.map(c => [c, (EXPL[c] || []).find(([x]) => x === id)]).filter(([, e]) => e).map(([c, [, L]]) => `${clsName(c)}${lv(c) < L ? ` ${L}` : ''}`), vals = doorVals(V, q), v = re => vals.find(x => re.test(x)) || null; // 모든 직업 (안 연 직업도 — 누구를 데려와야 하나) · 레벨이 모자라면 필요한 레벨
     if (q.kind === 'locked') { const lt = q.lock || 'lock', o = [];
       if (lt === 'lock' || lt === 'bars') o.push({ k: '따기', who: who('pick'), val: v(/^따기/) });
@@ -673,6 +680,13 @@ G.Dive = (() => {
     scout: [['track', 1], ['scout', 2], ['augury', 3], ['findtraps', 3]], bard: [['light', 1], ['jack', 2], ['knock', 3]], archmage: [['light', 1], ['detect', 1], ['knock', 3], ['augury', 3]],
     mage: [['light', 1], ['knock', 3]], warlock: [['detect', 1]],
   };
+  // ── 탐험 열쇠 (2026-11-26 사용자: 「필요한 탐험스킬이 무엇인지 … 간결하면서도 재미가 있는지」): 탐험 스킬을 열쇠 여섯으로 묶는다. 가지고 있으면 판정 없이 된다 (레벨 · 쿨타임 없음)
+  //   lock 자물쇠 (잠긴 문 · 창살, 조용히) · str 힘 (잠긴 문 · 창살 · 무너진 길, 시끄럽게) · magic 마법 (마법 봉인) · light 빛 (어두운 길 · 방) · sense 감각 (함정 · 숨은 통로) · scout 정찰 (갈림길 너머가 보인다 · 잠든 무리 기습)
+  const KEYS = { lock: { n: '자물쇠', ic: 'lock' }, str: { n: '힘', ic: 'hammer' }, magic: { n: '마법', ic: 'wand' }, light: { n: '빛', ic: 'spark' }, sense: { n: '감각', ic: 'warn' }, scout: { n: '정찰', ic: 'target' } };
+  const CLS_KEYS = { rogue: ['lock', 'sense'], bard: ['lock', 'light'], dragoon: ['str'], barbarian: ['str'], paladin: ['str'], mage: ['magic', 'light'], archmage: ['magic', 'light'], warlock: ['magic'], cleric: ['light', 'scout'], archer: ['sense', 'scout'], monk: ['sense'], scout: ['scout'] };
+  const ID_KEY = { pick: 'lock', knock: 'magic', detect: 'magic', brute: 'str', tactical: 'str', light: 'light', disarm: 'sense', findtraps: 'sense', evasion: 'sense', danger: 'sense', explorer: 'sense', scout: 'scout', track: 'scout', augury: 'scout', lore: 'scout', sense: 'scout' };
+  const keysOf = cls => CLS_KEYS[cls] || [];
+  const KEYUSE = []; // 방금 쓴 열쇠 { who: 탐사 사람, k } (화면이 머리 위에 띄우고 비운다)
   // 쿨타임 (라운드 · 방을 하나 옮기면 ROOM_R) — 시험값
   const XCD = { knock: 12, augury: 6, findtraps: 6, detect: 6, sense: 6, tactical: 6 }, ROOM_R = 6;
   const KO_SK = { 운동: 'athletics', 지각: 'perception', 은신: 'stealth', 조사: 'investigation', 생존: 'survival', 설득: 'persuasion', 위협: 'intimidation', 종교: 'religion', 비전: 'arcana', 의학: 'medicine', 역사: 'history' };
@@ -680,17 +694,19 @@ G.Dive = (() => {
   const hasX = (h, id) => !!h && (EXPL[h.cls] || []).some(([x, L]) => x === id && (h.lv || 1) >= L);
   // 원정의 탐사 규칙 연결 (RUN.X — js/explore/rules.js가 쓴다): 판정 = d20 + 영웅의 능력치 수정치 + 숙련(전문화 두 배) · 탐험 스킬 · 쿨타임
   const XRUN = {
-    CD: XCD, ROOM_R,
+    CD: XCD, ROOM_R, keyed: true, KEYS,
+    keyHolder: (st, k) => st.party.find(m => !m.dead && m.hero && keysOf(m.hero.cls).includes(k)) || null,
+    onKey(st, m, k) { if (KEYUSE.length < 20) KEYUSE.push({ who: m, k }); },
     skill(m, sk) { const h = m.hero; if (!h) return (RUN.CLS[m.cls]?.sk || {})[sk] ?? 0; const N = G.Dnd, pr = N.prof(h.lv || 1);
       if (sk === '도둑 도구') return N.mod(N.ab(h).dex) + (hasX(h, 'pick') ? pr * 2 : -5); // 로그: 도둑 도구 숙련 + 전문화
       const en = KO_SK[sk]; if (!en) return 0; let v = N.skill(h, en);
       if (en === 'investigation' && hasX(h, 'explorer')) v += pr; // 능숙한 탐험가: 조사 전문화
       if (hasX(h, 'jack') && !N.profs(h).includes(en)) v += Math.floor(pr / 2); // 만능 재주꾼: 숙련 없는 판정에 숙련 절반
       return v; },
-    can(st, m, id) { if (!hasX(m.hero, id)) return false; if (!XCD[id]) return true; const c = (st.xcd || {})[m.uid || m.n]; return !(c && c[id] > 0); },
-    use(st, m, id) { if (!XCD[id]) return; st.xcd = st.xcd || {}; (st.xcd[m.uid || m.n] = st.xcd[m.uid || m.n] || {})[id] = XCD[id]; },
+    can(st, m, id) { const k = ID_KEY[id]; return !!k && !!m.hero && keysOf(m.hero.cls).includes(k); }, // 열쇠: 가지고 있으면 (쿨타임 없음)
+    use(st, m, id) { return; }, useOld(st, m, id) { if (!XCD[id]) return; st.xcd = st.xcd || {}; (st.xcd[m.uid || m.n] = st.xcd[m.uid || m.n] || {})[id] = XCD[id]; },
     tick(st, r) { for (const k in st.xcd || {}) for (const id in st.xcd[k]) st.xcd[k][id] = Math.max(0, st.xcd[k][id] - r); if (G.Res?.cdOn) G.Res.clock += r; }, // 전투 스킬과 한 시계
-    lightBy: st => st.party.find(m => !m.dead && hasX(m.hero, 'light')),
+    lightBy: st => XRUN.keyHolder(st, 'light'),
     lit(st) { const al = st.party.filter(m => !m.dead); return !!XRUN.lightBy(st) || (al.length > 0 && al.every(m => (m.hero && G.Light ? G.Light.darkvision({ merc: m.hero }) > 0 : RUN.CLS[m.cls]?.dv))); }, // 전원 암시야 = 영웅의 실제 종족 (전에는 옛 다섯 직업표 — 파이터면 드워프로 쳤다)
     onFail(st, m, r, c) { if (!XRUN.can(st, m, 'tactical')) return 0; XRUN.use(st, m, 'tactical'); const d = 1 + Math.floor(st.rng() * 10); st.log.push({ t: `${m.n} · 전술적 사고 · +${d}`, k: 'dv' }); return d; },
     trapSave(st, m) { const h = m.hero; if (!h) return { b: RUN.CLS[m.cls]?.dex ?? 0, adv: 0, ev: false }; const N = G.Dnd, b = N.mod(N.ab(h).dex) + (['rogue', 'monk', 'archer', 'bard'].includes(h.cls) ? N.prof(h.lv || 1) : 0); return { b, adv: hasX(h, 'danger') ? 1 : 0, ev: hasX(h, 'evasion') }; },
@@ -745,7 +761,7 @@ G.Dive = (() => {
     arrive(st) { if (st.here.xdone) return; st.here.xdone = true;
       const mark = a => { const L = st.log[st.log.length - 1]; if (L && !L.g && !L.r) L.g = { who: a.who || '', gate: '탐험', how: a.label, ok: true }; }; // 탐험 스킬 (판정 없는 것): 화면의 알림 판으로 — 판정 있는 것은 그 기록(.r)을 쓴다
       for (const a of RUN.roomActs(st)) if (['search', 'findtraps', 'sense', 'lore', 'detect'].includes(a.id)) { const n0 = st.log.length; a.run(); if (st.log.length > n0 && a.id !== 'search' && a.id !== 'findtraps') mark(a); }
-      for (const x of RUN.nexts(st)) { if (x.n.visited || x.n.info >= 3) continue; for (const a of RUN.infoActs(st, x.e)) if (a.id === 'augury' || (a.id === 'scout' && x.n.hostile) || a.id === 'track') { const n0 = st.log.length; a.run(); if (st.log.length > n0 && a.id === 'augury') mark(a); if (st.here.augury) break; } } },
+      for (const x of RUN.nexts(st)) { if (x.n.visited || x.n.info >= 3) continue; for (const a of RUN.infoActs(st, x.e)) if (a.id === 'augury' || (a.id === 'scout' && (x.n.hostile || XRUN.keyed)) || a.id === 'track') { const n0 = st.log.length; a.run(); if (st.log.length > n0 && a.id === 'augury') mark(a); if (st.here.augury) break; } } },
     side: sideEnter,
     // 갈림길: opts = 출구들 ({ to, e }). 체력이 낮으면 야영 쪽, 아니면 RANK — 잠긴 보물 방은 열 수단이 있을 때만 (로그 · 열림 두루마리 · 열림 주문)
     fork(st, opts) {
@@ -803,5 +819,5 @@ G.Dive = (() => {
     const f = r => (!r ? [] : [r.gold ? `금화 +${r.gold}` : '', r.ally ? '동료 +1' : '', r.healAll ? `체력 +${r.healAll}` : '', r.hurt ? `체력 −${r.hurt}` : '', r.fight ? '싸움' : '', r.mapPiece || r.revealRow || r.scoutAhead ? '지도' : '', r.bless ? '가호' : '', r.curse ? '저주' : '', r.warn || r.alert ? '경보' : ''].filter(Boolean));
     return { ok: f(o.ok), no: o.sk ? f(o.no) : [], cost: o.cost || 0 }; }
   function toggleCamp(s, fl, id) { const pl = s.plan[fl] || []; if (!pl.includes(id) || id === pl[0]) return false; const c = s.campPlan[fl] = s.campPlan[fl] || []; const i = c.indexOf(id); if (i >= 0) c.splice(i, 1); else c.push(id); if (!c.length) delete s.campPlan[fl]; return true; }
-  return { USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, HAND, handIs, handLock, handSet, handPick, handTick, handCd, handWait, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, toggleCamp, raidRisk, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, planLines, drawState, segPts, reward, planReward, SPECS, FV, torches, sideEnter, planSides, torchUse, isSide, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, STARTS, starts, autoStart, startFloor, floorSeed, remember, recall, explored, view, pathTo, planTo, doorVals, planBlocked, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, descend, POL };
+  return { KEYS, keysOf, KEYUSE, USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, HAND, handIs, handLock, handSet, handPick, handTick, handCd, handWait, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, toggleCamp, raidRisk, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, planLines, drawState, segPts, reward, planReward, SPECS, FV, torches, sideEnter, planSides, torchUse, isSide, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, STARTS, starts, autoStart, startFloor, floorSeed, remember, recall, explored, view, pathTo, planTo, doorVals, planBlocked, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, descend, POL };
 })();

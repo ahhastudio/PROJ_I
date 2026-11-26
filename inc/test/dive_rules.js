@@ -252,15 +252,15 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 
 // 탐험 스킬 · 열쇠 (2026-11-23)
 { const X = D.XRUN, F = (G.newState(), G.S.w.fantasy), H = (c, lv) => D.member(F, c, lv), M = h => ({ hero: h, n: h.name, uid: h.uid, cls: G.Party.RUN_CLS[h.cls], dead: false, hp: 10, max: 10 }), st = { xcd: {}, party: [], rng: Math.random, log: [] };
-  t('탐험 스킬은 그 레벨에 생긴다 (로그 따기 1 · 위저드 열림 3 · 파이터 전술적 사고 2 · 클레릭 빛 1)', X.can(st, M(H('rogue', 1)), 'pick') && !X.can(st, M(H('archmage', 2)), 'knock') && X.can(st, M(H('archmage', 3)), 'knock') && !X.can(st, M(H('dragoon', 1)), 'tactical') && X.can(st, M(H('dragoon', 2)), 'tactical') && X.can(st, M(H('cleric', 1)), 'light') && !X.can(st, M(H('dragoon', 5)), 'pick'));
+  t('열쇠 (2026-11-26): 직업마다 1~2개 · 레벨과 상관없다 (로그 자물쇠 · 감각, 위저드 마법 · 빛, 파이터 힘, 클레릭 빛 · 정찰)', X.can(st, M(H('rogue', 1)), 'pick') && X.can(st, M(H('rogue', 1)), 'disarm') && X.can(st, M(H('archmage', 1)), 'knock') && X.can(st, M(H('dragoon', 1)), 'brute') && X.can(st, M(H('cleric', 1)), 'light') && X.can(st, M(H('cleric', 1)), 'scout') && !X.can(st, M(H('dragoon', 5)), 'pick') && D.keysOf('dragoon').join() === 'str');
   const r1 = H('rogue', 1), r9 = H('rogue', 9);
   t('판정은 영웅의 능력치 + 숙련 (레벨이 오르면 값이 오른다) · 도둑 도구는 로그만 전문화', X.skill(M({ ...r1, lv: 9 }), '은신') > X.skill(M(r1), '은신') && X.skill(M(r1), '도둑 도구') === G.Dnd.mod(G.Dnd.ab(r1).dex) + 2 * G.Dnd.prof(1) && X.skill(M(H('dragoon', 3)), '도둑 도구') < 0, [X.skill(M(r1), '은신'), X.skill(M({ ...r1, lv: 9 }), '은신')]);
   const w = M(H('archmage', 3)); X.use(st, w, 'knock'); const c0 = X.can(st, w, 'knock'); X.tick(st, X.ROOM_R); const c1 = X.can(st, w, 'knock'); X.tick(st, X.ROOM_R);
-  t('쿨타임: 열림 12 = 방 둘 (방 하나 = 6라운드)', !c0 && !c1 && X.can(st, w, 'knock') && D.XCD.knock === 12 && X.ROOM_R === 6);
+  t('열쇠에는 쿨타임이 없다', c0 && c1 && X.can(st, w, 'knock'));
   // 열쇠별 풀이: 자물쇠 종류마다 쓸 수 있는 방법
   const mk = (lock, party) => { const node = { hostile: false, type: 'treasure', notes: [] }, S = { map: { nodes: [{}, node] }, party: party.map(M), items: {}, xcd: {}, rng: Math.random, log: [], at: 0, turn: 0, flags: {} }; return RUN.moveActs(S, { a: 0, b: 1, kind: 'locked', lock, dc: 12, seen: {}, tried: {} }).map(a => a.id).sort().join(); };
   const all = [H('rogue', 3), H('archmage', 3)];
-  t('열쇠: 자물쇠 = 따기 · 부수기 · 열림 / 창살 = 따기 · 부수기 / 마법 봉인 = 열림만 / 무너진 길 = 부수기만', mk('lock', all) === 'break,knock,pick' && mk('bars', all) === 'break,pick' && mk('seal', all) === 'knock' && mk('rubble', all) === 'break' && mk('lock', [H('dragoon', 3)]) === 'break', [mk('lock', all), mk('bars', all), mk('seal', all), mk('rubble', all)]);
+  t('열쇠: 잠긴 문 = 자물쇠 · 힘 / 창살 = 자물쇠 · 힘 / 봉인 = 마법만 / 무너진 길 = 힘만 / 아무 열쇠 없으면 몸으로 부순다(봉인은 못 연다)', mk('lock', all) === 'pick' && mk('seal', all) === 'knock' && mk('rubble', all) === 'force' && mk('lock', [H('dragoon', 3)]) === 'break' && mk('rubble', [H('dragoon', 3)]) === 'break' && mk('seal', [H('dragoon', 3)]) === '' && mk('bars', [H('rogue', 3), H('dragoon', 3)]) === 'break,pick', [mk('lock', all), mk('seal', all), mk('rubble', all), mk('bars', [H('rogue', 3), H('dragoon', 3)])]);
   t('빛: 클레릭 · 위저드 등 빛 소마법이 있으면 어두운 길을 그냥 지난다', X.lit({ party: [M(H('cleric', 1))] }) && !X.lit({ party: [M(Object.assign(H('rogue', 1), { sp: 'human' }))] }) && X.lit({ party: [M(Object.assign(H('rogue', 1), { sp: 'dwarf' }))] })); // 전원 암시야 = 영웅의 실제 종족
   // 조사 전에는 모른다: 기억이 없으면 관문 표시가 없다
   const s0 = D.fresh(), V0 = D.view(s0, 1); t('조사 전에는 관문이 지도 데이터에 없다 (잠김 · 함정 · 어두움 · 숨은 통로 모두 미확인)', V0.map.edges.every(e => !e.seen.lock && !e.seen.trap && !e.seen.dark && !e.seen.hidden));
@@ -268,7 +268,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   const s3 = D.fresh(); s3.roster.dragoon = { m: H('dragoon', 3), tr: [] }; s3.roster.rogue = { m: H('rogue', 3), tr: [] }; s3.party = ['dragoon']; s3.up.cls = 4;
   const V3 = D.view(s3, 1), lk = V3.map.edges.find(e => e.kind === 'locked' && (e.lock || 'lock') === 'lock' && !V3.map.nodes[e.b].hostile); lk.seen.lock = true;
   const g1 = D.gateTxt(s3, V3, lk); s3.party = ['dragoon', 'rogue']; const g2 = D.gateTxt(s3, D.view(s3, 1), Object.assign(D.view(s3, 1).map.edges[lk.id], { seen: { lock: true } }));
-  t('필요한 직업: 파티에 없으면 직업 이름 · 있으면 값 (파티를 바꾸면 바뀐다)', /따기 로그/.test(g1) && /따기 \d+%/.test(g2) && g1 !== g2, [g1, g2]);
+  t('필요한 열쇠: 파티에 없으면 직업 이름 · 있으면 ✓ (파티를 바꾸면 바뀐다)', /자물쇠 로그·바드/.test(g1) && /힘 ✓/.test(g1) && /자물쇠 ✓/.test(g2) && g1 !== g2, [g1, g2]);
   // 기존 게임은 원형 표 그대로
   const X0 = RUN.X; RUN.X = undefined; const st5 = RUN.newRun(3, ['rogue'], 3), ck = RUN.checkers(st5, { skill: '은신' })[0]; RUN.X = X0;
   t('기존 게임(RUN.X 없음)은 원형 표 그대로', ck.bonus === RUN.CLS.rogue.sk.은신);
@@ -398,10 +398,10 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 { const F = (G.newState(), G.S.w.fantasy), H = (c, lv) => D.member(F, c, lv), M = h => ({ hero: h, n: h.name, uid: h.uid, cls: G.Party.RUN_CLS[h.cls], dead: false, hp: 30, max: 30 });
   const rg = H('rogue', 5), mk = party => ({ map: { nodes: [{ id: 0, notes: [] }, { id: 1, hostile: false, type: 'treasure', notes: [] }], edges: [] }, party: party.map(M), items: {}, xcd: {}, rng: () => 0.99, log: [], at: 0, turn: 0, flags: {}, path: [0], here: {} });
   const e = { a: 0, b: 1, kind: 'trap', dc: 15, seen: { trap: true }, tried: {} }, S1 = mk([rg]), acts = RUN.moveActs(S1, e), N = G.Dnd;
-  t('찾은 함정: 로그가 있으면 해제가 먼저 · 도둑 도구 = 민첩 + 숙련 2배', acts[0].id === 'disarm' && acts[0].check.bonus === N.mod(N.ab(rg).dex) + 2 * N.prof(5), acts.map(a => a.id));
+  t('찾은 함정: 감각(로그)이 있으면 판정 없이 해제', acts[0].id === 'disarm' && !acts[0].check, acts.map(a => a.id));
   acts[0].run(); t('해제 성공: 작동하지 않는다', e.disarmed && !S1.log.some(l => l.trap), S1.log.map(l => l.t));
   const e2 = { a: 0, b: 1, kind: 'trap', seen: { trap: true }, tried: {} }, S2 = mk([H('dragoon', 5)]), a2 = RUN.moveActs(S2, e2); a2[0].run();
-  t('로그가 없으면 알고 지나간다: 작동하지만 내성에 이점', a2.length === 1 && S2.log.some(l => l.trap), a2.map(a => a.id));
+  t('감각이 없으면 밟고 지나간다: 작동한다', a2.length === 1 && S2.log.some(l => l.trap), a2.map(a => a.id));
 }
 // 몬스터 상성 (SRD 능력치표) · 싸워 본 것은 도감에 · 레인저는 만난 것만으로
 { const s = D.fresh(); s.party = ['dragoon', 'cleric']; const map = { w: 10, h: 10, c: new Array(100).fill('.') };

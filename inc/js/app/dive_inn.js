@@ -117,11 +117,12 @@ const DIVEINN = (() => {
   const faces = (box, S) => box.querySelectorAll('canvas[data-f]').forEach(cv => { const go = () => { if (cv.isConnected && !UI.face(cv, merc(S, cv.dataset.f))) setTimeout(go, 400); }; go(); });
   // 파티 초상 줄 (길드 · 지도가 같이 쓴다): 자리 수만큼 칸
   const party = (S, key) => { const t = D.team(S); return `<div class="in-party">${Array.from({ length: D.seats(S) }, (_, i) => { const c = t[i]; if (!c) return '<i class="in-p empty"></i>'; const m = S.roster[c]?.m;
-    return `<button class="in-p on" data-${key}="${c}"><canvas data-f="${c}" width="26" height="30"${m ? '' : ' class="sil"'}></canvas><b>${esc(m?.name || clsN(c))}</b><em>${m?.lv || D.newLv(S)}</em></button>`; }).join('')}</div>`; };
+    return `<button class="in-p on" data-${key}="${c}"><canvas data-f="${c}" width="26" height="30"${m ? '' : ' class="sil"'}></canvas><b>${esc(m?.name || clsN(c))}</b><em>${m?.lv || D.newLv(S)}</em><i class="in-pk">${D.keysOf(c).map(k => UI.px(D.KEYS[k].ic)).join('')}</i></button>`; }).join('')}</div>`; };
   // 오른쪽 정보: 큰 그림 · 이름 · 직업 · 레벨 · 단추
   function info(S, c) {
     if (!c) return ''; const h = S.roster[c], st = stOf(S, c), team = D.team(S), inT = team.includes(c);
-    const top = (n, sub) => `<canvas class="in-big" width="80" height="50"></canvas><div class="in-hd"><b>${esc(n)}</b><small>${esc(sub)}</small></div>`;
+    const keys = `<div class="in-keys">${D.keysOf(c).map(k => `<span>${UI.px(D.KEYS[k].ic)}${esc(D.KEYS[k].n)}</span>`).join('')}</div>`; // 탐험 열쇠
+    const top = (n, sub) => `<canvas class="in-big" width="80" height="50"></canvas><div class="in-hd"><b>${esc(n)}</b><small>${esc(sub)}</small></div>${keys}`;
     if (!h) return top(clsN(c), `Lv ${D.newLv(S)}`) + `<div class="in-act"><button class="in-hire" data-hire="${c}">영입</button></div>`;
     const m = h.m, need = G.Guild.needOf(m);
     return top(m.name, `${clsN(c)} · ${G.Builds.byId(m.build)?.n || ''}`)

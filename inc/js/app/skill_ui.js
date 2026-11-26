@@ -22,8 +22,9 @@ const SKUI = (() => {
     const t = performance.now(), L = live.get(e); if (L && L.k === k && t - L.t < 900) return; L?.el.remove();
     const el = document.createElement('div'); el.className = 'sk-cast' + (foe ? ' foe' : ''); el.innerHTML = `${img(k)}<div><b>${esc(nameOf(k))}</b>${fx ? `<small>${esc(fx)}</small>` : ''}</div>`; $('floats').append(el); live.set(e, { el, k, t });
   }
+  function castRaw(e, iconHtml, name) { const t = performance.now(); live.get(e)?.el.remove(); const el = document.createElement('div'); el.className = 'sk-cast key'; el.innerHTML = `${iconHtml}<div><b>${esc(name)}</b></div>`; $('floats').append(el); live.set(e, { el, k: name, t }); }
   function tick() { const t = performance.now(); for (const [e, L] of live) { if (t - L.t > 1500 || e.dead) { L.el.remove(); live.delete(e); continue; } UI.place(L.el, e._dx ?? e.x, e._dy ?? e.y, 2.3); L.r = null; } const on = [];
     for (const L of [...live.values()].sort((a, b) => b.t - a.t)) { const m = /translate\(([-\d.]+)px, ?([-\d.]+)px\)/.exec(L.el.style.transform); if (!m) continue; let x = +m[1], y = +m[2]; const w = L.el.offsetWidth, h = L.el.offsetHeight + 2; for (let n = 0; n < 4 && on.some(o => Math.abs(o.x - x) < (o.w + w) / 2 && Math.abs(o.y - y) < h); n++) y -= h; on.push({ x, y, w }); L.el.style.transform = `translate(${x}px, ${y}px) translate(-50%,-100%)`; } } // 서로 겹치면 위로 쌓는다
   function clear() { for (const L of live.values()) L.el.remove(); live.clear(); }
-  return { icon, img, cast, tick, clear };
+  return { icon, img, cast, castRaw, tick, clear };
 })();

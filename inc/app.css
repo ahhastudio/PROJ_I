@@ -984,3 +984,12 @@ canvas.sil { filter:brightness(.32); }
 #dv-bar .dv-p .dv-cd { grid-column:1 / -1; justify-content:flex-start; flex-wrap:nowrap; min-width:0; } #dv-bar .dv-p > small, #dv-bar .dv-p > span { white-space:nowrap; }
 @media (max-height: 480px) and (min-aspect-ratio: 4/3) { body.rt #dv-bar .dv-ps .dv-p > small { display:none; } }
 #dv-bar .dv-hand button.hk::before { content:none; }
+/* 탐험 열쇠 (2026-11-26) */
+.in-keys { display:flex; justify-content:center; gap:6px; flex-wrap:wrap; } .in-keys span { display:inline-flex; align-items:center; gap:3px; padding:1px 6px; background:#4f2a16; border:1px solid #24140c; color:#ffe9b0; font:600 11px "Galmuri11",sans-serif; }
+.in-pk { position:absolute; right:2px; top:2px; display:flex; flex-direction:column; gap:1px; } .in-pk .px { transform:scale(.8); }
+.sk-cast.key { border-color:#9fe79f; color:#e0ffd8; }
+#dv-cost { position:absolute; left:50%; bottom:calc(6px + var(--safe-b)); transform:translateX(-50%); z-index:30; max-width:calc(100% - 24px); padding:8px 10px 10px; background:rgba(60,28,12,.94); border:2px solid #24140c; box-shadow:inset 0 2px 0 #a3643a, 0 8px 24px rgba(0,0,0,.5); box-sizing:border-box; }
+#dv-cost .fk-t b { font:700 15px "Galmuri11",sans-serif; color:#ffe9b0; } #dv-cost .fk-t i { display:block; height:3px; margin:4px 0 7px; background:#ffd45a; width:100%; } #dv-cost .fk-l { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+#dv-cost button { min-width:108px; max-width:190px; min-height:58px; flex:1 1 108px; display:grid; justify-items:center; align-content:center; gap:3px; padding:6px 8px; background:linear-gradient(#a3643a, #7a4424); border:2px solid #24140c; color:#ffe9b0; font:700 14px "Galmuri11",sans-serif; } #dv-cost button.x { background:linear-gradient(#5a3a24, #3e2616); } #dv-cost button small { font:600 11px "Galmuri11",sans-serif; color:#ffd9a8; } #dv-cost button small.gate { color:#ffb0a0; }
+.fk-need { margin-left:8px; display:inline-flex; gap:5px; } .fk-need em { font-style:normal; display:inline-flex; align-items:center; gap:2px; font:600 11px "Galmuri11",sans-serif; color:#a08060; } .fk-need em.on { color:#9fe79f; }
+#dv-fork button small.zz { color:#9fe79f; }
