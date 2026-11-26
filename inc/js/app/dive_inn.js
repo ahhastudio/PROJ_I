@@ -121,7 +121,7 @@ const DIVEINN = (() => {
   // 오른쪽 정보: 큰 그림 · 이름 · 직업 · 레벨 · 단추
   function info(S, c) {
     if (!c) return ''; const h = S.roster[c], st = stOf(S, c), team = D.team(S), inT = team.includes(c);
-    const keys = `<div class="in-keys">${D.keysOf(c).map(k => `<span>${UI.px(D.KEYS[k].ic)}${esc(D.KEYS[k].n)}</span>`).join('')}</div>`; // 탐험 열쇠
+    const keys = `<div class="in-keys">${D.keysOf(c).flatMap(k => D.OVERCOME[k].map(t => `<span>${UI.px(D.KEYS[k].ic)}${esc(t)}</span>`)).join('')}</div>`; // 넘는 방 상태 (2026-11-26)
     const top = (n, sub) => `<canvas class="in-big" width="80" height="50"></canvas><div class="in-hd"><b>${esc(n)}</b><small>${esc(sub)}</small></div>${keys}`;
     if (!h) return top(clsN(c), `Lv ${D.newLv(S)}`) + `<div class="in-act"><button class="in-hire" data-hire="${c}">영입</button></div>`;
     const m = h.m, need = G.Guild.needOf(m);

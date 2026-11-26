@@ -36,11 +36,11 @@ const DIVEUI = (() => {
   function attach(r) {
     R = r; on = true; document.body.classList.add('dive'); if (typeof setZoom === 'function') setZoom(HUD.zoom(false), true); watch(); if (away?.gold) awayBox(away);
     if (!run) { FXUI.attach(R); PMAP.hide(); return guild(); }
-    CRAWL.policy = { ...D.POL, waves: D.waves, forkWin, costWin, chest: k => chestShow(k), tap: ev => handTap(ev), busy: () => !!$('dv-card') || !!$('dv-ev') || !!$('dv-fork') || !!$('dv-cost') || gateBusy(), event: (st, sc) => D.evDecide(S, st, sc), eventWin: (st, sc, pick) => evWin(st, sc, pick), wait: () => 1500 / spd(), end: finish, note, seed: fl => D.floorSeed(S, fl), leave: st => { D.remember(S, st); run.blk[st.floor] = (run.blk[st.floor] || 0) + D.planBlocked(st); }, descend: st => D.descend(st, S, G.Party.members(G.S.w.fantasy)) };
+    CRAWL.policy = { ...D.POL, waves: D.waves, routeWin, wantRest: st => D.wantCamp(S, st), chest: k => chestShow(k), tap: ev => handTap(ev), busy: () => !!$('dv-card') || !!$('dv-ev') || !!$('dv-fork') || gateBusy(), event: (st, sc) => D.evDecide(S, st, sc), eventWin: (st, sc, pick) => evWin(st, sc, pick), wait: () => 1500 / spd(), end: finish, note, seed: fl => D.floorSeed(S, fl), leave: st => { D.remember(S, st); }, descend: st => D.descend(st, S, G.Party.members(G.S.w.fantasy)) };
     PMAP.view = st => D.drawState(S, st); // 원정 중 지도 = 지도 기억 + 이번 판
     PMAP.render = (box, st, big) => { if (!box) return; box.querySelector('#pmap')?.style.setProperty('display', 'none'); let w = box.querySelector('.dvpmw'); if (!w) { w = document.createElement('div'); w.className = 'dvpmw'; box.append(w); const t = document.createElement('b'); t.className = 'dvpm-t'; box.append(t); }
       const V = D.drawState(S, st), ex = D.explored(S, st.floor); box.querySelector('.dvpm-t').textContent = `${RUN.zone(st.floor).n} · ${st.floor}층${ex ? ` · 탐사 ${ex[0]}/${ex[1]}` : ''}`; // 큰 지도 머리는 칸 밖(위)에 따로
-      DIVEMAP.mount(w, V, { plan: st.plan, trail: st.path, fail: [], camp: S.campPlan[st.floor] || [], S, gateInfo: q0 => D.gateInfo(S, V, q0), here: st.at, mini: !big }); }; // 원정 중 지도: 작게 = 방 · 지금 위치 · 계획 점선 · 발자국 / 크게 = 길드 지도와 같은 그림
+      DIVEMAP.mount(w, V, { plan: null, trail: st.path, fail: [], camp: [], S, gateInfo: q0 => D.gateInfo(S, V, q0), here: st.at, mini: !big }); }; // 원정 중 지도: 작게 = 방 · 지금 위치 · 계획 점선 · 발자국 / 크게 = 길드 지도와 같은 그림
     PMAP.bigBox = (svg, st) => { // 크게 본 지도: 아는 곳 + 계획한 길에 맞춘 틀 (길드 지도와 같은 방식, 칸 비율에 맞춰 넓힌다)
       const V = D.drawState(S, st), L = st.map._lay, cs = [], add = id => { const r = L.room[id]; cs.push([r.x, r.y], [r.x + r.w, r.y + r.h]); };
       V.map.nodes.forEach(q => { if (q.visited || q.seenMap || q.info >= 2) add(q.id); }); (st.plan || []).forEach(add); add(st.at);
@@ -55,7 +55,7 @@ const DIVEUI = (() => {
   function finish(st, why = '') {
     if (run.over) return; run.over = true; $('dv-ev')?.remove();
     const min = Math.round((performance.now() - run.t0) / 6000) / 10;
-    D.remember(S, st); run.blk[st.floor] = (run.blk[st.floor] || 0) + D.planBlocked(st);
+    D.remember(S, st);
     const maps = []; for (let fl = run.start; fl <= st.floor; fl++) { const ex = D.explored(S, fl); if (ex) maps.push([fl, ex[0], ex[1], ex[0] - (run.ex0[fl] || 0), run.blk[fl] || 0]); } // 층별 탐사 (새로 밝힌 수 · 막힌 잠긴 문)
     logPoll(); S.lastLog = (run.log || []).slice(-200); // 지난 판 로그 (길드에서 지난 판 결과를 펼치면)
     // 사망: 엔진에서 죽은(dead) 영웅 · 전멸이면 전원. 살아 돌아오면 짐 속 전리품이 금화, 전멸하면 잃는다
@@ -158,7 +158,7 @@ const DIVEUI = (() => {
     const tab = f => { const ex = D.explored(S, f), st = D.starts(S).includes(f); const eo = D.evOpen(S, f); return `<button data-fl="${f}" class="${f === fl ? 'on' : ''}${st ? ' st' : ''}">${f}층${ex ? ` <small>${ex[0]}/${ex[1]}</small>` : ''}${eo ? ` <small class="dv-bad">사건 ${eo}</small>` : ''}</button>`; };
     box.innerHTML = `<header><h2><button class="chip dv-back">‹ 길드</button> 지도</h2><div class="dv-res"><span class="chip c-gold${S.gold < 0 ? ' neg' : ''}">${UI.px('coin')} ${S.gold}</span><span class="chip">최고 ${S.deep}층</span>${fsBtn()}</div></header>`
       + last
-      + `<div class="dv-gmain"><div class="dv-gmap"><div class="dv-fls"><button data-fl="0" class="dv-autof${S.start ? '' : ' on'}">자동 ${sf}층</button>${fls.map(tab).join('')}${S.plan[fl] ? '<button class="dv-clr">경로 ✕</button>' : ''}</div>`
+      + `<div class="dv-gmain"><div class="dv-gmap"><div class="dv-fls"><button data-fl="0" class="dv-autof${S.start ? '' : ' on'}">자동 ${sf}층</button>${fls.map(tab).join('')}</div>`
       + `<div class="dv-mapw"><svg id="dvmap" xmlns="http://www.w3.org/2000/svg"></svg></div></div>`
       + `<div class="dv-gside"><div class="dv-sum"></div>${bagLine(team)}`
       + `<div class="dv-gparty">${DIVEINN.party(S, 'cls')}</div>`
@@ -176,7 +176,6 @@ const DIVEUI = (() => {
       if (b.classList.contains('dv-back')) return goStep('inn');
       if (b.classList.contains('dv-bagb')) { if (cd) cd.stop = true; return bagPanel(); }
       if (b.dataset.cls) { inC = b.dataset.cls; return goStep('inn'); } // 초상: 길드로 돌아가 그 영웅
-      if (b.classList.contains('dv-clr')) { delete S.plan[fl]; mapOld[fl] = []; put(S); guild(); return; }
       if (b.classList.contains('dv-auto')) { S.autoOn = !S.autoOn; put(S); guild(); return; }
       if (b.classList.contains('dv-gch') && pixM && pixV) { const L = pixM.gates(); if (!L.length) return; const g = L[gchI++ % L.length]; pixM.show(g); return gatePop(pixV, g.q); } // 못 연 관문을 차례로
       if (b.classList.contains('dv-start')) depart();
@@ -184,22 +183,20 @@ const DIVEUI = (() => {
   }
   // ── 파티 짐 (2026-11-23): 길드의 「짐 5/9」 줄 → 짐 챙기기 창 (칸 줄 · 물자 −/+ · 값 · 남는 칸 · 경로 끝 · 가득 차면 복귀 · 사망 시 멈춤 · 계획 횃불) ──
   const SUP_N = { torch: ['횃불', 'spark'], camp: ['야영 물자', 'tent'] }; // 물자는 둘 (2026-11-23)
-  const planTorch = () => { let n = 0; for (const f of Object.keys(S.plan).map(Number)) if (f >= D.startFloor(S)) n += D.torchUse(S, D.view(S, f), S.plan[f])[0]; return n; }; // 출발 층부터 계획이 있는 층들의 아는 어두운 길 수
-  const bagUse = () => { const b = D.bagPlan(S); return D.SUP_KEYS.reduce((a, k) => a + b[k], 0); };
-  const planCamp = () => { let n = 0; for (const f of Object.keys(S.campPlan || {}).map(Number)) if (f >= D.startFloor(S)) n += (S.campPlan[f] || []).filter(id => (S.plan[f] || []).includes(id)).length; return n; };
-  const backSum = () => [S.endMode === 'back' && '경로 완주', S.fullBack && '짐 가득', S.risk !== false && '파티 위험'].filter(Boolean).join(' · ') || '직접';
+  const bagUse = () => D.bagPlan(S).torch; // 짐 칸은 횃불만 (야영 물자는 칸을 안 차지한다 — 2026-11-26)
+  const backSum = () => [S.fullBack && '짐 가득', S.risk !== false && '파티 위험'].filter(Boolean).join(' · ') || '직접';
   // 메뉴 아이콘 (흰 실루엣): CSS mask로 버튼 글자색을 입힌다
   const mi = n => `<span class="dv-mi" style="--mi:url(assets/ll/icon_${n}.png)"></span>`;
   const bagLine = t => `<button class="dv-bagb">${mi('inventory')} 짐 ${bagUse()}/${D.bagCap(S, t)} <small>${UI.px('coin')} ${D.supCost(D.bagPlan(S))} · 귀환 ${backSum()}</small></button>`;
   function bagPanel() {
-    const box = panel('dv-bag'), t = D.team(S), cap = D.bagCap(S, t), mx = D.supMax(S), b = D.bagPlan(S), used = bagUse(), cost = D.supCost(b), pt = planTorch();
-    const cells = Array.from({ length: cap }, (_, i) => { let k = 0, acc = 0; for (const q of D.SUP_KEYS) { const n = b[q]; if (i < acc + n) { k = q; break; } acc += n; } return `<i class="${k ? `on k-${k}` : ''}">${k ? UI.px(SUP_N[k][1]) : ''}</i>`; }).join('');
-    const row = k => { const n = b[k], m = mx[k]; return `<div class="dv-supr"><b>${ico({ sup: k }) || UI.px(SUP_N[k][1])} ${SUP_N[k][0]}</b><button data-sup="${k}" data-d="-1"${n <= 0 ? ' disabled' : ''}>−</button><span>${n}/${m}</span><button data-sup="${k}" data-d="1"${n >= m || used >= cap ? ' disabled' : ''}>+</button><small>${TUNE_SUP(k)}</small></div>`; };
+    const box = panel('dv-bag'), t = D.team(S), cap = D.bagCap(S, t), mx = D.supMax(S), b = D.bagPlan(S), used = bagUse(), cost = D.supCost(b);
+    const cells = Array.from({ length: cap }, (_, i) => { let k = 0, acc = 0; for (const q of ['torch']) { const n = b[q]; if (i < acc + n) { k = q; break; } acc += n; } return `<i class="${k ? `on k-${k}` : ''}">${k ? UI.px(SUP_N[k][1]) : ''}</i>`; }).join('');
+    const row = k => { const n = b[k], m = mx[k]; return `<div class="dv-supr"><b>${ico({ sup: k }) || UI.px(SUP_N[k][1])} ${SUP_N[k][0]}</b><button data-sup="${k}" data-d="-1"${n <= 0 ? ' disabled' : ''}>−</button><span>${n}/${m}</span><button data-sup="${k}" data-d="1"${n >= m || (k !== 'camp' && used >= cap) ? ' disabled' : ''}>+</button><small>${TUNE_SUP(k)}</small></div>`; };
     box.innerHTML = `<header><h2>짐 ${used}/${cap}</h2><div class="dv-res"><span class="chip c-gold${S.gold < 0 ? ' neg' : ''}">${UI.px('coin')} ${S.gold}</span><button class="chip dv-x">닫기</button></div></header>`
       + `<div class="dv-cells">${cells}</div>`
       + D.SUP_KEYS.map(row).join('')
-      + `<p class="dv-bagsum">${UI.px('coin')} ${cost}${S.gold < 0 ? ' · <span class="dv-bad">빚</span>' : S.gold < cost ? ` · <span class="dv-bad">${UI.px('coin')} ${S.gold}</span>` : ''} · 남는 칸 ${cap - used} · 계획 야영 ${planCamp()}${planCamp() > b.camp ? ' <span class="dv-bad">!</span>' : ''} · 계획 횃불 ${pt}${pt > b.torch ? ' <span class="dv-bad">!</span>' : ''}</p>`
-      + `<h3 class="dv-togh">자동 귀환</h3><div class="dv-tog"><span>경로 완주</span><button data-end="back" class="${S.endMode === 'back' ? 'on' : ''}">켬</button><button data-end="go" class="${S.endMode !== 'back' ? 'on' : ''}">끔</button></div>`
+      + `<p class="dv-bagsum">${UI.px('coin')} ${cost}${S.gold < 0 ? ' · <span class="dv-bad">빚</span>' : S.gold < cost ? ` · <span class="dv-bad">${UI.px('coin')} ${S.gold}</span>` : ''} · 남는 칸 ${cap - used} · ${UI.px('tent')} ${b.camp + D.CAMP_FREE}</p>`
+      + `<h3 class="dv-togh">자동 귀환</h3>`
       + `<div class="dv-tog"><span>짐 가득</span><button data-full="1" class="${S.fullBack ? 'on' : ''}">켬</button><button data-full="0" class="${S.fullBack ? '' : 'on'}">끔</button></div>`
       + `<div class="dv-tog"><span>파티 위험</span><button data-risk="1" class="${S.risk !== false ? 'on' : ''}">켬</button><button data-risk="0" class="${S.risk !== false ? '' : 'on'}">끔</button></div>`
       + `<h3 class="dv-togh">기타</h3><div class="dv-tog"><span>레벨업 카드</span><button data-card="1" class="${S.cardOn !== false ? 'on' : ''}">켬</button><button data-card="0" class="${S.cardOn !== false ? '' : 'on'}">끔</button></div>`
@@ -316,19 +313,22 @@ const DIVEUI = (() => {
   let mapOld = {}; // 층 → 지난번에 그린 경로 (새 구간만 잉크로 그려 보이려고)
   // 경로 요약 (지도 아래): 들르는 방 수와 종류 · 경로 위 관문과 지금 파티의 풀이 값. 경로가 없으면 「자동」
   const TYPE_N = { fight: '전투', elite: '정예', event: '사건', camp: '야영', shop: '상인', treasure: '보물', boss: '우두머리' };
-  function summary(V, plan) {
-    if (!plan || plan.length < 2) return `<b>경로</b> <span>자동</span>`;
-    const L = D.planLines(S, V, plan); // 방 차례대로 한 줄씩 (예상 · 관문) + 합계
-    // 경로의 안 끝난 사건: 계획에서 고를 선택지 (지금 파티의 값 · 직업 전용은 그 직업)
-    return `<ul class="dv-plines">${L.map(o => `<li class="pl-${o.k}${o.short ? ' short' : ''}${o.ev ? ' ev' : ''}${o.no ? ' no' : ''}"${o.ev != null ? ` data-evr="${o.ev}"` : ''}>${o.no ? '<b class="dv-bad">✕</b> ' : ''}${esc(o.t)}</li>`).join('')}</ul>`; // ✕: 지금 파티로 못 여는 관문 // 사건 방 줄을 누르면 선택지 판
+  // 층 정보 (지도 아래 — 2026-11-26 사용자: 「필요한 파티원 · 열쇠를 챙기는 데 필요한 걸로」): 그 층의 방 상태 수 · 지금 파티에서 넘는 사람(없으면 결과)
+  function floorSum(V) {
+    const cnt = new Map(), add = k => { const nm = D.STATE[k].n, o = cnt.get(nm) || { k, n: 0 }; o.n++; cnt.set(nm, o); };
+    for (const q of V.map.edges) { const k = q.kind === 'locked' ? q.lock || 'lock' : q.kind === 'trap' ? 'trap' : q.kind === 'dark' ? 'dark' : null; if (k && D.STATE[k]) add(k); }
+    for (const n of V.map.nodes) { if (n.dark) add('dark'); if (n.sleepy) add('sleep'); }
+    if (!cnt.size) return '';
+    const t = D.team(S), li = [...cnt].map(([nm, o]) => { const S0 = D.STATE[o.k], h = S0.by.map(([g]) => t.find(c => D.keysOf(c).includes(g))).find(Boolean), v = h ? clsN(h) : o.k === 'sleep' ? S0.none : S0.torch && D.bagPlan(S).torch ? `횃불 ${D.bagPlan(S).torch}` : S0.none, ok = !!h || o.k === 'sleep' || (S0.torch && D.bagPlan(S).torch > 0);
+      return `<li class="pl-gate${ok ? '' : ' no'}">${esc(nm)} ${o.n} · ${esc(v)}</li>`; });
+    return `<ul class="dv-plines">${li.join('')}</ul>`;
   }
   // 픽셀 지도 (시안 v1, 2026-11-23 — ?pix=1일 때만): DIVEMAP(js/app/dive_map.js)이 캔버스에 그린다. 누르기 · 경로 · 지우기는 SVG 지도와 같은 규칙
   // 픽셀 지도가 기본 (2026-11-23 — ?svg=1이면 예전 SVG 손그림 지도): DIVEMAP(js/app/dive_map.js)이 캔버스에 그린다. 누르기 · 경로 · 지우기 · 야영 지점 · 사건 판은 같은 규칙
-  const PIX = q.get('svg') !== '1';
   let pixM = null;
   let pixV = null, gchI = 0;
   function pixMap(box, fl, erase = null) {
-    const V = D.view(S, fl), plan = S.plan[fl] || null, wrap = box.querySelector('.dv-mapw'), keep = pixM && wrap.querySelector('canvas.dvpix') && wrap.dataset.fl === String(fl) ? pixM.scroll() : null;
+    const V = D.view(S, fl), plan = null, wrap = box.querySelector('.dv-mapw'), keep = pixM && wrap.querySelector('canvas.dvpix') && wrap.dataset.fl === String(fl) ? pixM.scroll() : null;
     wrap.dataset.fl = fl; box.querySelector('#dvmap')?.remove();
     const prev = S.shown[fl] || '', cur0 = S.maps[fl]?.n || '', fresh = []; if (prev !== cur0) { for (let i = 0; i < cur0.length; i++) if ((parseInt(cur0[i], 16) & 4) && !(parseInt(prev[i] || '0', 16) & 4)) fresh.push(i); S.shown[fl] = cur0; put(S); } // 새로 밝힌 방 (한 번만)
     let anim = null; // 원정 뒤 첫 길드: 이번에 밝힌 방을 깃펜이 그린다 (새로 들어간 방 · 새로 본 방이 있을 때만 — 자동 재출발 중이면 짧게)
@@ -339,14 +339,10 @@ const DIVEUI = (() => {
     const old = mapOld[fl] || [], from = plan ? (old.length && plan.slice(0, old.length).join() === old.join() ? old.length - 1 : 0) : 0;
     if (erase) pixM.redraw(plan, 0, erase); else if (plan && from < plan.length - 1) pixM.redraw(plan, from);
     mapOld[fl] = plan ? plan.slice() : [];
-    const sum = box.querySelector('.dv-sum'); if (sum) sum.innerHTML = summary(V, plan);
+    const sum = box.querySelector('.dv-sum'); if (sum) sum.innerHTML = floorSum(V);
     edges(box, V, plan);
-    wrap.onclick = ev => { ev.stopPropagation(); if (pixM.dragged() || pixM.busy() || pixM.skipped()) return; const g = pixM.gate(ev); if (g) return gatePop(V, g); const id = pixM.cell(ev), before = (S.plan[fl] || []).slice();
-      if (id == null) { if (!before.length) return; const pairs = []; for (let k = 0; k + 1 < before.length; k++) pairs.push([before[k], before[k + 1]]); delete S.plan[fl]; put(S); mapOld[fl] = []; box.querySelector('.dv-clr')?.remove(); return pixMap(box, fl, pairs); } // 빈 곳: 경로를 지운다
-      if (before.includes(id) && id !== before[0]) { const n = V.map.nodes[id]; if (n.type === 'event' && n.ev && D.evOf(S, fl, id)?.st !== 'done') return evPop(V, n, fl); D.toggleCamp(S, fl, id); put(S); return pixMap(box, fl); } // 경로 위의 방: 사건 방이면 선택지 판, 아니면 야영 지점 켬 · 끔
-      if (!D.planTo(S, V, id)) return pixM.nope(id);
-      put(S); const after = S.plan[fl] || []; if (after.length && !box.querySelector('.dv-clr')) box.querySelector('.dv-fls')?.insertAdjacentHTML('beforeend', '<button class="dv-clr">경로 ✕</button>');
-      pixMap(box, fl); };
+    wrap.onclick = ev => { ev.stopPropagation(); if (pixM.dragged() || pixM.busy() || pixM.skipped()) return; const g = pixM.gate(ev); if (g) return gatePop(V, g); const id = pixM.cell(ev); if (id == null) return; // 경로 계획은 없앴다 (2026-11-26 — 원정 중 방마다 고른다): 관문 · 사건 방만 자세히
+      const n = V.map.nodes[id]; if (n.type === 'event' && n.ev && D.evOf(S, fl, id)?.st !== 'done' && (n.visited || n.info >= 2)) evPop(V, n, fl); };
     document.body.dataset.mapfl = fl;
   }
   // 파티 칸: 그 경로의 아는 적에게 주 피해 유형이 통하나 (▲ 취약을 찌름 · ▼ 저항 · 면역에 막힘)
@@ -358,62 +354,11 @@ const DIVEUI = (() => {
   const gatePop = (V, q) => pop(`<h4>${esc(D.gateTxt(S, V, q).split(' · ')[0])}</h4>${D.gateInfo(S, V, q).map(x => `<p class="gp-row"><b>${esc(x.k)}</b> ${x.val ? `<em>${esc(x.val)}</em>` : ''}${x.who.map(w => `<span class="gp-who ${w === '누구나' ? 'on' : whoSt(w)}">${esc(w)}</span>`).join('')}</p>`).join('')}`);
   function evPop(V, n, fl) {
     const sc = RUN.eventScene({ ...V, rng: () => 0.5, gold: 999, flags: {}, here: {}, log: [] }, n, n.ev), want = S.evPlan?.[fl]?.[n.id];
-    pop(`<h4>${esc(n.name || '사건')}</h4>${sc.filter(c => !c.lock && !D.evPass(n.ev, c.n)).map(c => { const o = D.evOut(n.ev, c.n); return `<button data-evn="${esc(c.n)}" class="${want === c.n ? 'on' : ''}"${c.off && c.off() ? ' disabled' : ''}><b>${esc(c.n.replace(/^\[([^\]]*)\] /, '$1 · '))}</b><small>${[c.p != null && c.p < 1 ? `${Math.round(c.p * 100)}%` : '', o.ok.join(' · '), o.no.length ? `실패 ${o.no.join(' · ')}` : ''].filter(Boolean).join(' · ')}</small></button>`; }).join('')}<button data-camp="1" class="${(S.campPlan[fl] || []).includes(n.id) ? 'on' : ''}">야영</button>`,
-      (b, el) => { if (b.dataset.evn != null) D.evPlanSet(S, fl, n.id, b.dataset.evn); if (b.dataset.camp) D.toggleCamp(S, fl, n.id); put(S); el.remove(); guild(); });
+    pop(`<h4>${esc(n.name || '사건')}</h4>${sc.filter(c => !c.lock && !D.evPass(n.ev, c.n)).map(c => { const o = D.evOut(n.ev, c.n); return `<button data-evn="${esc(c.n)}" class="${want === c.n ? 'on' : ''}"${c.off && c.off() ? ' disabled' : ''}><b>${esc(c.n.replace(/^\[([^\]]*)\] /, '$1 · '))}</b><small>${[c.p != null && c.p < 1 ? `${Math.round(c.p * 100)}%` : '', o.ok.join(' · '), o.no.length ? `실패 ${o.no.join(' · ')}` : ''].filter(Boolean).join(' · ')}</small></button>`; }).join('')}`,
+      (b, el) => { if (b.dataset.evn != null) D.evPlanSet(S, fl, n.id, b.dataset.evn); put(S); el.remove(); guild(); });
   }
 
-  // 지도 그리기 (길드 안의 #dvmap): 경로 잉크 선(굵게) · 지나갈 방 순서 번호 · 깃펜 · 발자국 · 붉은 ✕ · 손글씨 풀이 값 · 새로 밝힌 방
-  function drawMap(box, fl, erase = null) {
-    if (PIX) return pixMap(box, fl, erase);
-    const V = D.view(S, fl), plan = S.plan[fl] || null, svg = box.querySelector('#dvmap'); RUN.draw.render(svg, V);
-    const L = V.map._lay, add = [], old = mapOld[fl] || [], from = plan ? (old.length && plan.slice(0, old.length).join() === old.join() ? old.length - 1 : 0) : 0;
-    const ctr = id => { const r = L.room[id]; return [M6 + (r.x + r.w / 2) * T13, M6 + (r.y + r.h / 2) * T13]; };
-    const tr = S.trail[fl] || []; for (let k = 0; k + 1 < tr.length; k++) { const d = segD(V.map, tr[k], tr[k + 1]); if (d) add.push(`<path class="dv-foot" d="${d}"/>`); }
-    // 곁방에서 돌아오는 길(이미 지난 방으로 되돌아감)은 가는 점선으로 — 깃펜은 마지막으로 새로 가는 방에 (돌아온 방에 깃펜이 있으면 경로가 곁방에서 시작하는 것처럼 보였다)
-    if (plan) { const met = new Set([plan[0]]); for (let k = 0; k + 1 < plan.length; k++) { const back = met.has(plan[k + 1]); met.add(plan[k + 1]); const d = segD(V.map, plan[k], plan[k + 1]); if (d) add.push(back ? `<path class="dv-seg ret${k >= from && !erase ? ' new' : ''}" data-k="${k}" d="${d}"/>` : `<path class="dv-under" d="${d}"/><path class="dv-seg${k >= from && !erase ? ' new' : ''}" data-k="${k}" d="${d}"/>`); } }
-    if (erase) for (const d of erase) add.push(`<path class="dv-seg erase" d="${d}"/>`);
-    add.push(...rwSvg(V.map, fl));
-    const fail = new Set(S.fail[fl] || []);
-    for (const q of V.map.edges) { const c = L.cor[q.id], [x, y] = c.cells[c.cells.length - 1] || c.doorB, X = M6 + (x + 1) * T13, Y = M6 + (y + 0.5) * T13;
-      if (fail.has(q.id)) add.push(`<text x="${(X - 10).toFixed(1)}" y="${(Y + 7).toFixed(1)}" class="sym halo" fill="#8e2a1a" font-size="20">✕</text>`);
-      if (!q.walked && ((q.kind === 'locked' && q.seen.lock) || (q.kind === 'trap' && q.seen.trap) || (q.kind === 'dark' && q.seen.dark))) D.gateInfo(S, V, q).map(x => x.val || (x.who.length ? `${x.k} ${x.who.slice(0, 3).join('·')}${x.who.length > 3 ? '…' : ''}` : '')).filter(Boolean).forEach((v, i) => add.push(`<text x="${(X + 3).toFixed(1)}" y="${(Y + 16 + i * 12).toFixed(1)}" class="note halo" fill="#2b1d14">${esc(v)}</text>`)); } /* 관문마다: 지금 파티의 값 · 없으면 풀 수 있는 직업 (파티를 바꾸면 바로 바뀐다) */
-    for (const id of (S.campPlan[fl] || [])) { const rr = L.room[id], x = M6 + (rr.x + rr.w) * T13 - 14, y = M6 + rr.y * T13 + 4; add.push(`<path class="dv-tent" d="M${x.toFixed(1)},${(y + 10).toFixed(1)} l6,-10 l6,10 Z M${(x + 6).toFixed(1)},${(y + 10).toFixed(1)} l0,-5"/>`); } // 야영 지점 (텐트)
-    const numd = new Set([plan?.[0]]); let num = 0; // 곁방에서 돌아온 방은 번호를 다시 달지 않는다
-    if (plan) plan.slice(1).forEach(id => { if (numd.has(id)) return; numd.add(id); const i = num++; const rr = L.room[id], x = M6 + rr.x * T13 + 9, y = M6 + rr.y * T13 + 9; add.push(`<g class="dv-ord"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7.5"/><text x="${x.toFixed(1)}" y="${(y + 3.5).toFixed(1)}" text-anchor="middle">${i + 1}</text></g>`); }); // 순서 번호는 방 왼쪽 위 모서리 (가운데 글자와 겹치지 않게)
-    svg.insertAdjacentHTML('beforeend', add.join('') + (plan ? QUILL : ''));
-    // 맞춤: 경로가 있으면 경로(+입구) 쪽, 없으면 아는 곳 — 지도 칸의 가로세로 비율에 맞춰 넓힌다
-    { const cs = [], box1 = id => { const r = L.room[id]; cs.push([r.x, r.y], [r.x + r.w, r.y + r.h]); };
-      { /* 지도 틀은 아는 곳 전체로 고정 — 경로를 고르는 동안 확대 · 이동하지 않는다 (2026-11-23 사용자: 「줌인 연출」이 어색) */ V.map.nodes.forEach(q => { if (q.visited || q.seenMap || q.info >= 2) box1(q.id); }); V.map.edges.forEach(q => { if (q.walked) for (const c of L.cor[q.id].cells) cs.push(c, [c[0] + 1, c[1] + 1]); }); }
-      if (cs.length) { let x0 = M6 + (Math.min(...cs.map(c => c[0])) - 2) * T13, y0 = M6 + (Math.min(...cs.map(c => c[1])) - 3) * T13, w = (Math.max(...cs.map(c => c[0])) - Math.min(...cs.map(c => c[0])) + 4) * T13, h = (Math.max(...cs.map(c => c[1])) - Math.min(...cs.map(c => c[1])) + 5) * T13;
-        w = Math.max(w, 12 * T13); h = Math.max(h, 10 * T13); const cw = svg.clientWidth || 1, ch = svg.clientHeight || 1, ar = cw / ch;
-        if (w / h < ar) { const nw = h * ar; x0 -= (nw - w) / 2; w = nw; } else { const nh = w / ar; y0 -= (nh - h) / 2; h = nh; }
-        svg.setAttribute('viewBox', `${x0.toFixed(1)} ${y0.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`); } }
-    // 발자국: 선 위에 10px마다 좌우 번갈아 (경로 잉크 위에 겹쳐도 읽히게 짙은 갈색 · 테두리)
-    for (const p of svg.querySelectorAll('.dv-foot')) { const len = p.getTotalLength(), out = []; for (let u = 6, k = 0; u < len - 4; u += 10, k++) { const a = p.getPointAtLength(u), b = p.getPointAtLength(Math.min(len, u + 1)), ang = Math.atan2(b.y - a.y, b.x - a.x), o = k % 2 ? 2.8 : -2.8, cx = a.x - Math.sin(ang) * o, cy = a.y + Math.cos(ang) * o; out.push(`<ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="3" ry="1.8" transform="rotate(${(ang * 180 / Math.PI).toFixed(0)} ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`); } p.insertAdjacentHTML('afterend', `<g class="dv-feet">${out.join('')}</g>`); }
-    const news = [...svg.querySelectorAll('.dv-seg.new')], quill = svg.querySelector('.dv-quill'), lastSeg = [...svg.querySelectorAll('.dv-seg:not(.erase):not(.ret)')].pop();
-    const at = (p, u) => { const a = p.getPointAtLength(u); quill.setAttribute('transform', `translate(${a.x.toFixed(1)},${a.y.toFixed(1)}) scale(2)`); };
-    if (quill && lastSeg) at(lastSeg, lastSeg.getTotalLength());
-    if (news.length) { const lens = news.map(p => p.getTotalLength()), tot = lens.reduce((a, b) => a + b, 0) || 1, t0 = performance.now(), DUR = 420;
-      news.forEach((p, i) => { p.style.strokeDasharray = lens[i]; p.style.strokeDashoffset = lens[i]; });
-      const step = () => { if (!svg.isConnected) return; const q = Math.min(1, (performance.now() - t0) / DUR); let u = q * tot;
-        news.forEach((p, i) => { const l = Math.max(0, Math.min(lens[i], u)); p.style.strokeDashoffset = lens[i] - l; if (u > 0 && u <= lens[i] && quill) at(p, l); u -= lens[i]; });
-        if (q < 1) requestAnimationFrame(step); else { news.forEach(p => { p.style.strokeDasharray = ''; p.style.strokeDashoffset = ''; }); if (quill && lastSeg) at(lastSeg, lastSeg.getTotalLength()); } }; // 끝나면 원래 선 모양(돌아오는 길 점선)으로
-      step(); }
-    for (const p of svg.querySelectorAll('.dv-seg.erase')) requestAnimationFrame(() => p.classList.add('gone'));
-    mapOld[fl] = plan ? plan.slice() : [];
-    const prev = S.shown[fl] || '', cur0 = S.maps[fl]?.n || '';
-    if (prev !== cur0) { for (const g of svg.querySelectorAll('g.room')) { const id = +g.dataset.id, was = parseInt(prev[id] || '0', 16), now = parseInt(cur0[id] || '0', 16); if ((now & 4) && !(was & 4)) g.classList.add('fresh'); } S.shown[fl] = cur0; put(S); }
-    const sum = box.querySelector('.dv-sum'); if (sum) sum.innerHTML = summary(V, plan);
-    edges(box, V, plan);
-    svg.onclick = ev => { const rm = ev.target.closest('g.room'); ev.stopPropagation(); const before = (S.plan[fl] || []).slice();
-      if (!rm) { if (!before.length) return; const gone = []; for (let k = 0; k + 1 < before.length; k++) { const d = segD(V.map, before[k], before[k + 1]); if (d) gone.push(d); } delete S.plan[fl]; put(S); mapOld[fl] = []; box.querySelector('.dv-clr')?.remove(); drawMap(box, fl, gone); return; } // 빈 곳을 누르면 경로를 지운다 (잉크가 흐려지며)
-      if (before.includes(+rm.dataset.id) && +rm.dataset.id !== before[0]) { D.toggleCamp(S, fl, +rm.dataset.id); put(S); return drawMap(box, fl); } // 경로 위의 방을 다시 누르면 야영 지점 켬 · 끔 (경로 지우기는 빈 곳)
-      if (!D.planTo(S, V, +rm.dataset.id)) { rm.classList.remove('nope'); void rm.getBBox(); rm.classList.add('nope'); const b = rm.getBBox(); rm.insertAdjacentHTML('beforeend', `<text class="note halo dv-nope" x="${(b.x + b.width / 2).toFixed(1)}" y="${(b.y + b.height / 2 + 6).toFixed(1)}" text-anchor="middle" fill="#8e2a1a" font-size="18">?</text>`); setTimeout(() => rm.querySelector('.dv-nope')?.remove(), 700); return; } // 아는 길이 없는 방: 경로는 그대로 · 흔들림과 「?」
-      put(S); const after = S.plan[fl] || []; if (after.length && !box.querySelector('.dv-clr')) box.querySelector('.dv-fls')?.insertAdjacentHTML('beforeend', '<button class="dv-clr">경로 ✕</button>'); if (!after.length) box.querySelector('.dv-clr')?.remove();
-      if (after.length < before.length) { const gone = []; for (let k = Math.max(0, after.length - 1); k + 1 < before.length; k++) { const d = segD(V.map, before[k], before[k + 1]); if (d) gone.push(d); } mapOld[fl] = after.slice(); drawMap(box, fl, gone); } // 지운 구간은 흐려지며 사라진다
-      else drawMap(box, fl); };
-    document.body.dataset.mapfl = fl;
-  }
+  const drawMap = (box, fl) => pixMap(box, fl); // 길드 지도 = 픽셀 지도 (옛 SVG 손그림 지도 · 경로 그리기는 없앴다 — 2026-11-26)
   // 방에서 얻는 것 (아는 방만): 물건 수 + 나올 수 있는 등급 색 점 · 동료 +1 · 회복 % — 길드 지도 · 원정 중 미니맵이 같이 쓴다
   function rwSvg(map, fl) { const L = map._lay, add = [];
   const RC = ['#7b6852', '#2f8a3e', '#2f63c9', '#8a3fc4', '#c9741a'];
@@ -679,32 +624,31 @@ const DIVEUI = (() => {
     if (on) wvOn = true; else if (!FIGHT.on) wvOn = false;
     document.body.classList.toggle('dv-fight', on); if (!$('dv-vig')) { const v = document.createElement('div'), c = $('stage').querySelector('canvas'); v.id = 'dv-vig'; if (c) c.after(v); } // 전투 중 가장자리 붉게 (인형 · 막대 아래)
   }
-  // ── 갈림길 (2026-11-26 사용자: 「갈림길에서 유저가 선택할수 있게」): 길마다 방향 · 방 · 관문. FORK_WAIT초 안에 답이 없으면 계획한 길 · 자동 규칙. 자동 재출발이 켜져 있으면 묻지 않는다 ──
-  const FORK_WAIT = 12;
-  function forkWin(st, opts, inf, pick, auto) {
+  // ── 다음 방 고르기 (2026-11-26 사용자: 「방클리어하면 지도 띄우고 갈수있는 방을 선택하는 ftl스타일」): 층 지도에 고를 수 있는 방 번호 · 목록에 방 종류 · 상태 · 넘는 사람(없으면 결과) · 야영(물자)
+  //   ROUTE_WAIT초 안에 답이 없으면 자동(G.Dive.POL.fork — 다쳤으면 먼저 야영). 자동 재출발 중이면 묻지 않는다
+  const ROUTE_WAIT = 12, RT_IC = { fight: 'battle', elite: 'battle', boss: 'battle', treasure: 'gold', shop: 'shop', event: 'map', camp: 'inventory', start: 'map' };
+  function routeWin(st, opts, pick, auto, rest) {
     if (run.over || S.autoOn || q.get('fork') === '0') return false; $('dv-fork')?.remove();
     const el = document.createElement('div'); el.id = 'dv-fork'; el.onpointerup = ev => ev.stopPropagation(); el.onpointerdown = ev => ev.stopPropagation();
-    const TI = { fight: 'battle', elite: 'battle', boss: 'battle', treasure: 'gold', shop: 'shop', event: 'map', camp: 'inventory' };
-    el.innerHTML = `<div class="fk-t"><b>갈림길</b><i></i></div><div class="fk-l">${opts.map((x, i) => { const n = st.map.nodes[x.to], o = inf[i], known = n.visited || n.info >= 2, g = n.hostile && (n.info >= 2 || n.visited) && n.g ? (n.g.units || [[n.g.name, n.g.count]]).map(([a, c]) => `${a} ${c}`).join(' · ') : '', gate = o.k === 'open' ? '' : D.gateTxt(S, st, x.e);
-      const plan = st.plan && st.plan[(st.plan.indexOf(st.at, st.planI || 0)) + 1] === x.to && st.plan.includes(st.at);
-      return `<button data-i="${i}"${plan ? ' class="plan"' : ''}><em>${o.ar[0]}</em>${mi(known ? TI[n.type] || 'map' : 'map')}<b>${esc(n.visited ? o.bt : n.info >= 2 ? (n.name || RUN.TYPE[n.type] || '방') : '?')}</b>${n.info >= 2 && !n.visited && n.sleepy && !n.alert ? '<small class="zz">잠듦 · 기습</small>' : ''}${g ? `<small>${esc(g)}</small>` : ''}${gate ? `<small class="gate">${esc(gate)}</small>` : ''}</button>`; }).join('')}</div>`;
-    const t0 = performance.now(), end = i => { clearInterval(tm); if (!el.isConnected) return; el.remove(); if (run && !run.over) pick(i); };
-    const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); const u = 1 - (performance.now() - t0) / 1000 / FORK_WAIT; el.querySelector('.fk-t i').style.width = `${Math.max(0, u * 100)}%`; if (u <= 0) end(auto()); }, 100);
-    el.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; const i = +b.dataset.i; st.log.push({ t: `갈림길 · 선택 → ${st.map.nodes[opts[i].to].name || RUN.TYPE[st.map.nodes[opts[i].to].type] || '방'}`, k: 'fork' }); end(i); };
-    $('stage').append(el); return true;
-  }
-  // ── 열쇠가 없을 때 (2026-11-26): 대가 카드 — 부수기(체력 · 시끄럽게) · 횃불 · 밟고 지나감 · 지나친다. FORK_WAIT초 안에 답이 없으면 기본(auto)
-  function costWin(st, title, ex, opts, pick, auto) {
-    if (run.over) return pick(auto()); if (S.autoOn || q.get('fork') === '0') return pick(auto()); $('dv-cost')?.remove();
-    const need = D.gateInfo(S, D.view(S, st.floor), ex.e).filter(x => x.key), el = document.createElement('div'); el.id = 'dv-cost'; el.className = 'dv-fork'; el.onpointerup = ev => ev.stopPropagation(); el.onpointerdown = ev => ev.stopPropagation();
-    el.innerHTML = `<div class="fk-t"><b>${esc(title)}</b>${need.length ? `<span class="fk-need">${need.map(x => `<em class="${x.val ? 'on' : ''}">${UI.px(x.ic)}${esc(x.k)}</em>`).join('')}</span>` : ''}<i></i></div><div class="fk-l">${opts.map((o, i) => `<button data-i="${i}"${o.a ? '' : ' class="x"'}><b>${esc(o.label)}</b>${o.cost ? `<small class="gate">${esc(o.cost)}</small>` : ''}${o.note ? `<small>${esc(o.note)}</small>` : ''}</button>`).join('')}</div>`;
-    const t0 = performance.now(), end = i => { clearInterval(tm); if (!el.isConnected) return; el.remove(); if (run && !run.over) pick(i); };
-    const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); const u = 1 - (performance.now() - t0) / 1000 / FORK_WAIT; el.querySelector('.fk-t i').style.width = `${Math.max(0, u * 100)}%`; if (u <= 0) end(auto()); }, 100);
-    el.onclick = ev => { const b = ev.target.closest('button'); if (b) end(+b.dataset.i); };
+    const N = st.map.nodes, V = D.drawState(S, st);
+    const row = (x, i) => { const n = N[x.to], pi = D.passInfo(st, x.ed || x.e, n), nm = (n.visited && n.name) || RUN.TYPE[n.type] || '방';
+      return `<button class="rt-o" data-i="${i}"><i class="rt-n">${i + 1}</i>${mi(RT_IC[n.type] || 'map')}<b>${esc(nm)}</b>${pi ? `<small class="${pi.ok ? 'ok' : 'no'}">${esc(pi.st)} · ${esc(pi.who || pi.out)}</small>` : ''}${n.visited ? '<small>가 봄</small>' : ''}</button>`; };
+    const restBtn = () => { const ok = D.canCamp(st) && !st.camped?.[`${st.floor}:${st.at}`] && st.party.some(m => !m.dead && m.hp < m.max); /* 다친 사람이 있을 때만 */ return `<button class="rt-rest" data-r="1"${ok ? '' : ' disabled'}>${UI.px('tent')} 야영 · ${D.restCost(st)}</button>`; };
+    el.innerHTML = `<div class="fk-t"><b>다음 방</b><span class="rt-sup">${UI.px('tent')} <em>${st.items.camp || 0}</em></span><i class="rt-bar"></i></div><div class="rt-map"></div><div class="fk-l">${opts.map(row).join('')}${restBtn()}</div>`;
+    let t0 = performance.now();
+    const end = i => { clearInterval(tm); if (!el.isConnected) return; el.remove(); if (run && !run.over) pick(i); };
+    const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); const u = 1 - (performance.now() - t0) / 1000 / ROUTE_WAIT; el.querySelector('.rt-bar').style.width = `${Math.max(0, u * 100)}%`; if (u <= 0) end(auto()); }, 100);
+    const take = i => { st.log.push({ t: `다음 방 · ${N[opts[i].to].name || RUN.TYPE[N[opts[i].to].type] || '방'}`, k: 'fork' }); end(i); };
+    el.onclick = ev => { const b = ev.target.closest('button'); if (!b || b.disabled) return;
+      if (b.dataset.r) { if (rest()) { el.querySelector('.rt-sup em').textContent = st.items.camp || 0; b.outerHTML = restBtn(); t0 = performance.now(); } return; }
+      take(+b.dataset.i); };
     $('stage').append(el);
+    const wrap = el.querySelector('.rt-map'), m = DIVEMAP.mount(wrap, V, { trail: st.path, fail: [], camp: [], S, gateInfo: q0 => D.gateInfo(S, V, q0), here: st.at, pick: opts.map((x, i) => [x.to, i + 1]) });
+    wrap.onclick = ev => { if (m.dragged()) return; const id = m.cell(ev), i = opts.findIndex(x => x.to === id); if (i >= 0) take(i); };
+    return true;
   }
   // 열쇠를 쓴 순간: 그 영웅 머리 위에 열쇠 아이콘 · 이름
-  function keySee() { for (const u of D.KEYUSE.splice(0)) { const p = R.party.find(q => q.merc && u.who.hero && q.merc.uid === u.who.hero.uid); if (p) SKUI.castRaw(p, UI.px(D.KEYS[u.k].ic), D.KEYS[u.k].n); } }
+  function keySee() { for (const u of D.KEYUSE.splice(0)) { const p = R.party.find(q => q.merc && u.who.hero && q.merc.uid === u.who.hero.uid); if (p) SKUI.castRaw(p, UI.px(D.KEYS[u.k]?.ic || 'star'), u.t || D.KEYS[u.k]?.n || ''); } }
   // ── 직접 조종 시험판 (2026-11-24, 흐름식 — 규칙은 D.HAND): 카드를 누르면 그 영웅을 조종 · 다시 누르면 전원 AI. 적을 누르면 표적 고정. 스킬을 누르면 다음 차례에 (치유는 누른 뒤 카드로 대상)
   const cdL = (m, k) => { const p = R?.turn && R.party.find(q => q.merc === m); return p ? D.handCd(R, p, k) : G.Res.cdLeftOf ? G.Res.cdLeftOf(m, k) : 0; }; // 남은 쿨타임 (라운드) — 전투 중엔 무기 기술 쿨타임까지
   const handM = () => (D.HAND.on && D.HAND.uid != null ? R?.party.find(p => p.merc?.uid === D.HAND.uid)?.merc || null : null);

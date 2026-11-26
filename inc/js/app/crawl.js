@@ -128,18 +128,26 @@ const CRAWL = (() => {
   function autoNext() {
     { const o = lootAt[st.at]; if (o && !st.here.loot) { st.here.loot = true; if (moveTo(o.x, o.y)) return; } } // 이 방에 놓인 장비부터 줍는다
     st.here.auto = true;
+    if (POL?.fork && RUN.X?.keyed) { // 원정 (2026-11-26, FTL처럼): 방을 정리하면 다음 방 고르기 — 이 방의 모든 길(가 본 방으로 돌아가는 길도). 답이 없으면 자동 (다쳤으면 먼저 야영)
+      POL.arrive?.(st); // 입구 방도 이웃 방의 종류 · 상태가 보이게 (방마다 한 번)
+      const opts = exits().filter(x => !x.e.stuck); if (!opts.length) return;
+      const go = i => takeExit(opts[i]), auto = () => { if (POL.wantRest?.(st)) rest(); return POL.fork(st, opts); };
+      if (POL.routeWin && POL.routeWin(st, opts, go, auto, rest)) return;
+      return go(auto());
+    }
     const fresh = ahead().filter(x => !st.map.nodes[x.to].visited), opts = fresh.length ? fresh : exits().filter(x => x.e.a === st.at && !x.e.stuck);
-    if (!opts.length) { if (POL && st.map.nodes[st.at].side) back(); return; } // 원정: 막다른 곁방이면 갈라진 방으로 돌아간다
+    if (!opts.length) return;
     if (opts.length === 1) return takeExit(opts[0]);
     fork(opts);
   }
+  // 정리한 방에서 야영 (원정): 물자로 전체 회복 — 엔진 쪽 자원(주문 슬롯 · 기술 횟수)도 긴 휴식
+  function rest() { if (!POL?.rest || !POL.rest(st, G.Party.members(G.S.w.fantasy))) return false; for (const [p, m] of pair()) if (!m.dead) p.hp = p.max; say(); PMAP.draw(); return true; }
   // 화면에서 그 문이 어느 쪽인가 (쿼터뷰: 화면 x ∝ x − y, 화면 y ∝ (x + y) / 2) — 갈림길 창의 길을 지도와 맞춰 보게
   const DIRS = [['→', '오른쪽'], ['↘', '오른쪽 아래'], ['↓', '아래'], ['↙', '왼쪽 아래'], ['←', '왼쪽'], ['↖', '왼쪽 위'], ['↑', '위'], ['↗', '오른쪽 위']];
   const dirOf = ([x, y]) => { const L = lead(), dx = x - L.x, dy = y - L.y, top = typeof TOP !== 'undefined' && TOP.on; return DIRS[((Math.round((top ? Math.atan2(dy, dx) : Math.atan2((dx + dy) / 2, dx - dy)) / (Math.PI / 4)) % 8) + 8) % 8]; }; // 탑뷰(TOP)는 칸 방향 그대로
   // 갈림길 번호: 창의 길과 지도 위 표지에 같은 번호 (방향이 겹쳐도 — 출구 넷인 방에서 「왼쪽 위」가 둘이던 것)
   const NUM = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'];
   function fork(opts) {
-    if (POL?.forkWin) { closeSign(); const inf = x => ({ ar: dirOf(x.door), k: FL.kindOf(x.e), kn: KIND[FL.kindOf(x.e)] || '통로', ic: ICON[FL.kindOf(x.e)] || 'arrow', bt: beyond(st.map.nodes[x.to]) }); opts.forEach((x, i) => { const mk = marks.find(q => q.ex && q.ex.e.id === x.e.id); if (mk) mk.el.querySelector('b').textContent = NUM[i] || '›'; }); if (POL.forkWin(st, opts, opts.map(inf), i => takeExit(opts[i]), () => POL.fork(st, opts))) return; } // 원정: 플레이어가 고른다
     closeSign(); const box = document.createElement('div'); box.id = 'exitsign';
     opts.forEach((x, i) => { const mk = marks.find(q => q.ex && q.ex.e.id === x.e.id); if (mk) mk.el.querySelector('b').textContent = NUM[i] || '›'; });
     box.innerHTML = '<h4>갈림길</h4><p>어느 길로 갈까 — 번호는 지도 위 표지와 같다</p>' + opts.map((x, i) => { const k = FL.kindOf(x.e), [ar, dw] = dirOf(x.door); return `<button data-i="${i}"><b class="fk-n">${NUM[i] || ''}</b> ${ar} ${esc(dw)} · ${esc(KIND[k] || '통로')} <small>너머: ${esc(beyond(st.map.nodes[x.to]))}</small></button>`; }).join('') +
@@ -147,38 +155,22 @@ const CRAWL = (() => {
     box.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; closeSign(); if (b.dataset.i !== 'x') takeExit(opts[+b.dataset.i]); };
     $('stage').append(box); if (POL) autoClick(box, POL.fork(st, opts));
   }
-  // 막다른 곁방에서 갈라진 방으로 (원정 · 설계서 층): 들어온 길을 거꾸로 걷는다 — 돌아간 방은 가 본 방이라 일 없이 이어 간다
-  function back() {
-    const ex = exits().find(x => x.e.b === st.at && x.e.walked); if (!ex) return;
-    closeSign(); clearMarks(); nearKey = null; const L = lead(), p0 = FL.findPath(iso.w, iso.h, walkable, L.x, L.y, ex.door[0], ex.door[1]) || [];
-    cutscene = true; go([...p0, ...ex.path, centerOf(ex.to)], () => { cutscene = false; st.at = ex.to; st.path.push(ex.to); st.here = {}; doorTiles = doorsOf(); PMAP.draw(); showMarks(); document.body.dataset.room = st.at; autoNext(); });
-  }
   // 그 출구로: 문 앞까지 걸어가서 저절로 들어간다
   function takeExit(ex) {
     closeSign(); clearMarks(); nearKey = null; st.here.auto = true;
     const L = lead(), pts = FL.findPath(iso.w, iso.h, walkable, L.x, L.y, ex.door[0], ex.door[1]);
     cutscene = true; go(pts && pts.length ? pts : [ex.door], () => { cutscene = false; enter(ex); });
   }
-  const sideIn = ex => { const sd = POL.side(st, ex.to); if (sd) { st.sideDark = !!sd.dark; say(); if (st.done) { end(); return true; } } return false; };
   function enter(ex) {
     if (st.map.nodes[ex.to].visited || ex.e.walked) return choose(ex, { run: null }); // 가 본 방: 그냥 지나간다
-    if (POL?.side && !(ex.e.kind === 'locked' && !ex.e.opened && !prepable(ex)) && sideIn(ex)) return; // 원정: 곁방은 횃불 하나 (없으면 어둠) — 잠긴 문은 연 뒤에 (choose)
+    if (POL && RUN.X?.keyed) { const a = RUN.moveActs(st, ex.ed)[0]; a.pre(); say(); if (st.done) return end(); return prepable(ex) ? prepDoor(ex) : choose(ex, a); } // 방 상태: 넘거나 결과를 안고 들어간다 (적이 있는 방은 문 앞 준비)
     if (prepable(ex)) return prepDoor(ex); // 적이 있는 방: 문을 저절로 연다
     const acts = RUN.moveActs(st, ex.ed);
     if (ex.e.kind === 'locked' && !ex.e.opened) return unlock(ex, acts);
-    if (POL?.costWin && ((ex.e.kind === 'dark' && !RUN.lit(st)) || (ex.e.kind === 'trap' && ex.e.seen.trap && !ex.e.disarmed && !acts.some(a => a.id === 'disarm')))) return costAsk(ex, acts, ex.e.kind === 'dark' ? '어두운 길' : '함정'); // 원정 열쇠: 빛 · 감각이 없으면 고른다
     choose(ex, acts.find(a => a.cost === '횃불 1') || acts[0]); // 어두운 길은 횃불이 있으면 켜고
   }
   // 잠긴 문 (적이 없는 방 — 보물 방 등): 따기 → 부수기를 저절로. 그래도 안 되면 대가가 있는 방법만 묻는다, 없으면 이 문은 두고 간다
-  // 원정 열쇠: 대가가 있는 방법을 카드로 (부수기 · 횃불 · 밟고 지나감 · 지나친다). 지나치면 이 길은 두고 간다
-  function costAsk(ex, acts, title) {
-    const leave = () => { ex.e.stuck = true; st.here.auto = false; showMarks(); }, other = ahead().some(x => x !== ex && x.e.id !== ex.e.id);
-    const opts = acts.map(a => ({ label: a.label, cost: a.cost || '', note: a.note || '', a })).concat(other || !acts.length ? [{ label: '지나친다', cost: '', note: '', a: null }] : []);
-    if (!opts.length) { st.log.push({ t: '이 길은 열 수 없다 — 다른 길로.' }); say(); return leave(); }
-    POL.costWin(st, title, ex, opts, i => { const o = opts[i]; if (!o || !o.a) return leave(); choose(ex, o.a); }, () => { const j = opts.findIndex(o => o.a && (o.a.cost === '횃불 1' || o.a.id === 'force')); return j >= 0 ? j : opts.findIndex(o => !o.a) >= 0 ? opts.findIndex(o => !o.a) : 0; });
-  }
   function unlock(ex, acts) {
-    if (RUN.X?.keyed && POL?.costWin) { const auto = acts.find(q => q.who); if (auto) return choose(ex, auto); return costAsk(ex, acts, ({ lock: '잠긴 문', bars: '창살', seal: '마법 봉인', rubble: '무너진 길' })[ex.e.lock || 'lock'] || '잠긴 문'); } // 원정 열쇠: 가진 사람이 열고, 없으면 카드
     const tries = acts.filter(q => q.id === 'pick' || q.id === 'break'), from = st.at;
     const step = i => (i < tries.length ? askWho(tries[i], () => { choose(ex, tries[i]); if (st.at === from) step(i + 1); }) : stuck());
     const stuck = () => {
@@ -209,9 +201,8 @@ const CRAWL = (() => {
   function choose(ex, a) {
     if (a.prep) return prepDoor(ex);
     closeSign(); const from = st.at;
-    if (!a.run) ex.e.walked = true; else a.run();
+    if (!a.run) { ex.e.walked = true; if (POL?.move && RUN.X?.keyed) { POL.move(st); say(); } } else a.run(); // 원정: 가 본 방으로 옮겨도 물자 1 (새 방은 탐사 규칙이 센다)
     if (st.at === from && a.run) { say(); return; } // 자물쇠를 못 땄다 등: 부른 쪽(unlock)이 다음 방법을 해 본다
-    if (POL?.side && ex.e.kind === 'locked' && sideIn(ex)) return;
     // 통로를 지나 새 방으로 (잠깐 자동으로 걷는다). 그 통로와 방은 이제 열린 곳
     openCor(ex.e.id); openRoom(ex.to); refreshSeen();
     cutscene = true; nearKey = null; clearMarks();
@@ -231,8 +222,8 @@ const CRAWL = (() => {
   // 처음 들어선 방에서 한 번 굴린다. 적이 있는 방이면 싸움이 끝난 뒤에 걸어간다 (autoNext)
   const lootAt = {}, P_FLOOR = 0.12; // 바닥 장비가 있을 확률 (입구 · 우두머리 방 빼고, 시험값)
   function placeLoot() {
-    const n = st.map.nodes[st.at]; if (!n || n.lootDone) return; n.lootDone = true;
-    const f = G.S.w.fantasy, chest = n.type === 'treasure' || !!n.chest, ds = chest ? G.Gear.drops(st.floor, 'treasure', Math.random, f, R.party) : n.type !== 'start' && n.type !== 'boss' && Math.random() < P_FLOOR ? [G.Gear.roll(st.floor, 'fight', Math.random, f, R.party)].filter(Boolean) : [];
+    const n = st.map.nodes[st.at]; if (!n || n.lootDone) return; n.lootDone = true; if (n.shut) return; // 못 연 방: 보상 없음
+    const f = G.S.w.fantasy, chest = n.type === 'treasure' || !!n.chest, ds = chest ? G.Gear.drops(st.floor, n.bonus ? 'elite' : 'treasure', Math.random, f, R.party).concat(n.bonus ? G.Gear.drops(st.floor, 'treasure', Math.random, f, R.party) : []) : n.type !== 'start' && n.type !== 'boss' && Math.random() < P_FLOOR ? [G.Gear.roll(st.floor, 'fight', Math.random, f, R.party)].filter(Boolean) : [];
     if (!ds.length) return;
     const [cx, cy] = centerOf(st.at), spot = [[1.5, -1], [-1.5, 1], [1.5, 1], [-1.5, -1], [0, 0]].map(([dx, dy]) => [Math.round(cx + dx), Math.round(cy + dy)]).find(([x, y]) => roomAt[TI(x, y)] === st.at && walkable(TI(x, y))) || [cx, cy];
     const o = lootAt[st.at] = { kind: chest ? 'chest' : 'drop', x: spot[0], y: spot[1], ds };
@@ -242,7 +233,7 @@ const CRAWL = (() => {
     delete lootAt[st.at]; if (o.ent) { R.chests = R.chests.filter(c => c !== o.ent); G.Fantasy.refreshEnts(R); }
     st.log.push({ t: `${o.kind === 'chest' ? '상자' : '바닥'}: ${o.ds.map(d => G.Gear.info(d).n).join(' · ')}.`, c: 'good' }); say(); showMarks();
     if (POL?.chest && o.kind === 'chest') POL.chest('wood'); // 원정 화면: 상자가 열리는 그림 (나무 · 은 · 금)
-    if (POL?.gem && o.kind === 'chest') POL.gem(st, 'treasure'); // 원정: 상자 · 보물 방의 보석
+    if (POL?.gem && o.kind === 'chest') POL.gem(st, st.map.nodes[st.at].bonus ? 'boss' : 'treasure'); // 잠김 · 봉인을 연 방은 보석 둘 // 원정: 상자 · 보물 방의 보석
     if (POL) { const sold = POL.gear(G.S.w.fantasy, R.party.filter(p => p.merc && !p.dead).map(p => p.merc), o.ds, st.floor); refreshHP(); if (sold) { st.gold += sold; st.log.push({ t: `쓰지 않을 장비를 팔았다 · 금화 ${sold}.` }); say(); } return; }
     GEARUI.found(o.ds, o.kind === 'chest' ? '상자' : '떨어진 장비', null);
   }
@@ -252,6 +243,7 @@ const CRAWL = (() => {
     if (st.combat) { const c = st.combat; st.log.push({ t: `전투 ${c.rounds.length}라운드 — ${c.win ? '이겼다' : '졌다'}.` }); st.combat = null; }
     // 야영 · 상인은 구조물로: 다가가면 연다
     if (st.scene && (st.scene.kind === 'camp' || st.scene.kind === 'shop')) { deferred[st.at] = st.scene; st.scene = null; }
+    { const n = st.map.nodes[st.at]; if (POL && n.bonus && n.ev === 'captive' && st.scene?.kind === 'event') { st.scene = null; rescue(); } } // 방 상태: 창살을 열었으면 갇힌 사람은 바로 합류
     say(); doorTiles = doorsOf(); PMAP.draw();
     if (st.scene) return scene();
     if (st.done) return end();
@@ -317,6 +309,7 @@ const CRAWL = (() => {
   function startFight(n, mod) {
     clearMarks(); closeSign(); syncToG();
     G.Encounter.spawnRoom(R, st.map._lay.room[n.id].cells.map(FL.tile), wave0(n), lead(), { boss: n.type === 'boss' && !R.wave?.list.length, spots: st.map._lay.room[n.id].spawns }).forEach(wvMark); // spots: 손으로 짠 방의 몬스터 자리
+    if (POL && RUN.X?.keyed) { R.dvWhy = null; if (n.darkIn || st.roomDark === n.id) { R.prepSurprise = false; R.nextFirst = 'foes'; R.dvWhy = 'dark'; } else if (n.sleepy && !n.alert) { R.prepSurprise = true; R.nextFirst = 'party'; R.dvWhy = 'sleep'; } } // 방 상태: 어둠 = 적 선공 · 잠듦 = 우리 선공
     FIGHT.start(R, { n, mod, log: t => { st.log.push({ t }); say(); }, purse, done: fightDone, quiet: !!POL, calm: !!POL });
     st.log.push({ t: `${n.g.label} — 전투가 시작된다.` }); say();
   }
@@ -358,9 +351,10 @@ const CRAWL = (() => {
     //   영웅 수치의 매복 살피기(옛 G.Flow와 같은 G.Mission.roll 지각)로 가린다 — 성공: 먼저 봤다 · 우리 선공 / 실패: 기습당함 · 적 선공. 잠든 무리를 미리 알았으면 우리 선공 · 빛 없는 곁방은 적 선공.
     //   로그 줄은 차례 엔진이 정한 최종 선공을 보고 화면이 한 줄 남긴다 (DIVEUI — R.dvWhy)
     if (POL) { for (const r0 of R.map.rooms || []) r0.ambush = false; R.dvWhy = null; }
-    if (POL && n.sleepy && n.info >= 2 && !n.alert) { R.prepSurprise = true; R.nextFirst = 'party'; R.dvWhy = 'sleep'; }
+    if (POL && n.sleepy && (n.info >= 2 || RUN.X?.keyed) && !n.alert) { R.prepSurprise = true; R.nextFirst = 'party'; R.dvWhy = 'sleep'; }
     if (POL && n.surprisedNow && R.dvWhy !== 'sleep') { const look = G.Mission.roll(G.S.w.fantasy, R, 'perception'); for (const m of S.asleep || []) { m.stop = 0; m.koHit = false; } R.prepSurprise = false; R.nextFirst = look && look.ok ? 'party' : 'foes'; R.dvWhy = look && look.ok ? 'look' : 'ambush'; R.roll = null; }
     R.dvDark = !!POL && st.roomDark === st.at; if (R.dvDark) st.log.push({ t: '어둠 속 전투', k: 'dv' }); // 어두운 방을 빛 없이: 엔진 어둠 (G.Dive가 빛을 끈다)
+    if (POL && n.darkIn) st.sideDark = true; // 방 상태: 어둠을 빛 없이 — 적이 먼저
     if (st.sideDark) { R.prepSurprise = false; R.nextFirst = 'foes'; st.sideDark = false; if (POL) R.dvWhy = 'dark'; else st.log.push({ t: '어둠 · 적이 먼저', k: 'dv' }); } // 횃불 없이 곁방: 적이 먼저
     const waiting = others.filter(o => o.aware === 'hunt');
     FIGHT.start(R, { n, mod: {}, log: t => { st.log.push({ t }); say(); }, purse, done: fightDone, onRound: r => fightRound(r, waiting, others), quiet: !!POL, calm: !!POL });

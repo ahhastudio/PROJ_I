@@ -110,7 +110,7 @@ const DIVEMAP = (() => {
         o.gates.push({ q, x: px - 12, y: py - 12, w: Math.max(24, gx - px + 14), h: 24 }); } // 누르는 범위는 아이콘보다 넓게 (24px)
       // 방: 아이콘 · 이름(위) · 적 구성(가운데 아래) · 보상(아래) · 텐트 · 사건 표시 · 순서 번호
       for (const n of N) { if (!shown(n) || (st.hide && st.hide.has(n.id))) continue; const r = L.room[n.id], [rx, ry] = [(r.x - x0) * c, (r.y - y0) * c], rw = r.w * c, rh = r.h * c, cx = rx + rw / 2, mw = rw - 6;
-        if (o.fogBox[n.id]) { const [fx, fy] = o.fogBox[n.id]; text(x, '?', (fx - x0 + 1.5) * c, (fy - y0 + 1.5) * c + 5, PAL.ink, { size: 12, bold: true, plate: false }); continue; }
+        if (o.fogBox[n.id]) { const [fx, fy] = o.fogBox[n.id]; if (n.seenMap && ICON[n.type]) bitmap(x, ICON[n.type], Math.round((fx - x0 + 1.5) * c - 8), Math.round((fy - y0 + 1.5) * c - 8), 2); else text(x, '?', (fx - x0 + 1.5) * c, (fy - y0 + 1.5) * c + 5, PAL.ink, { size: 12, bold: true, plate: false }); continue; } // 종류만 본 방 (원정: 이웃 방) — 아이콘
         if (n.name) text(x, n.name, cx, ry + 13, PAL.ink, { size: 12, maxW: mw });
         const low = rh < 64, ic = ICON[n.type]; if (ic && n.visited && (!low || !(n.hostile && n.g))) bitmap(x, ic, Math.round(cx - 8), Math.round(ry + rh / 2 - 12), 2); // 낮은 방(3칸): 아이콘 없이 글씨만 (겹치지 않게)
         if (n.hostile && n.g) { const u = n.g.units || [[n.g.name, n.g.count]]; text(x, `${u[0][0]} ×${u.reduce((a, q) => a + q[1], 0)}`, cx, ry + rh / 2 + (low ? 5 : 16), n.visited ? PAL.ink : PAL.pen, { size: 11, maxW: mw }); }
@@ -120,6 +120,7 @@ const DIVEMAP = (() => {
         else if (rw0.ally && ev?.st !== 'done') text(x, '동료 +1', cx, by, PAL.ink, { size: 10 });
         else if (rw0.heal) text(x, `회복 ${rw0.heal}%`, cx, by, PAL.ink, { size: 10 });
         if (ev) { x.fillStyle = ev.st === 'done' ? '#2f8a3e' : PAL.rust; x.fillRect(rx + rw - 14, ry + 3, 11, 11); text(x, ev.st === 'done' ? '✓' : '!', rx + rw - 8, ry + 13, PAL.paper, { size: 10, bold: true, plate: false }); }
+        if ((st.S?.miss?.[fl] || []).includes(n.id)) bitmap(x, GATE.lock, Math.round(rx + rw - 12), Math.round(ry + 4), 1, { 1: PAL.rust, 3: PAL.paper }); // 못 연 방 (다시 올 이유)
         if ((st.camp || []).includes(n.id)) bitmap(x, TENT, Math.round(rx + rw - 13), Math.round(ry + rh - 22), 1);
         if (n.dark) { const q = { kind: 'dark', room: n.id }, gx0 = rx + 3, gy0 = Math.round(ry + rh / 2 - 6); x.fillStyle = PAL.ink; x.fillRect(gx0, gy0, 12, 12); bitmap(x, GATE.dark, gx0 + 2, gy0 + 2, 1, { 1: PAL.paper, 2: PAL.paper, 3: PAL.paper }); // 어두운 방: 달 · 풀 수 있는 직업 (관문처럼 눌러서 자세히)
           const info = st.gateInfo ? st.gateInfo(q) : []; let gx = gx0 + 14; const val = info.map(i => i.val).filter(Boolean)[0]; if (val) gx += text(x, val, gx + 1, gy0 + 10, PAL.ink, { align: 'left', size: 10 }) + 4; else for (const nm of [...new Set(info.flatMap(i => i.who).filter(w => w !== '누구나'))].slice(0, 3)) gx += clsMark(x, nm, gx, gy0);
@@ -128,6 +129,9 @@ const DIVEMAP = (() => {
       { const numd = new Set([plan[0]]); let num = 0; for (const id of plan.slice(1)) { if (numd.has(id)) continue; numd.add(id); num++; const r = L.room[id], px = (r.x - x0) * c + 2, py = (r.y - y0) * c + r.h * c - 14; x.fillStyle = PAL.paper; x.fillRect(px - 1, py - 1, 13, 13); x.fillStyle = PAL.rust; x.fillRect(px, py, 11, 11); x.font = '700 10px Galmuri11, sans-serif'; x.textAlign = 'center'; x.fillStyle = PAL.paper; x.fillText(String(num), px + 6, py + 10); } }
       if (tip || qtip) { const q0 = tip || qtip; bitmap(x, QUILL, Math.round(q0[0]) - 1, Math.round(q0[1]) - 23, 2, { 1: PAL.ink, 2: PAL.paper }); }
     }
+    // 고를 수 있는 방 (다음 방 고르기): 금색 테두리 · 번호 (목록과 같은 번호)
+    for (const [id, num] of st.pick || []) { const r = L.room[id], rx = (r.x - x0) * c, ry = (r.y - y0) * c, rw = r.w * c, rh = r.h * c; x.fillStyle = PAL.gold; x.fillRect(rx - 3, ry - 3, rw + 6, 3); x.fillRect(rx - 3, ry + rh, rw + 6, 3); x.fillRect(rx - 3, ry, 3, rh); x.fillRect(rx + rw, ry, 3, rh);
+      x.fillStyle = PAL.ink; x.fillRect(rx - 3, ry - 3, 17, 17); x.fillStyle = PAL.gold; x.fillRect(rx - 2, ry - 2, 15, 15); text(x, String(num), rx + 5, ry + 10, PAL.ink, { size: 12, bold: true, plate: false }); }
     // 지금 위치 (원정 중)
     if (st.here != null) { const r = L.room[st.here], hx = (r.x - x0 + r.w / 2) * c, hy = (r.y - y0 + r.h / 2) * c; x.fillStyle = PAL.ink; x.fillRect(hx - 4, hy - 4, 9, 9); x.fillStyle = '#d9493a'; x.fillRect(hx - 3, hy - 3, 7, 7); }
     if (st.flash > 0) for (const id of st.fresh || []) { const r = L.room[id]; x.globalAlpha = st.flash * 0.55; x.fillStyle = '#fff6c8'; x.fillRect((r.x - x0) * c, (r.y - y0) * c, r.w * c, r.h * c); x.globalAlpha = 1; } // 새로 밝힌 방: 잠깐 밝게
@@ -179,7 +183,7 @@ const DIVEMAP = (() => {
     const tall = bh / bw > VH / VW, small = typeof RUN !== 'undefined' && RUN.SMALL, c = opts.mini ? 5 : Math.max(small ? 16 : 10, Math.min(small ? 20 : 14, Math.floor(tall ? VW / bw : VH / bh))); // 작은 방(5칸)은 칸을 크게 (16~20px) — 방 글씨가 붙지 않게, 넘치면 끌어서 본다
     const W = Math.max(VW, bw * c), H = Math.max(VH, bh * c), x0 = bx0 - Math.floor((W / c - bw) / 2), y0 = by0 - Math.floor((H / c - bh) / 2), o = { c, x0, y0, W, H, fl: V.floor, mini: !!opts.mini };
     cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px';
-    const st = { base: base(V, o), plan: opts.plan, trail: opts.trail, fail: opts.fail, camp: opts.camp || [], S: opts.S, gateInfo: opts.gateInfo, here: opts.here };
+    const st = { base: base(V, o), plan: opts.plan, trail: opts.trail, fail: opts.fail, camp: opts.camp || [], S: opts.S, gateInfo: opts.gateInfo, here: opts.here, pick: opts.pick || null }; // pick: [[방, 번호]] 고를 수 있는 방
     if (opts.anim) animate(cv, V, o, st, opts.anim); else draw(cv, V, o, st);
     if (opts.fresh?.length && !opts.anim) { st.fresh = opts.fresh; const t0 = performance.now(); const step = () => { if (!cv.isConnected) return; const k = (performance.now() - t0) / 900; st.flash = k < 1 ? Math.abs(Math.sin(k * Math.PI * 2)) * (1 - k) : 0; draw(cv, V, o, st); if (k < 1) requestAnimationFrame(step); }; step(); }
     // 처음 열면 입구 쪽 (경로가 있으면 경로의 시작) — 그 뒤로는 끌 때만 움직인다

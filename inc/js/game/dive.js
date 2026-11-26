@@ -101,7 +101,7 @@ G.Dive = (() => {
     { id: 'cls', br: 'party', n: '영웅 들이기', cost: [20, 80, 200, 350, 500, 700, 900, 1150, 1450, 1800, 2200], val: s => `${1 + s}직업` }, // 레벨 줄은 없앴다 — 레벨은 경험치로 · 첫 값 20 = 1레벨 혼자 첫 판(전투 2~3번 · 금화 20~30)으로 둘째 영웅 (2026-11-23)
     // 탐험 해금: 탐사 규칙에 이미 있는 열쇠 — 시작 물자로 들고 간다
     { id: 'torch', br: 'supply', n: '횃불', cost: [30, 200], val: s => `${1 + s}개` },
-    { id: 'camp', br: 'supply', n: '야영 물자', cost: [100, 450, 1400], val: s => `${Math.min(4, 1 + s)}개` }, // 챙길 수 있는 최대 (2026-11-23 — 옛 「계단 야영」 단계를 그대로 옮김, 계단 회복은 없앴다)
+    { id: 'camp', br: 'supply', n: '야영 물자', cost: [100, 450, 1400], val: s => `+${CAMP_FREE}+${CAMP_BUY + CAMP_STEP * s}개` }, // 공짜 몫 + 사서 챙길 수 있는 최대 (2026-11-26 방마다 1개) // 챙길 수 있는 최대 (2026-11-23 — 옛 「계단 야영」 단계를 그대로 옮김, 계단 회복은 없앴다)
     { id: 'bag', br: 'supply', n: '짐 칸', cost: [150, 600, 1800], val: s => `+${s * TUNE.BAG_STEP}칸` }, // 파티 짐 (2026-11-23)
     { id: 'spd', br: 'party', n: '배속', cost: [30, 400], val: s => `×${[1, 2, 4][s]}` }, // 화면의 ×1 · ×2 · ×4 = 엔진 배속 2 · 4 · 8 (speeds) — 작은 창으로 곁눈질해도 지루하지 않게 기본을 엔진 ×2로
   ];
@@ -109,7 +109,7 @@ G.Dive = (() => {
   const BRANCH = [{ id: 'supply', n: '보급' }, { id: 'party', n: '원정대' }]; // 해금 갈래 (전술 갈래는 정해지면 — 2026-11-23)
   // ── 죽음의 값 · 파티 짐 (2026-11-23) — 시험값은 이 표 하나 ──
   //   REVIVE_K: 부활 값 = 이것 × 레벨 · BAG_BASE: 짐 기본 칸 · BAG_STEP: 「짐 칸」 해금 한 단계 · SUP: 물자 하나 값(출발 때) · 힘 수정치(0 이상)만큼 영웅마다 칸이 는다
-  const TUNE = { REVIVE_FREE_LV: 3, REVIVE_K: 25, BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 30 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, FIT_W: 1, FIT_H: 0.95, PACE: 0.7, RT_ROUND: 4.2, RT_WALK: 2.4, RT_LUNGE: 700, RT_DMG: 0.3, WAVE: { fight: 2, elite: 1.5, max: 4, pay: 1.2 }, /* 전투 빠르기 (2026-11-25 사용자: 「너무 빨리 걷고 너무 빨리 때려」) — 게임 초 기준, 화면의 ×1은 1.4배라 한 라운드 3.0초 · 걷기 초당 3.4칸 · 휘두르기 0.5초 */ TELE: 1, /* TELE: 실시간 예고 동작의 준비 (라운드 — G.MonAct.teleTick) */ // RT_DMG: 실시간에서만 양쪽이 주고받는 피해 배율 (2026-11-24 시험값 — 사용자: 「한 방에서 싸움은 15초 정도로」, 라운드 박자는 그대로 두고 라운드 수를 늘린다)
+  const TUNE = { REVIVE_FREE_LV: 3, REVIVE_K: 25, BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 3 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, FIT_W: 1, FIT_H: 0.95, PACE: 0.7, RT_ROUND: 4.2, RT_WALK: 2.4, RT_LUNGE: 700, RT_DMG: 0.3, WAVE: { fight: 2, elite: 1.5, max: 4, pay: 1.2 }, /* 전투 빠르기 (2026-11-25 사용자: 「너무 빨리 걷고 너무 빨리 때려」) — 게임 초 기준, 화면의 ×1은 1.4배라 한 라운드 3.0초 · 걷기 초당 3.4칸 · 휘두르기 0.5초 */ TELE: 1, /* TELE: 실시간 예고 동작의 준비 (라운드 — G.MonAct.teleTick) */ // RT_DMG: 실시간에서만 양쪽이 주고받는 피해 배율 (2026-11-24 시험값 — 사용자: 「한 방에서 싸움은 15초 정도로」, 라운드 박자는 그대로 두고 라운드 수를 늘린다)
     VIEW_K: 0.87 }; /* VIEW_K: 작은 방 모드의 화면 배율 (2026-11-24 사용자: 「캐릭터는 조금 더 줄여야」 — 인형 45px → 39px쯤, 예전 전투 33px와의 사이) */ // SMALL_ROOMS: 작은 방 · PACE: ×1의 빠르기 배율 (2026-11-24 — 0.7 = 30% 느리게) // HIT: 원정의 명중 보정 (d20에 더함) — 실측 영웅 60% · 몬스터 40%라 빗나감이 절반이었다 (2026-11-24, 시험값) // 물자는 야영 물자 · 횃불 둘 (치유 물약은 원정에서 없앴다) · RAID: 안전하지 않은 방에서 야영할 때 이웃한 안 치운 적 무리마다 습격 확률 // 도둑 도구 · 열림 두루마리는 없앴다 (자물쇠 따기 = 로그의 스킬, 열림 = 주문 스킬)
   const SUP_KEYS = ['torch', 'camp']; // 계단 야영: 살아 있는 사람의 최대 체력 대비 회복 (4단계는 주문 슬롯 · 기술 횟수도 — 긴 휴식)
   const byId = id => TREE.find(t => t.id === id);
@@ -124,9 +124,9 @@ G.Dive = (() => {
   const newSeed = () => (Math.random() * 4294967296) >>> 0;
   // 기본 설정 (2026-11-25 사용자: 「기본 옵션들을 배틀하트방식으로」): 실시간 · 넷 모두 끌어 조종 · 스킬은 손으로 · 한 판 끝나면 길드로(자동 재출발 끔) · 그린 경로를 다 돌면 귀환 · 위험해도 저절로 물러나지 않는다
   const BASE = { rt: true, rtAuto: false, hand: false, autoOn: false, endMode: 'back', risk: false, bh: 1 };
-  const fresh = () => ({ v: 3, mapSeed: newSeed(), maps: {}, plan: {}, trail: {}, fail: {}, shown: {}, gold: 0, deep: 0, runs: 0, wins: 0, up: {}, party: ['dragoon'], roster: {}, start: 0, last: null, rec: [], seen: 0, dex: { m: {}, h: {}, i: {} }, fv: FV, cls0: 1, evs: {}, evPlan: {}, dead: {}, bag: { torch: 1, camp: 1 }, campPlan: {}, fullBack: false, deadStop: true, ...BASE });
+  const fresh = () => ({ v: 3, mapSeed: newSeed(), maps: {}, plan: {}, trail: {}, fail: {}, shown: {}, gold: 0, deep: 0, runs: 0, wins: 0, up: {}, party: ['dragoon'], roster: {}, start: 0, last: null, rec: [], seen: 0, dex: { m: {}, h: {}, i: {} }, fv: FV, cls0: 1, evs: {}, evPlan: {}, miss: {}, dead: {}, bag: { torch: 1, camp: 1 }, campPlan: {}, fullBack: false, deadStop: true, ...BASE });
   // v1 · v2(영웅이 판마다 새로 만들어지던 때) 저장은 구조가 달라 새로 시작한다 — 망가진 저장에도 죽지 않는다
-  const load = raw => { try { const o = JSON.parse(raw || '{}'); if (o.v !== 3) return fresh(); const s = { ...fresh(), ...o, ...(o.bh ? {} : BASE) }; /* bh 없는 옛 저장은 새 기본 설정으로 한 번 바꾼다 */ s.up = { ...s.up }; s.roster = { ...(o.roster || {}) }; s.rec = [...(o.rec || [])]; s.dex = { m: { ...(o.dex?.m || {}) }, h: { ...(o.dex?.h || {}) }, i: { ...(o.dex?.i || {}) } }; s.maps = { ...(o.maps || {}) }; s.plan = { ...(o.plan || {}) }; s.trail = { ...(o.trail || {}) }; s.fail = { ...(o.fail || {}) }; s.shown = { ...(o.shown || {}) }; if (!o.mapSeed) s.mapSeed = newSeed(); s.evs = JSON.parse(JSON.stringify(o.evs || {})); s.evPlan = JSON.parse(JSON.stringify(o.evPlan || {})); s.campPlan = { ...(o.campPlan || {}) }; if (o.cls0 === undefined) s.cls0 = 2; s.dead = { ...(o.dead || {}) }; s.bag = o.bag ? { ...o.bag } : null; /* 옛 저장: 사망자 없음 · 짐 = 해금한 만큼 다 */ if ((o.fv || 0) < FV) { const fls = (o.fv || 0) < 3 ? null : SPEC_FL; for (const k of ['maps', 'plan', 'trail', 'fail', 'shown', 'evs', 'evPlan', 'campPlan']) { if (!s[k]) continue; if (fls) for (const fl of fls) delete s[k][fl]; else s[k] = {}; } s.fv = FV; } return s; } catch (e) { return fresh(); } };
+  const load = raw => { try { const o = JSON.parse(raw || '{}'); if (o.v !== 3) return fresh(); const s = { ...fresh(), ...o, ...(o.bh ? {} : BASE) }; /* bh 없는 옛 저장은 새 기본 설정으로 한 번 바꾼다 */ s.up = { ...s.up }; s.roster = { ...(o.roster || {}) }; s.rec = [...(o.rec || [])]; s.dex = { m: { ...(o.dex?.m || {}) }, h: { ...(o.dex?.h || {}) }, i: { ...(o.dex?.i || {}) } }; s.maps = { ...(o.maps || {}) }; s.plan = { ...(o.plan || {}) }; s.trail = { ...(o.trail || {}) }; s.fail = { ...(o.fail || {}) }; s.shown = { ...(o.shown || {}) }; if (!o.mapSeed) s.mapSeed = newSeed(); s.evs = JSON.parse(JSON.stringify(o.evs || {})); s.evPlan = JSON.parse(JSON.stringify(o.evPlan || {})); s.campPlan = {}; s.plan = {}; /* 경로 계획 · 야영 지점은 없앴다 (2026-11-26) */ s.miss = { ...(o.miss || {}) }; if (o.cls0 === undefined) s.cls0 = 2; s.dead = { ...(o.dead || {}) }; s.bag = o.bag ? { ...o.bag } : null; /* 옛 저장: 사망자 없음 · 짐 = 해금한 만큼 다 */ if ((o.fv || 0) < FV) { const fls = (o.fv || 0) < 3 ? null : SPEC_FL; for (const k of ['maps', 'plan', 'trail', 'fail', 'shown', 'evs', 'evPlan', 'campPlan', 'miss']) { if (!s[k]) continue; if (fls) for (const fl of fls) delete s[k][fl]; else s[k] = {}; } s.fv = FV; } return s; } catch (e) { return fresh(); } };
   const dump = s => JSON.stringify(s);
   const step = (s, id) => s.up[id] || 0;
   const cost = (s, id) => { const t = byId(id); return t && step(s, id) < t.cost.length ? t.cost[step(s, id)] : null; }; // null = 다 샀다
@@ -137,7 +137,10 @@ G.Dive = (() => {
   const seats = s => 2 + step(s, 'seat'), classes = s => CLS.slice(0, Math.max(1, step(s, 'cls') + (s.cls0 ?? 1))); // 새 저장은 파이터 하나로 시작 (cls0 1) · 옛 저장은 둘로 시작했다 (cls0 2 — 열린 직업 그대로)
   const camp = s => 0 /* 계단 회복 없음 — 회복은 야영뿐 */, speeds = s => [2, 4, 8].slice(0, 1 + step(s, 'spd'));
   // 들고 가는 물자 (탐사 규칙의 st.items 이름)
-  const kit = s => ({ torch: 1 + step(s, 'torch'), camp: Math.min(4, 1 + step(s, 'camp')) });
+  // 야영 물자 (2026-11-26 사용자: 「방마다 줄어드는 형태로」 — FTL의 연료): 방을 옮길 때마다 1, 0이면 옮길 때마다 전원 최대 체력의 10%. 정리한 방에서 REST개로 전체 회복 (야영 방은 REST_CAMP)
+  //   판마다 CAMP_FREE개는 공짜, 그 위로 길드에서 산다 (짐 칸은 차지하지 않는다)
+  const CAMP_FREE = 8, CAMP_BUY = 6, CAMP_STEP = 4, REST = 3, REST_CAMP = 1, STARVE = 0.1;
+  const kit = s => ({ torch: 1 + step(s, 'torch'), camp: CAMP_BUY + CAMP_STEP * step(s, 'camp') });
   // 나갈 파티: 고른 직업 중 열린 것만, 자리 수까지 (비면 파이터 · 클레릭)
   // 사망한 영웅은 되살릴 때까지 나가지 못한다 (모두 죽었으면 빈 파티 — 길드가 출발을 막는다)
   function team(s) { const open = classes(s).filter(c => !s.dead?.[c]), t = [...new Set(s.party)].filter(c => open.includes(c)).slice(0, seats(s)); return t.length ? t : (s.party.length ? open.slice(0, Math.min(2, seats(s))) : ['dragoon', 'cleric']); }
@@ -167,26 +170,33 @@ G.Dive = (() => {
   // 출발할 때 챙긴다: 칸 · 금화가 허락하는 만큼 (빚이 있으면 값이 드는 것은 못 산다). 금화를 내고 실제로 챙긴 개수를 돌려준다
   function pack(s, t = team(s)) {
     const want = bagPlan(s), cap = bagCap(s, t), got = { torch: 0, camp: 0, potion: 0, knockScroll: 0, tools: 0, seeScroll: 0 }; let used = 0; // 두루마리 · 도구는 0 (없앴다)
-    for (const k of SUP_KEYS) for (let i = 0; i < want[k] && used < cap; i++) { const c = TUNE.SUP[k]; if (c && s.gold < c) break; s.gold -= c; got[k]++; used++; }
-    return got;
+    for (const k of SUP_KEYS) for (let i = 0; i < want[k] && (k === 'camp' || used < cap); i++) { const c = TUNE.SUP[k]; if (c && s.gold < c) break; s.gold -= c; got[k]++; if (k !== 'camp') used++; }
+    got.camp += CAMP_FREE; return got;
   }
-  // ── 야영 (2026-11-23): 야영 물자 1개 = 체력 전부 · 탐험 스킬 쿨타임 전부 (전투 쪽은 엔진의 긴 휴식). 야영 방은 안전, 그 밖의 치운 방은 이웃한 안 치운 적 무리마다 RAID 확률로 습격 ──
-  //   어디서 쉴지는 지도에서 정한다 (s.campPlan[층] = 방 번호들). 계획이 없으면 체력 평균 절반 아래 + 물자가 있을 때 지금 방에서
-  const raidRisk = (map, id) => { const n = map.nodes[id]; if (n.type === 'camp') return 0; const k = map.edges.filter(e => (e.a === id || e.b === id)).map(e => map.nodes[e.a === id ? e.b : e.a]).filter(q => q.hostile && !q.visited).length; return 1 - Math.pow(1 - TUNE.RAID, k); };
-  const canCamp = (st, id = st.at) => (st.items.camp || 0) > 0 && !st.map.nodes[id].hostile;
+  const restCost = (st, id = st.at) => (st.map.nodes[id].type === 'camp' ? REST_CAMP : REST);
+  const canCamp = (st, id = st.at) => (st.items.camp || 0) >= restCost(st, id) && !st.map.nodes[id].hostile;
+  // 방을 옮겼다 · 무너진 길을 돌아갔다: 물자 n개 (없으면 전원 최대 체력의 STARVE씩)
+  function spend(st, n = 1, why = '') {
+    for (let i = 0; i < n; i++) {
+      if ((st.items.camp || 0) > 0) { st.items.camp--; continue; }
+      for (const m of st.party) if (!m.dead) { m.hp -= Math.max(1, Math.round(m.max * STARVE)); if (m.hp <= 0) { m.hp = 0; m.dead = true; st.log.push({ t: `${m.n} 쓰러짐 (굶주림)`, k: 'dv' }); } }
+      st.log.push({ t: `물자 0 · 굶주림 · 체력 −${Math.round(STARVE * 100)}%`, k: 'dv' }); st.starved = (st.starved || 0) + 1;
+    }
+    if (why) st.log.push({ t: `${why} · 물자 ${st.items.camp || 0}`, k: 'dv' });
+    if (!st.party.some(m => !m.dead)) st.done = 'lose';
+  }
   // 쉰다 → { raid: 습격한 무리 이름 | null }. 습격이면 체력은 절반만 돌아오고 그 무리가 깬다
   function campHere(st, members = null) {
-    if (!canCamp(st)) return null; const id = st.at, map = st.map, k0 = st.items.camp; st.items.camp--;
-    const foes = map.edges.filter(e => e.a === id || e.b === id).map(e => map.nodes[e.a === id ? e.b : e.a]).filter(q => q.hostile && !q.visited && map.nodes[id].type !== 'camp'), hit = foes.find(() => st.rng() < TUNE.RAID);
-    for (const m of st.party) if (!m.dead) m.hp = hit ? Math.min(m.max, m.hp + Math.ceil((m.max - m.hp) / 2)) : m.max;
-    st.xcd = {}; if (members && !hit) G.Res.longRest(members); st.camped = st.camped || {}; st.camped[`${st.floor}:${id}`] = true;
-    if (hit) { hit.alert = true; st.log.push({ t: `야영 중 습격 · ${hit.g?.label || '적'}`, k: 'dv' }); } else st.log.push({ t: `야영 · 물자 ${k0} → ${st.items.camp} · 체력 100%`, k: 'dv' });
-    return { raid: hit ? hit.g?.label || '적' : null };
+    if (!canCamp(st)) return null; const id = st.at, k0 = st.items.camp; st.items.camp -= restCost(st, id);
+    for (const m of st.party) if (!m.dead) m.hp = m.max;
+    st.xcd = {}; if (members) G.Res.longRest(members); st.camped = st.camped || {}; st.camped[`${st.floor}:${id}`] = true;
+    st.log.push({ t: `야영 · 물자 ${k0} → ${st.items.camp} · 체력 100%`, k: 'dv' });
+    return { raid: null };
   }
   // 지금 쉴까: 계획한 야영 지점이거나(그 방 일이 끝난 뒤), 계획이 없고 체력 평균이 절반 아래일 때
-  function wantCamp(s, st) { if (!canCamp(st) || st.camped?.[`${st.floor}:${st.at}`]) return false; const pl = s.campPlan?.[st.floor]; if (pl && pl.length) return pl.includes(st.at); return hurt(st) < 0.5; }
+  function wantCamp(s, st) { if (!canCamp(st) || st.camped?.[`${st.floor}:${st.at}`]) return false; const left = (st.items.camp || 0) - restCost(st); return hurt(st) < (st.map.nodes[st.at].type === 'camp' ? 0.8 : 0.5) && left >= 2; } // 자동: 다쳤고 쉬어도 물자가 둘은 남을 때
   // 원정 중 짐: 물자 개수 + 전리품(st.loot) — 가득 차면 값이 가장 낮은 전리품부터 두고 간다 (물자는 버리지 않는다)
-  const supN = st => SUP_KEYS.reduce((a, k) => a + (st.items[k] || 0), 0);
+  const supN = st => st.items.torch || 0; // 짐 칸: 횃불만 (야영 물자는 칸을 안 차지한다)
   // ── 보석 (2026-11-23, 보물로만 — 팔기만): SRD 주문 재료의 보석 이름 · 값 단계 (값은 우리 금화 규모로, 시험값). 같은 보석은 한 칸에 GEM_STACK개까지
   const GEMS = [{ id: 'jade', n: '옥', g: 5 }, { id: 'pearl', n: '진주', g: 20 }, { id: 'diamond', n: '다이아몬드', g: 45 }, { id: 'bpearl', n: '흑진주', g: 70 }, { id: 'sapphire', n: '사파이어', g: 120 }, { id: 'bigdia', n: '큰 다이아몬드', g: 400 }], GEM_STACK = 5;
   const slotsOf = e => (e.gem ? Math.ceil((e.cnt || 1) / GEM_STACK) : 1);
@@ -521,12 +531,13 @@ G.Dive = (() => {
     const n = N.map((q, i) => { const v = hx(o.n, i, 16); return (Math.max(v & 3, Math.min(3, q.info || 0)) | (v & 4) | (q.visited ? 4 : 0) | (v & 8) | (q.visited || q.seenMap || (q.info || 0) >= 2 ? 8 : 0)).toString(16); }).join('');
     const e = E.map((q, i) => (hx(o.e, i, 32) | (q.walked ? 1 : 0) | (q.seen?.lock ? 2 : 0) | (q.seen?.dark ? 4 : 0) | (q.seen?.trap ? 8 : 0) | (q.seen?.hidden ? 16 : 0)).toString(32)).join('');
     s.maps[fl] = { n, e };
+    { const ms = new Set(s.miss[fl] || []); for (const q of N) { if (q.shut) ms.add(q.id); if (q.bonus) ms.delete(q.id); } if (ms.size) s.miss[fl] = [...ms]; else delete s.miss[fl]; } // 못 연 방 (다음에 넘을 사람을 데려오면 연다)
     s.trail[fl] = st.path.slice(); s.fail[fl] = st.map.edges.filter(q => q.stuck).map(q => q.id); // 지난 판에 실제로 간 길 (발자국) · 못 연 관문 (붉은 ✕)
   }
   // 새 층에 들어섰다 (판 시작 · 계단): 기억한 길의 정체(잠김 · 어두움 · 함정 · 찾은 숨은 통로)를 그 판에도 알고 간다 · 그 층의 경로 · 판정 난수는 새로
   function recall(st, s) {
     const m = s.maps[st.floor]; if (m) st.map.edges.forEach((q, i) => { const b = hx(m.e, i, 32); q.seen = q.seen || {}; if (b & 2) q.seen.lock = true; if (b & 4) q.seen.dark = true; if (b & 8) q.seen.trap = true; if (b & 16) q.seen.hidden = true; });
-    st.plan = s.plan[st.floor] || null; st.planMiss = 0; st.planI = 0; st.rng = RUN.rng(newSeed()); st.freeSide = RUN.lit(st) ? 1 : 0; // 횃불은 챙긴 것을 판 전체에 — 빛 소마법 · 전원 암시야 파티는 층마다 첫 곁방 하나가 공짜
+    st.plan = null; /* 경로 계획은 없앴다 (2026-11-26 — 방마다 다음 방을 고른다) */ st.planMiss = 0; st.planI = 0; st.rng = RUN.rng(newSeed()); st.freeSide = RUN.lit(st) ? 1 : 0; // 횃불은 챙긴 것을 판 전체에 — 빛 소마법 · 전원 암시야 파티는 층마다 첫 곁방 하나가 공짜
   }
   // 지도 위 경로 선의 점들 (칸 좌표): 방 a 가운데 → 방 안 칸만 밟아 문 → 복도 칸 → 문 → 방 b 가운데. 방 안은 칸 사이 걷기(8방향, 벽 모서리는 깎지 않는다)
   //   예전에는 방 가운데와 문을 곧게 이어, 모양이 고르지 않은 방(동굴 · 손으로 짠 방)에서 선이 벽을 가로지르고, 템플릿이 문 칸을 비운 방에서는 문이 방 밖에 찍혔다 (2026-11-23 사용자: 「경로가 실제 복도와 안 맞는다」)
@@ -561,8 +572,6 @@ G.Dive = (() => {
   const GEN = new Map(); const genMap = (seed, fl) => { const k = seed + ':' + fl; if (!GEN.has(k)) { if (GEN.size > 24) GEN.clear(); GEN.set(k, JSON.stringify(RUN.gen.make(seed, fl))); } return JSON.parse(GEN.get(k)); };
   // ── 곁방 · 횃불 (설계서 층): 곁방(막다른 방)에 한 번 들를 때 횃불 하나 — 큰길 · 갈래는 공짜. 층마다 다시 채운다 (해금한 개수 + 빛 소마법이나 전원 암시야면 1)
   //    횃불이 없어도 들어간다: 적이 있는 방이면 기습당하고(적이 먼저), 그 밖이면 어둠 속 함정 피해 (탐사 규칙의 함정과 같은 2d6 · 민첩 13 내성이면 절반)
-  const torches = (s, st) => bagPlan(s).torch + (RUN.lit(st) ? 1 : 0); // 길드 지도의 경로 요약: 챙길 횃불 + 그 층의 공짜 한 번
-  const isSide = (map, id) => !!map.nodes[id]?.side;
   // 방에서 얻는 것 (지도에 미리 — 실제 규칙의 값): 물건 수(G.Gear.N_DROP) · 나올 수 있는 등급(이 층 희귀도 표 R_TABLE) · 포로 구출 = 동료 +1 · 야영 = 긴 휴식(체력 100%)
   function reward(n, floor) {
     const kind = n.type === 'treasure' || n.chest ? 'treasure' : n.type === 'elite' || n.type === 'boss' ? n.type : null, o = {};
@@ -572,53 +581,6 @@ G.Dive = (() => {
     if (n.type === 'camp') o.heal = 100;
     return o;
   }
-  // 경로 예상 (길드 지도 아래, 방 차례대로 한 줄씩): 아는 만큼만 — 들어가 본 방은 확정, 문 너머로 본 방(info 2 이상)은 「추정」, 그 밖은 「?」
-  //   [{ t: 줄, k: fight | got | gate | sum }] · 관문(잠긴 문 · 함정 · 어두운 길 · 횃불)은 그 길 다음 줄에
-  function planLines(s, V, plan) {
-    const out = [], N = V.map.nodes, seen = new Set([plan[0]]), fl = V.floor; let fights = 0, items = 0, ally = 0;
-    const hs = team(s).map(c => s.roster[c]?.m).filter(Boolean), unitsOf = g => (g.units || [[g.name, g.count]]).map(([n, c]) => { const a = affTag(s, n, hs); return `${n} ${c}${a ? ` ${a}` : ''}`; }).join(' · ');
-    { const need = new Map(); for (let k = 1; k < plan.length; k++) { const q = V.map.edges.find(e => e.a === plan[k - 1] && e.b === plan[k]); if (q && !q.walked && ((q.kind === 'locked' && q.seen.lock) || (q.kind === 'trap' && q.seen.trap) || (q.kind === 'dark' && q.seen.dark))) for (const x of gateInfo(s, V, q)) if (x.key) need.set(x.key, x); }
-      if (need.size) out.push({ t: '열쇠 · ' + [...need.values()].map(x => `${x.k} ${x.val ? '✓' : '✗'}`).join(' · '), k: 'gate', no: [...need.values()].some(x => !x.val) }); } // 이 경로에 필요한 열쇠
-    for (let k = 1; k < plan.length; k++) {
-      const id = plan[k], q = V.map.edges.find(e => (e.a === plan[k - 1] && e.b === id)); // 돌아오는 길은 관문 없음
-      if (q && !q.walked && ((q.kind === 'locked' && q.seen.lock) || (q.kind === 'trap' && q.seen.trap) || (q.kind === 'dark' && q.seen.dark))) { const gi = gateInfo(s, V, q); out.push({ t: gateTxt(s, V, q), k: 'gate', no: gi.length > 0 && gi.every(x => !x.val && !x.who.includes('누구나')) }); } // 관문: 지금 파티의 값 · 없으면 풀 수 있는 직업 · no = 지금 파티로는 못 연다
-      if (seen.has(id)) continue; seen.add(id);
-      if (N[id].dark && darkKnown(N[id])) out.push({ t: gateTxt(s, V, { kind: 'dark', room: id }), k: 'gate' }); // 어두운 방: 빛 · 횃불
-      const n = N[id], know = n.visited ? 2 : n.info >= 2 ? 1 : 0, est = know === 1 ? ' 추정' : '', nm = n.name || RUN.TYPE[n.type] || '방', o = reward(n, fl), bits = [];
-      if (!know) { out.push({ t: `${nm} · ?`, k: 'fight' }); continue; }
-      if (n.hostile && n.g) { bits.push(`${unitsOf(n.g)}${est}`); fights++; }
-      if (o.items) { const r0 = RARITY[o.r[0]], r1 = RARITY[o.r[o.r.length - 1]]; bits.push(`물건 ${o.items} · ${r0}${r1 !== r0 ? `~${r1}` : ''} 추정`); items += o.items; }
-      if (o.ally && evOf(s, fl, id)?.st !== 'done') { bits.push(`동료 +${o.ally}${est || ' 추정'}`); ally += o.ally; } // 해결된 포로 구출은 다시 안 생긴다
-      if (o.heal) bits.push(`회복 ${o.heal}%`);
-      if (n.type === 'event') { const e = evOf(s, fl, id), want = s.evPlan?.[fl]?.[id]; if (e?.st === 'done') bits.push('해결'); else bits.push(want ? `${want.replace(/^\[[^\]]*\] /, '')}` : e?.st === 'skip' ? '사건 · 미해결' : '사건'); } // 사건: 해결 · 계획에서 고른 선택지 · 미해결
-      if ((s.campPlan?.[fl] || []).includes(id)) { const r = raidRisk(V.map, id); bits.push(`야영${r ? ` · 습격 ${Math.round(r * 100)}%` : ''}`); } // 계획한 야영 지점
-      out.push({ t: `${nm}${bits.length ? ` · ${bits.join(' · ')}` : ''}`, k: n.hostile ? 'fight' : o.items || o.ally ? 'got' : 'exp', ev: n.type === 'event' && n.ev && evOf(s, fl, id)?.st !== 'done' ? id : null }); // ev: 화면이 그 줄을 누르면 사건 선택지 판
-    }
-    const [tu, tn] = torchUse(s, V, plan), cu = (s.campPlan?.[fl] || []).filter(id => plan.includes(id)).length, cn = bagPlan(s).camp;
-    out.push({ t: [`전투 ${fights}`, items ? `물건 ${items} 추정` : '', ally ? `동료 +${ally}` : '', cu ? `야영 ${cu} · 물자 ${cu}/${cn}` : '', tu ? `횃불 ${tu}/${tn}` : ''].filter(Boolean).join(' · '), k: 'sum', short: tu > tn || cu > cn });
-    return out;
-  }
-  // 경로로 얻는 것의 합 (같은 방은 한 번)
-  const planReward = (map, plan, floor) => { const t = { items: 0, ally: 0 }; for (const id of new Set((plan || []).slice(1))) { const o = reward(map.nodes[id], floor); t.items += o.items || 0; t.ally += o.ally || 0; } return t; };
-  // 곁방에 들어선다 (처음): 횃불을 쓰거나 어둠 → { torch, dark }. 적이 없는 방이면 피해까지 여기서
-  function sideEnter(st, id) { return null; // 「곁방마다 횃불 하나」는 없앴다 (2026-11-23) — 횃불은 어두운 길에서만 (탐사 규칙)
-  }
-  function sideEnterOld(st, id) {
-    const n = st.map.nodes[id]; if (!n?.side || n.sideIn) return null; n.sideIn = true;
-    if (st.freeSide > 0) { st.freeSide--; st.log.push({ t: `${n.name || '곁방'} · 빛`, k: 'dv' }); return { torch: true }; }
-    if (st.items.torch > 0) { st.items.torch--; st.log.push({ t: `${n.name || '곁방'} · 횃불 ${st.items.torch + 1} → ${st.items.torch}`, k: 'dv' }); return { torch: true }; }
-    st.log.push({ t: `${n.name || '곁방'} · 횃불 0 · 어둠`, k: 'dv' });
-    if (!n.hostile) for (const m of st.party.filter(q => !q.dead)) { const ok = RUN.check(st.rng, RUN.CLS[m.cls].dex, 13).ok, d = RUN.roll(st.rng, '2d6'), v = ok ? Math.floor(d / 2) : d; m.hp -= v; if (m.hp <= 0) { m.hp = 0; m.dead = true; } }
-    if (!st.party.some(q => !q.dead)) st.done = 'lose';
-    return { dark: true };
-  }
-  // 경로의 곁방 들르기 수 (같은 곁방은 한 번)
-  const planSides = (map, plan) => new Set((plan || []).filter(id => isSide(map, id))).size;
-  // 경로에 필요한 횃불 = 경로 위의 아는 어두운 길 수 (빛 · 전원 암시야 파티는 0)
-  const planDark = (V, plan) => { let n = 0; for (let k = 0; k + 1 < (plan || []).length; k++) { const q = V.map.edges.find(e => e.a === plan[k] && e.b === plan[k + 1]); if (q && q.kind === 'dark' && q.seen.dark && !q.walked) n++; } for (const id of new Set((plan || []).slice(1))) if (V.map.nodes[id]?.dark && darkKnown(V.map.nodes[id])) n++; return RUN.X && RUN.X.lit(V) ? 0 : n; };
-  const darkKnown = n => !!(n.visited || n.seenMap || n.info >= 1); // 어두운 방은 방이 보이면 안다 (어둡다는 것만)
-  // 길드 지도 화면: 이 층 경로가 쓰는 횃불 / 가진 횃불
-  const torchUse = (s, V, plan) => [planDark(V, plan), bagPlan(s).torch];
   const short = g => { const u = g.units || [[g.name, g.count]]; return `${u[0][0]} ${u[0][1]}${u.length > 1 ? '+' : ''}`; }; // 「홉고블린 2+」
   function view(s, fl) {
     const map = genMap(floorSeed(s, fl), fl), m = s.maps[fl] || { n: '', e: '' };
@@ -627,49 +589,16 @@ G.Dive = (() => {
     const party = team(s).map(c => { const k = G.Party.RUN_CLS[c] || 'fighter', C = RUN.CLS[k], h = s.roster[c]?.m || { cls: c, lv: newLv(s), ab: G.Party.stdAb(c), name: '' }; return { cls: k, n: h.name || C.n, hp: C.hp, max: C.hp, dead: false, sl: { ...(C.slots || {}) }, hero: h }; }); // hero: 탐험 판정은 영웅의 실제 수치로 (RUN.X)
     return { map, at: 0, here: {}, party, items: kit(s), floor: fl, revealAll: true, flags: {}, log: [], path: [0] };
   }
-  const shownN = q => q.visited || q.seenMap || q.info >= 2;
-  const edgeOK = (V, q) => (q.kind !== 'hidden' || q.seen.hidden) && shownN(V.map.nodes[q.b]) && (q.walked || V.map.nodes[q.a].visited);
-  // 출발 방(또는 경로의 끝)에서 그 방까지 아는 길로 앞으로만 (없으면 null)
-  function pathTo(V, from, to) {
-    const prev = new Map([[from, null]]), q = [from];
-    while (q.length) { const a = q.shift(); if (a === to) break; for (const e of V.map.edges) if (e.a === a && !prev.has(e.b) && edgeOK(V, e)) { prev.set(e.b, a); q.push(e.b); } }
-    if (!prev.has(to)) return null; const out = []; for (let k = to; k != null; k = prev.get(k)) out.unshift(k); return out;
-  }
-  // 경로 잡기: 이미 경로에 있는 방이면 거기까지로 줄이고, 경로 끝에서 이어지면 잇고, 아니면 출발 방부터 새로. 못 가는 방이면 그대로
-  function planTo(s, V, id) {
-    const fl = V.floor, cur = s.plan[fl] || [0], i = cur.indexOf(id);
-    if (i >= 0) { s.plan[fl] = cur.slice(0, i + 1); if (s.plan[fl].length < 2) delete s.plan[fl]; return true; }
-    const tail = pathTo(V, cur[cur.length - 1], id), fresh0 = tail ? null : pathTo(V, 0, id);
-    const back = p => { const e = p[p.length - 1], n = V.map.nodes[e]; if (n.side && !V.map.edges.some(q => q.a === e && edgeOK(V, q)) && p.length > 1) p.push(p[p.length - 2]); return p; }; // 막다른 곁방: 갈라진 방으로 돌아온다
-    if (tail) { s.plan[fl] = back(cur.concat(tail.slice(1))); return true; } if (fresh0) { s.plan[fl] = back(fresh0); return true; } return false;
-  }
-  // 잠긴 문을 지금 파티 · 물자로 푸는 값 (탐사 규칙의 계산 그대로): 적이 있는 방은 문 앞 준비(G.Prep)가 걷어차서라도 연다 → 「부수기」, 그 밖은 RUN.moveActs
-  function doorVals(V, q) {
-    if (q.kind === 'locked' && V.map.nodes[q.b].hostile && (q.lock || 'lock') !== 'seal') return ['부수기'];
-    const out = []; q.tried = {}; const acts = q.kind === 'locked' ? RUN.moveActs({ ...V, xcd: {} }, q) : [], pct = p => `${Math.round(p * 100)}%`;
-    for (const a of acts) { if (a.id === 'pick') out.push(`따기 ${pct(a.p)}`); if (a.id === 'break') out.push(`부수기 ${pct(a.p)}`); if (a.id === 'knock') out.push('열림'); }
-    return out.length ? out : ['✕'];
-  }
   // 관문을 푸는 열쇠와 직업 (지도 · 경로 요약): [{ k: 열쇠, who: 풀 수 있는 직업 이름들, val: 지금 파티의 값 | null }] — 지금 파티에 없어도 누구를 데려와야 하나가 보이게
   // 관문 한 줄 (경로 요약 · 지도): 지금 파티의 값이 있으면 값, 없으면 풀 수 있는 직업
   const GATE_N = { locked: { lock: '잠긴 문', bars: '창살', seal: '마법 봉인', rubble: '무너진 길' }, dark: '어두운 길', trap: '함정', hidden: '숨은 통로' };
-  const gateTxt = (s, V, q) => { const nm = q.room != null ? '어두운 방' : q.kind === 'locked' ? GATE_N.locked[q.lock || 'lock'] : GATE_N[q.kind] || ''; const o = gateInfo(s, V, q).map(x => x.val || (x.who.length ? `${x.k} ${x.who.join('·')}` : '')).filter(Boolean); return `${nm}${o.length ? ` · ${o.join(' · ')}` : ''}`; };
+  const gateKey = (V, q) => (q.room != null ? 'dark' : q.kind === 'locked' ? q.lock || 'lock' : q.kind === 'trap' ? 'trap' : q.kind === 'dark' ? 'dark' : null);
+  const gateTxt = (s, V, q) => { const k = gateKey(V, q), S0 = STATE[k]; if (!S0) return GATE_N[q.kind] || ''; const r = gateInfo(s, V, q), v = r.find(x => x.val); return `${S0.n} · ${v ? v.val : S0.none}`; };
   function gateInfo(s, V, q) {
-    { const have = k => team(s).some(c => keysOf(c).includes(k)), row = k => ({ k: KEYS[k].n, ic: KEYS[k].ic, key: k, who: CLS.filter(c => keysOf(c).includes(k)).map(clsName), val: have(k) ? `${KEYS[k].n} ✓` : null });
-      if (q.kind === 'locked') { const lt = q.lock || 'lock'; return lt === 'seal' ? [row('magic')] : lt === 'rubble' ? [row('str')] : [row('lock'), row('str')]; }
-      if (q.kind === 'dark') return [row('light'), { k: '횃불', who: ['누구나'], val: null }];
-      if (q.kind === 'hidden' || q.kind === 'trap') return [row('sense')];
-      return []; } // 열쇠 (2026-11-26) — 아래는 옛 판정 방식
-    const lv = c => s.roster[c]?.m?.lv || newLv(s), who = id => CLS.map(c => [c, (EXPL[c] || []).find(([x]) => x === id)]).filter(([, e]) => e).map(([c, [, L]]) => `${clsName(c)}${lv(c) < L ? ` ${L}` : ''}`), vals = doorVals(V, q), v = re => vals.find(x => re.test(x)) || null; // 모든 직업 (안 연 직업도 — 누구를 데려와야 하나) · 레벨이 모자라면 필요한 레벨
-    if (q.kind === 'locked') { const lt = q.lock || 'lock', o = [];
-      if (lt === 'lock' || lt === 'bars') o.push({ k: '따기', who: who('pick'), val: v(/^따기/) });
-      if (lt !== 'seal') o.push({ k: '부수기', who: ['누구나'], val: v(/^부수기/) });
-      if (lt === 'lock' || lt === 'seal') o.push({ k: '열림', who: who('knock'), val: v(/^열림/) });
-      return o; }
-    if (q.kind === 'dark') return [{ k: '빛', who: who('light'), val: XRUN.lit(V) ? '빛' : null }, { k: '횃불', who: ['누구나'], val: null }];
-    if (q.kind === 'hidden') return [{ k: '조사', who: ['누구나'], val: q.seen?.hidden ? '찾음' : 'DC 15' }, { k: '능숙한 탐험가', who: who('explorer'), val: null }]; // 숨은 통로: 조사 DC 15 (레인저 능숙한 탐험가 = 조사 전문화)
-    if (q.kind === 'trap') { const best = {}; for (const id of ['disarm', 'danger', 'findtraps', 'evasion']) for (const c of CLS) { const e = (EXPL[c] || []).find(([x]) => x === id); if (e && !(c in best && best[c] <= e[1])) best[c] = e[1]; } return [{ k: '함정', who: Object.entries(best).map(([c, L]) => `${clsName(c)}${lv(c) < L ? ` ${L}` : ''}`), val: null }]; } // 해제 · 위험 감지 · 함정 찾기 · 회피 (직업마다 가장 이른 것)
-    return [];
+    { const k = gateKey(V, q), S0 = STATE[k]; if (!S0) return []; const t = team(s), hero = g => t.find(c => keysOf(c).includes(g));
+      const rows = S0.by.map(([g, how]) => ({ k: how, ic: KEYS[g].ic, key: g, who: CLS.filter(c => keysOf(c).includes(g)).map(clsName), val: hero(g) ? clsName(hero(g)) : null }));
+      if (S0.torch) rows.push({ k: '횃불', who: ['누구나'], val: null });
+      return rows; }
   }
   // ── 탐험 스킬 (2026-11-23, SRD 직업 기능 · 주문 — 그 레벨이 되어야 생긴다): [id, 레벨]. 탐험에만 쓴다 (전투 스킬 여섯 칸과 별개)
   //   tactical 전술적 사고(실패한 판정 +1d10, 쿨) · brute 운동 이점(부수기) · danger 위험 감지(함정 내성 이점) · pick 자물쇠 따기(도둑 도구 전문화) · disarm 함정 해제 · scout 정찰 · evasion 회피
@@ -680,12 +609,33 @@ G.Dive = (() => {
     scout: [['track', 1], ['scout', 2], ['augury', 3], ['findtraps', 3]], bard: [['light', 1], ['jack', 2], ['knock', 3]], archmage: [['light', 1], ['detect', 1], ['knock', 3], ['augury', 3]],
     mage: [['light', 1], ['knock', 3]], warlock: [['detect', 1]],
   };
-  // ── 탐험 열쇠 (2026-11-26 사용자: 「필요한 탐험스킬이 무엇인지 … 간결하면서도 재미가 있는지」): 탐험 스킬을 열쇠 여섯으로 묶는다. 가지고 있으면 판정 없이 된다 (레벨 · 쿨타임 없음)
-  //   lock 자물쇠 (잠긴 문 · 창살, 조용히) · str 힘 (잠긴 문 · 창살 · 무너진 길, 시끄럽게) · magic 마법 (마법 봉인) · light 빛 (어두운 길 · 방) · sense 감각 (함정 · 숨은 통로) · scout 정찰 (갈림길 너머가 보인다 · 잠든 무리 기습)
-  const KEYS = { lock: { n: '자물쇠', ic: 'lock' }, str: { n: '힘', ic: 'hammer' }, magic: { n: '마법', ic: 'wand' }, light: { n: '빛', ic: 'spark' }, sense: { n: '감각', ic: 'warn' }, scout: { n: '정찰', ic: 'target' } };
-  const CLS_KEYS = { rogue: ['lock', 'sense'], bard: ['lock', 'light'], dragoon: ['str'], barbarian: ['str'], paladin: ['str'], mage: ['magic', 'light'], archmage: ['magic', 'light'], warlock: ['magic'], cleric: ['light', 'scout'], archer: ['sense', 'scout'], monk: ['sense'], scout: ['scout'] };
-  const ID_KEY = { pick: 'lock', knock: 'magic', detect: 'magic', brute: 'str', tactical: 'str', light: 'light', disarm: 'sense', findtraps: 'sense', evasion: 'sense', danger: 'sense', explorer: 'sense', scout: 'scout', track: 'scout', augury: 'scout', lore: 'scout', sense: 'scout' };
+  // ── 방 상태 (2026-11-26 사용자: 「열쇠는 수단일 뿐 · 푸는 것 기준으로」 · FTL처럼 길을 막지 않고 결과만 바꾼다): 넘는 수단은 직업 세 갈래
+  //   deft 손재주 (잠김 조용히 · 함정 해제 · 숨은 길) · str 힘 (잠김 시끄럽게 · 무너짐) · spell 주문 (봉인 · 어둠). 판정 · 레벨 · 쿨타임 없음
+  const KEYS = { deft: { n: '손재주', ic: 'lock' }, str: { n: '힘', ic: 'hammer' }, spell: { n: '주문', ic: 'wand' } };
+  const CLS_KEYS = { rogue: ['deft'], bard: ['deft'], archer: ['deft'], monk: ['deft'], dragoon: ['str'], barbarian: ['str'], paladin: ['str'], mage: ['spell'], archmage: ['spell'], warlock: ['spell'], cleric: ['spell'], scout: ['spell'] };
+  const ID_KEY = { pick: 'deft', disarm: 'deft', findtraps: 'deft', evasion: 'deft', danger: 'deft', explorer: 'deft', brute: 'str', tactical: 'str', knock: 'spell', detect: 'spell', light: 'spell' };
   const keysOf = cls => CLS_KEYS[cls] || [];
+  // 방 상태 이름 · 넘는 수단 (넘는 말 · 없을 때 결과) — 지도 · 길드 · 다음 방 고르기가 같은 표를 읽는다
+  const STATE = {
+    lock: { n: '잠김', by: [['deft', '엶'], ['str', '부숨']], none: '보상 없음' },
+    bars: { n: '잠김', by: [['deft', '엶'], ['str', '부숨']], none: '보상 없음' },
+    seal: { n: '봉인', by: [['spell', '풂']], none: '보상 없음' },
+    rubble: { n: '무너짐', by: [['str', '치움']], none: '물자 +1' },
+    trap: { n: '함정', by: [['deft', '해제']], none: '피해' },
+    dark: { n: '어둠', by: [['spell', '밝힘']], torch: true, none: '기습' },
+    sleep: { n: '잠듦', by: [], none: '우리 선공' },
+  };
+  const OVERCOME = { deft: ['잠김', '함정', '숨은 길'], str: ['잠김', '무너짐'], spell: ['봉인', '어둠'] }; // 길드: 그 영웅이 넘는 것
+  // 그 길(e — 이 방에서 나가는 쪽) 너머 방(n)의 상태 키 (없으면 null)
+  const stateOf = (e, n) => (e.kind === 'locked' && !e.opened ? e.lock || 'lock' : e.kind === 'trap' && !e.disarmed ? 'trap' : (e.kind === 'dark' && !e.walked) || (n?.dark && !n.lit) ? 'dark' : n?.sleepy && !n.alert && !n.visited ? 'sleep' : null);
+  // 지금 파티로 그 상태를 넘나: { st: 상태 이름, who: 넘는 사람 이름 | '횃불 N' | null, out: 없을 때 결과, ok }
+  function passInfo(st, e, n) {
+    const k = stateOf(e, n); if (!k) return null; const S0 = STATE[k], h = S0.by.map(([g, how]) => [XRUN.keyHolder(st, g), how]).find(([m]) => m);
+    if (k === 'dark' && !h && XRUN.lit(st)) return { k, st: S0.n, who: '암시야', ok: true };
+    if (h) return { k, st: S0.n, who: clsName(h[0].hero?.cls) || h[0].n, how: h[1], ok: true };
+    if (S0.torch && (st.items?.torch || 0) > 0) return { k, st: S0.n, who: `횃불 ${st.items.torch}`, ok: true };
+    return { k, st: S0.n, who: null, out: S0.none, ok: k === 'sleep' };
+  }
   const KEYUSE = []; // 방금 쓴 열쇠 { who: 탐사 사람, k } (화면이 머리 위에 띄우고 비운다)
   // 쿨타임 (라운드 · 방을 하나 옮기면 ROOM_R) — 시험값
   const XCD = { knock: 12, augury: 6, findtraps: 6, detect: 6, sense: 6, tactical: 6 }, ROOM_R = 6;
@@ -696,7 +646,7 @@ G.Dive = (() => {
   const XRUN = {
     CD: XCD, ROOM_R, keyed: true, KEYS,
     keyHolder: (st, k) => st.party.find(m => !m.dead && m.hero && keysOf(m.hero.cls).includes(k)) || null,
-    onKey(st, m, k) { if (KEYUSE.length < 20) KEYUSE.push({ who: m, k }); },
+    onKey(st, m, k, t) { if (KEYUSE.length < 20) KEYUSE.push({ who: m, k, t: t || KEYS[k]?.n }); },
     skill(m, sk) { const h = m.hero; if (!h) return (RUN.CLS[m.cls]?.sk || {})[sk] ?? 0; const N = G.Dnd, pr = N.prof(h.lv || 1);
       if (sk === '도둑 도구') return N.mod(N.ab(h).dex) + (hasX(h, 'pick') ? pr * 2 : -5); // 로그: 도둑 도구 숙련 + 전문화
       const en = KO_SK[sk]; if (!en) return 0; let v = N.skill(h, en);
@@ -706,7 +656,8 @@ G.Dive = (() => {
     can(st, m, id) { const k = ID_KEY[id]; return !!k && !!m.hero && keysOf(m.hero.cls).includes(k); }, // 열쇠: 가지고 있으면 (쿨타임 없음)
     use(st, m, id) { return; }, useOld(st, m, id) { if (!XCD[id]) return; st.xcd = st.xcd || {}; (st.xcd[m.uid || m.n] = st.xcd[m.uid || m.n] || {})[id] = XCD[id]; },
     tick(st, r) { for (const k in st.xcd || {}) for (const id in st.xcd[k]) st.xcd[k][id] = Math.max(0, st.xcd[k][id] - r); if (G.Res?.cdOn) G.Res.clock += r; }, // 전투 스킬과 한 시계
-    lightBy: st => XRUN.keyHolder(st, 'light'),
+    lightBy: st => XRUN.keyHolder(st, 'spell'),
+    spend: (st, n, why) => spend(st, n, why),
     lit(st) { const al = st.party.filter(m => !m.dead); return !!XRUN.lightBy(st) || (al.length > 0 && al.every(m => (m.hero && G.Light ? G.Light.darkvision({ merc: m.hero }) > 0 : RUN.CLS[m.cls]?.dv))); }, // 전원 암시야 = 영웅의 실제 종족 (전에는 옛 다섯 직업표 — 파이터면 드워프로 쳤다)
     onFail(st, m, r, c) { if (!XRUN.can(st, m, 'tactical')) return 0; XRUN.use(st, m, 'tactical'); const d = 1 + Math.floor(st.rng() * 10); st.log.push({ t: `${m.n} · 전술적 사고 · +${d}`, k: 'dv' }); return d; },
     trapSave(st, m) { const h = m.hero; if (!h) return { b: RUN.CLS[m.cls]?.dex ?? 0, adv: 0, ev: false }; const N = G.Dnd, b = N.mod(N.ab(h).dex) + (['rogue', 'monk', 'archer', 'bard'].includes(h.cls) ? N.prof(h.lv || 1) : 0); return { b, adv: hasX(h, 'danger') ? 1 : 0, ev: hasX(h, 'evasion') }; },
@@ -726,8 +677,6 @@ G.Dive = (() => {
     unholy: n => (n.g?.units || []).some(([nm]) => ['undead', 'fiend'].includes(G.D.F.mon[G.Encounter.monName(nm)]?.ty)),
   };
 
-  // 이번 판 그 층에서 경로가 잠긴 문에 막힌 수 (판정을 다 해 보고 못 연 문 — crawl.js가 e.stuck을 붙인다)
-  const planBlocked = st => { const p = st.plan; if (!p) return 0; let n = 0; for (let i = 0; i + 1 < p.length; i++) { const e = st.map.edges.find(q => q.a === p[i] && q.b === p[i + 1]); if (e && e.stuck) n++; } return n; };
 
   // 계단을 내려갔다: 계단 야영 (살아 있는 사람 체력 % · 4단계면 엔진 자원도 긴 휴식)
   function descend(st, s, members) { if (cur && cur !== st) { st.stat = cur.stat; cur = st; } recall(st, s); } // 처치 금화 · 짐 · 집계가 새 층의 상태로 (전에는 1층 상태에 남았다) // 계단: 회복 없음 (야영뿐 — 2026-11-23)
@@ -759,18 +708,31 @@ G.Dive = (() => {
     // 방에 들어섰다 (설계서 층): 함정 · 숨은 통로를 저절로 찾아본다 (조사 판정 — 탐사 규칙 그대로, 방마다 한 번)
     // 방에 들어섰다: 조사(함정 · 숨은 통로) · 함정 찾기 · 신성 감지 · 사냥꾼의 지식 · 마법 탐지를 저절로, 그리고 아직 안 간 이웃 방을 미리 알기(정찰 · 흔적 · 점술) — 탐사 규칙 그대로
     arrive(st) { if (st.here.xdone) return; st.here.xdone = true;
+      if (XRUN.keyed) for (const x of RUN.nexts(st)) { x.n.seenMap = true; x.e.seen = x.e.seen || {}; if (x.e.kind === 'locked') x.e.seen.lock = true; if (x.e.kind === 'trap') x.e.seen.trap = true; if (x.e.kind === 'dark') x.e.seen.dark = true; } // 방 상태: 이웃 방의 종류와 상태는 늘 보인다 (적은 가 봐야 안다)
       const mark = a => { const L = st.log[st.log.length - 1]; if (L && !L.g && !L.r) L.g = { who: a.who || '', gate: '탐험', how: a.label, ok: true }; }; // 탐험 스킬 (판정 없는 것): 화면의 알림 판으로 — 판정 있는 것은 그 기록(.r)을 쓴다
       for (const a of RUN.roomActs(st)) if (['search', 'findtraps', 'sense', 'lore', 'detect'].includes(a.id)) { const n0 = st.log.length; a.run(); if (st.log.length > n0 && a.id !== 'search' && a.id !== 'findtraps') mark(a); }
-      for (const x of RUN.nexts(st)) { if (x.n.visited || x.n.info >= 3) continue; for (const a of RUN.infoActs(st, x.e)) if (a.id === 'augury' || (a.id === 'scout' && (x.n.hostile || XRUN.keyed)) || a.id === 'track') { const n0 = st.log.length; a.run(); if (st.log.length > n0 && a.id === 'augury') mark(a); if (st.here.augury) break; } } },
-    side: sideEnter,
+      if (!XRUN.keyed) for (const x of RUN.nexts(st)) { if (x.n.visited || x.n.info >= 3) continue; for (const a of RUN.infoActs(st, x.e)) if (a.id === 'augury' || (a.id === 'scout' && (x.n.hostile || XRUN.keyed)) || a.id === 'track') { const n0 = st.log.length; a.run(); if (st.log.length > n0 && a.id === 'augury') mark(a); if (st.here.augury) break; } } },
     // 갈림길: opts = 출구들 ({ to, e }). 체력이 낮으면 야영 쪽, 아니면 RANK — 잠긴 보물 방은 열 수단이 있을 때만 (로그 · 열림 두루마리 · 열림 주문)
+    // 다음 방 (FTL처럼 방마다 — 2026-11-26): opts = 이 방의 모든 길 ({ to, e, ed }). 안 가 본 방이 있으면 그중 RANK · 방 상태로, 없으면 안 가 본 방 · 우두머리로 가는 가장 짧은 길의 첫 방
+    //   다쳤으면 야영 방이 앞 · 못 여는 보물 방은 뒤 · 혼자면 정예 · 우두머리는 맨 뒤 · 물자가 모자라면 우두머리 쪽
     fork(st, opts) {
-      // 경로가 있으면 먼저: 경로의 다음 방이 선택지에 있으면 그리로 (다쳤어도 — 플레이어가 정한 길이 먼저). 없으면(막혔다 · 경로를 벗어났다) 아래 자동 규칙
-      if (st.plan) { const i0 = st.plan.indexOf(st.at, st.planI || 0), i = i0 >= 0 ? i0 : st.plan.indexOf(st.at), nx = i >= 0 ? st.plan[i + 1] : null; if (nx != null) { const j = opts.findIndex(x => x.to === nx); if (j >= 0) { st.planI = i + 1; forkLog(st, opts[j], '계획'); return j; } st.planMiss = (st.planMiss || 0) + 1; } } // planI: 경로에서 지금 어디쯤 (곁방 왕복으로 같은 방이 두 번 나온다)
-      const solo = st.party.filter(m => !m.dead).length < 2, low = hurt(st) < 0.5, canOpen = RUN.X ? st.party.some(m => !m.dead && (RUN.X.can(st, m, 'pick') || RUN.X.can(st, m, 'knock'))) : st.party.some(m => !m.dead && (m.cls === 'rogue' || m.cls === 'wizard')) || st.items.knockScroll > 0; // 잠긴 곁방을 열 수단 (따기 · 열림 — 부수기는 누구나지만 소리)
-      const score = x => { const n = st.map.nodes[x.to], t = n.type === 'fight' ? (n.tier === 'light' ? 'event' : 'fight') : n.type; let v = RANK[t] ?? 3; if (low && t === 'camp') v = -2; if (x.e.kind === 'locked' && !x.e.opened && !canOpen) v += 4; if (n.tier === 'heavy') v += 0.5; if (n.side) v = (x.e.kind === 'locked' && !x.e.opened && !canOpen) ? v + 20 : low ? v : -10; if (solo && (n.type === 'elite' || n.type === 'boss')) v += 30; return v; }; // 혼자면 정예 · 우두머리는 맨 뒤 (위험하면 복귀가 그 앞에서 돌아오게 — 첫 판이 튜토리얼) // 곁방: 횃불이 남는 동안 처음 만난 열 수 있는 곁방부터 (종류는 가리지 않는다 — 고르는 것은 계획의 몫) // 곁방: 횃불이 남고 열 수 있으면 먼저 (보물 > 사건 > 정예), 아니면 들르지 않는다
-      const j = opts.map((x, i) => [score(x), i]).sort((a, b) => a[0] - b[0])[0][1]; forkLog(st, opts[j], '자동'); return j;
+      const N = st.map.nodes, solo = st.party.filter(m => !m.dead).length < 2, low = hurt(st) < 0.5, poor = (st.items.camp || 0) < 3;
+      const score = x => { const n = N[x.to], t = n.type === 'fight' ? (n.tier === 'light' ? 'event' : 'fight') : n.type, pi = passInfo(st, x.ed || x.e, n); let v = RANK[t] ?? 3;
+        if (low && t === 'camp') v = -2; if (pi && !pi.ok) v += pi.out === '보상 없음' ? 6 : 1.5; if (n.tier === 'heavy') v += 0.5; if (solo && (n.type === 'elite' || n.type === 'boss')) v += 30; if (poor && n.type === 'boss') v = -3; return v; };
+      const fresh = opts.map((x, i) => [x, i]).filter(([x]) => !N[x.to].visited);
+      let j;
+      if (fresh.length) j = fresh.map(([x, i]) => [score(x), i]).sort((a, b) => a[0] - b[0])[0][1];
+      else { // 가 본 방뿐: 안 가 본 방이 이웃한 방(또는 우두머리 방)까지 가장 짧은 길
+        const E = st.map.edges.filter(e => e.kind !== 'hidden' || e.seen?.hidden), goal = id => (N[id].type === 'boss' && !N[id].visited) || E.some(e => (e.a === id && !N[e.b].visited) || (e.b === id && !N[e.a].visited));
+        const prev = new Map([[st.at, null]]), q = [st.at]; let hit = null;
+        while (q.length && hit == null) { const a = q.shift(); for (const e of E) { const b = e.a === a ? e.b : e.b === a ? e.a : null; if (b == null || prev.has(b)) continue; prev.set(b, a); if (goal(b)) { hit = b; break; } q.push(b); } }
+        let k = hit; while (k != null && prev.get(k) !== st.at) k = prev.get(k);
+        j = Math.max(0, opts.findIndex(x => x.to === k));
+      }
+      forkLog(st, opts[j], '자동'); return j;
     },
+    move: st => spend(st, 1), // 방을 옮길 때마다 물자 1
+    rest: (st, members) => campHere(st, members),
     // 장면 (사건 · 전투 · 야영 · 상인 · 구역 끝 야영지): choices의 번호
     scene(st, s) {
       const ok = s.choices.map((c, i) => [c, i]).filter(([c]) => !(c.off && c.off()) && !c.lock), name = re => ok.find(([c]) => re.test(c.n));
@@ -818,6 +780,5 @@ G.Dive = (() => {
   function evOut(evId, choiceName) { const ev = RUN.EVENTS.find(x => x.id === evId); if (!ev) return { ok: [], no: [] }; const o = ev.opts.find(q => choiceName === q.n || choiceName.endsWith(`] ${q.n}`)); if (!o) return { ok: [], no: [] };
     const f = r => (!r ? [] : [r.gold ? `금화 +${r.gold}` : '', r.ally ? '동료 +1' : '', r.healAll ? `체력 +${r.healAll}` : '', r.hurt ? `체력 −${r.hurt}` : '', r.fight ? '싸움' : '', r.mapPiece || r.revealRow || r.scoutAhead ? '지도' : '', r.bless ? '가호' : '', r.curse ? '저주' : '', r.warn || r.alert ? '경보' : ''].filter(Boolean));
     return { ok: f(o.ok), no: o.sk ? f(o.no) : [], cost: o.cost || 0 }; }
-  function toggleCamp(s, fl, id) { const pl = s.plan[fl] || []; if (!pl.includes(id) || id === pl[0]) return false; const c = s.campPlan[fl] = s.campPlan[fl] || []; const i = c.indexOf(id); if (i >= 0) c.splice(i, 1); else c.push(id); if (!c.length) delete s.campPlan[fl]; return true; }
-  return { KEYS, keysOf, KEYUSE, USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, HAND, handIs, handLock, handSet, handPick, handTick, handCd, handWait, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, toggleCamp, raidRisk, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, planLines, drawState, segPts, reward, planReward, SPECS, FV, torches, sideEnter, planSides, torchUse, isSide, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, STARTS, starts, autoStart, startFloor, floorSeed, remember, recall, explored, view, pathTo, planTo, doorVals, planBlocked, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, descend, POL };
+  return { restCost, REST, REST_CAMP, CAMP_FREE, KEYS, keysOf, KEYUSE, STATE, OVERCOME, stateOf, passInfo, USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, HAND, handIs, handLock, handSet, handPick, handTick, handCd, handWait, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, drawState, segPts, reward, SPECS, FV, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, STARTS, starts, autoStart, startFloor, floorSeed, remember, recall, explored, view, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, descend, POL };
 })();
