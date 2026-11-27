@@ -490,3 +490,15 @@ const MD = (() => {
   function pixMon(e) { if (!MINI_READY || !isMon(e)) return null; const d = monDoll(e); let sp = d.cache.get('P0'); if (!sp) { sp = px32(d, 'Idle', 0); d.cache.set('P0', sp); } return sp; }
   return { lookOf, frame, portrait, pix, pixFolk, pixMon, iconUrl, itemUrl, enqueue, snap, present, clear, isMon, zref };
 })();
+
+// 2.5D 시안 (?art=d25): 길드 · 카드 얼굴도 DCSS 인형으로 (몸 + 무기 한 장, 인형과 같은 쪽을 보게 뒤집는다)
+if (D25) {
+  const one = new WeakMap(), merged = dl => {
+    if (!dl) return null; let sp = one.get(dl); if (sp) return sp;
+    const w = dl.w, h = dl.h, src = dl.fr.idle[0], W0 = dl.weapon, px = new Uint32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, c = (W0 && W0.w === w && W0.px[i]) || src[i]; if (c) px[y * w + (w - 1 - x)] = c; }
+    sp = { w, h, foot: dl.foot, top: dl.top, px }; one.set(dl, sp); return sp;
+  };
+  MD.pix = m => merged(layered('c_' + m.cls, G.DCSS.cls[m.cls] || G.DCSS.cls.dragoon));
+  MD.pixMon = e => merged(dcssOf(e));
+}

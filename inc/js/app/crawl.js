@@ -315,7 +315,7 @@ const CRAWL = (() => {
     { const m = TAVERNUI.load(), r = G.Tavern.finish(m, sum); sum.seat = r.seat; sum.lured = r.cls.map(c => (G.Guild.def({ cls: c }) || {}).n || c); TAVERNUI.save(m); } // 선술집: 닿은 층 · 잡은 우두머리 층 · 벽의 명패
     sum.fresh = G.Reward.UNLOCKS.filter(u => sum.total >= u.at && before < u.at).map(u => u.n);
     document.body.dataset.done = st.done;
-    REWARDUI.record(sum, () => { location.href = location.pathname; });
+    REWARDUI.record(sum, () => { location.href = location.pathname + KEEPQ; });
   }
 
   // ── 전투로 넘기기: 탐사 규칙(RUN)의 파티 체력과 쿼터뷰 인물을 차례로 맞춘다 (파이터 ↔ 파이터, 위저드 ↔ 위저드, 클레릭 ↔ 클레릭) ──

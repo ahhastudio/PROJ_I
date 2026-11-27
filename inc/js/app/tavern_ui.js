@@ -152,7 +152,7 @@ const TAVERNUI = (() => {
       if (g) { cur = cur === +g.dataset.i ? null : +g.dataset.i; marks(); sheet(); }
       else if (ev.target.closest('.tv-x') || (ev.target.closest('.tv-scene') && cur != null)) { cur = null; marks(); sheet(); }
       else if (ev.target.closest('.tv-take')) { const k = picks.indexOf(cur); if (k >= 0) picks.splice(k, 1); else if (picks.length < n) picks.push(cur); marks(); sheet(); }
-      else if (go && !go.disabled) { const party = picks.map(i => m.night[i]); m.night = null; save(m); put(sessionStorage, GO, JSON.stringify(party)); location.href = location.pathname; }
+      else if (go && !go.disabled) { const party = picks.map(i => m.night[i]); m.night = null; save(m); put(sessionStorage, GO, JSON.stringify(party)); location.href = location.pathname + KEEPQ; }
     };
     size(); paint(); document.body.dataset.tavern = '1';
     addEventListener('resize', () => { if (box.isConnected) { size(); paint(); } });

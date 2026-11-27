@@ -2,7 +2,7 @@
 // 기초: 화면 버퍼 · 수학 · 입체 그리기 · 그림자
 // 쿼터뷰 시험 장면: 실제 턴제 전투(G.Turn · G.Story)를 탁자 위 디오라마처럼 그린다. 그림 파일 없이 전부 코드.
 // 렌더러 방식(직교 카메라 · 깊이 버퍼 · 색 램프 · 그림자 · 외곽선)은 pixel-plays(MIT, LICENSE-pixel-plays.txt)에서 가져와 고쳤다.
-const q = new URLSearchParams(location.search);
+const q = new URLSearchParams(location.search), KEEPQ = q.get('art') ? '?art=' + encodeURIComponent(q.get('art')) : ''; // 페이지를 다시 열 때 그림 고르기는 남긴다
 const DARK = q.get('bg') !== 'light';
 if (DARK) document.body.classList.add('dark');
 // 화면 크기: 픽셀 배율은 정수로 두고 창을 꽉 채운다. S가 칸 크기 — 인물(32px) 대비 칸을 키워 방이 넓어 보이게 한다

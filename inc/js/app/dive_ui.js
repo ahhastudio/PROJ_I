@@ -111,7 +111,7 @@ const DIVEUI = (() => {
   // 지난 판에 얻은 것: 새 스킬 · 아이템 (등급 색)
   const gotTxt = r => (r.skills?.length ? `<p class="dv-ups">새 스킬 ${r.skills.map(([n, k]) => `<b>${esc(n)}</b> ${esc(k)}`).join(' · ')}</p>` : '') + (r.items?.length ? `<p class="dv-items">${r.items.map(e => `<span class="r${e.r}">${D.RARITY[e.r]} · ${esc(e.n)}</span>${e.to ? ` → ${esc(e.to)}` : e.dropped ? ' · 두고 감' : ` → 짐 <small>${UI.px('coin')} ${e.gold}</small>`}`).join('<br>')}</p>` : '');
   const upsTxt = ups => (ups.length ? `<p class="dv-ups">레벨업 ${ups.map(([n, a, b]) => `<b>${esc(n)}</b> ${a}→${b}레벨`).join(' · ')}</p>` : '');
-  function depart() { put(S); flag(1); location.href = location.pathname; }
+  function depart() { put(S); flag(1); location.href = location.pathname + KEEPQ; }
   // ── 길드 ──
   function panel(id) { let el = $(id); if (!el) { el = document.createElement('div'); el.id = id; el.className = 'dv-panel'; el.onpointerup = ev => ev.stopPropagation(); document.body.append(el); } return el; }
   // ── 길드 (지도가 첫 화면, 2026-11-23): 위 = 지난 판 한 줄 · 층 고르기(자동 · 가 본 층 탐사 수) / 가운데 = 그 층 지도와 경로 / 아래 = 경로 요약 · 파티 · 원정 출발 / 맨 아래 탭 = 명단 · 해금 · 도감
@@ -134,7 +134,7 @@ const DIVEUI = (() => {
       if (ds.add || ds.out) { D.toggle(S, ds.add || ds.out); put(S); return guild(); }
       if (ds.hire) return buildPick(ds.hire);
       if (ds.rev) { D.raise(S, ds.rev); if (!S.party.includes(ds.rev) && !full) S.party.push(ds.rev); put(S); return guild(); } // 부활 (모자라면 빚)
-      if (ds.view != null) { try { localStorage.setItem('inc.view', viewTop() ? 'iso' : 'top'); } catch (e) { /* 기억 못 해도 */ } location.href = location.pathname; return; } // 시점 (탑뷰 시험) — 다시 열어 그림을 바꾼다
+      if (ds.view != null) { try { localStorage.setItem('inc.view', viewTop() ? 'iso' : 'top'); } catch (e) { /* 기억 못 해도 */ } location.href = location.pathname + KEEPQ; return; } // 시점 (탑뷰 시험) — 다시 열어 그림을 바꾼다
       if (ds.hero) return hero(ds.hero);
       if (b.classList.contains('in-go')) return goStep('map');
       if (b.classList.contains('dv-repb')) return repWin(S.lastRep);

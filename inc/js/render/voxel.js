@@ -229,8 +229,8 @@ const VOX = (() => {
     const vx0 = cam.ix, vy0 = cam.iy, inside = ov && vx0 >= ovX && vy0 >= ovY && vx0 + VW <= ovX + ovW && vy0 + VH <= ovY + ovH;
     if (!inside || t - ovT > .08) {
       ovT = t;
-      const fl = .85 + .1 * Math.sin(t * 7.3) + .06 * Math.sin(t * 13.1);
-      cur = { x: lx, y: ly, fl, lights: [{ x: lx, y: ly, z: FLOOR + 16, c: [1, .74, .44], i: 4.4 * fl, r: 32 }, ...lights.filter(Lg => Math.hypot(Lg.x - lx, Lg.y - ly) < LR + Lg.r * 2).map((Lg, k) => ({ ...Lg, i: Lg.i * (.85 + .12 * Math.sin(t * 6.1 + k * 1.7)) }))] };
+      const fl = .9; // 바닥 빛은 출렁이지 않는다 (2026-11-27 — 출렁일 때마다 디더가 다시 찍혀 바닥이 파르르 떨렸다. 불꽃 그림은 따로 움직인다)
+      cur = { x: lx, y: ly, fl, lights: [{ x: lx, y: ly, z: FLOOR + 16, c: [1, .74, .44], i: 4.4 * fl, r: 32 }, ...lights.filter(Lg => Math.hypot(Lg.x - lx, Lg.y - ly) < LR + Lg.r * 2).map((Lg, k) => ({ ...Lg, i: Lg.i * .9 }))] };
       const M = 24; ovX = Math.max(0, vx0 - M); ovY = Math.max(0, vy0 - M); ovW = Math.min(big.w, vx0 + VW + M) - ovX; ovH = Math.min(big.h, vy0 + VH + M) - ovY;
       if (!ov || ov.length < ovW * ovH) ov = new Uint32Array(ovW * ovH); else ov.fill(0, 0, ovW * ovH);
       // 파티 맨 앞의 판 좌표 둘레만 (빛 반지름 밖은 건너뛴다. 위로는 벽 높이만큼 더)
