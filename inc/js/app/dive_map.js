@@ -139,7 +139,11 @@ const DIVEMAP = (() => {
     for (const [id, num] of st.pick || []) { const r = L.room[id], rx = (r.x - x0) * c, ry = (r.y - y0) * c, rw = r.w * c, rh = r.h * c; x.fillStyle = PAL.gold; x.fillRect(rx - 3, ry - 3, rw + 6, 3); x.fillRect(rx - 3, ry + rh, rw + 6, 3); x.fillRect(rx - 3, ry, 3, rh); x.fillRect(rx + rw, ry, 3, rh);
       const tw = 16 + String(num).length * 7 + 9, bx = rx + rw - tw + 2, by = ry + rh - 12; x.fillStyle = PAL.ink; x.fillRect(bx - 1, by - 1, tw + 2, 17); x.fillStyle = PAL.gold; x.fillRect(bx, by, tw, 15); bitmap(x, TENT, bx + 2, by + 4, 1, { 1: PAL.ink, 3: PAL.ink }); text(x, `−${num}`, bx + 14, by + 12, PAL.ink, { align: 'left', size: 12, bold: true, plate: false }); } // 방 오른쪽 아래 모서리 (이름 · 물건 표시와 안 겹치게)
     // 지금 위치 (원정 중)
-    if (st.here != null) { const r = L.room[st.here], hx = (r.x - x0 + r.w / 2) * c, hy = (r.y - y0 + r.h / 2) * c; x.fillStyle = PAL.ink; x.fillRect(hx - 4, hy - 4, 9, 9); x.fillStyle = '#d9493a'; x.fillRect(hx - 3, hy - 3, 7, 7); }
+    if (st.here != null) { const r = L.room[st.here], rx = (r.x - x0) * c, ry = (r.y - y0) * c, rw = r.w * c, rh = r.h * c, hx = rx + rw / 2, hy = ry + rh / 2, HC = '#ff4a32'; // 2026-11-28 사용자: 크게 본 지도에서 지금 위치가 잘 안 보인다 — 방 테두리 + 핀
+      const box = (d, t, col) => { x.fillStyle = col; x.fillRect(rx - d, ry - d, rw + d * 2, t); x.fillRect(rx - d, ry + rh + d - t, rw + d * 2, t); x.fillRect(rx - d, ry - d, t, rh + d * 2); x.fillRect(rx + rw + d - t, ry - d, t, rh + d * 2); };
+      if (o.mini) { box(2, 2, HC); x.fillStyle = PAL.ink; x.fillRect(hx - 4, hy - 4, 9, 9); x.fillStyle = HC; x.fillRect(hx - 3, hy - 3, 7, 7); }
+      else { box(5, 5, '#140c08'); box(4, 3, HC); const R0 = Math.max(9, Math.min(16, c * 0.9)), py = hy - R0 * 0.6; x.fillStyle = '#140c08'; x.beginPath(); x.arc(hx, py, R0 + 2, Math.PI * 0.85, Math.PI * 2.15); x.lineTo(hx, py + R0 * 1.9 + 2); x.closePath(); x.fill();
+        x.fillStyle = HC; x.beginPath(); x.arc(hx, py, R0, Math.PI * 0.85, Math.PI * 2.15); x.lineTo(hx, py + R0 * 1.9 - 1); x.closePath(); x.fill(); x.fillStyle = '#fff6e0'; x.beginPath(); x.arc(hx, py, R0 * 0.42, 0, Math.PI * 2); x.fill(); } }
     if (st.flash > 0) for (const id of st.fresh || []) { const r = L.room[id]; x.globalAlpha = st.flash * 0.55; x.fillStyle = '#fff6c8'; x.fillRect((r.x - x0) * c, (r.y - y0) * c, r.w * c, r.h * c); x.globalAlpha = 1; } // 새로 밝힌 방: 잠깐 밝게
     if (st.nope) { const r = L.room[st.nope.id], [px, py] = P([r.x + r.w / 2 - 0.5, r.y + r.h / 2 - 0.5]); text(x, '?', px + st.nope.dx, py + 6, PAL.rust, { size: 24, bold: true }); }
   }

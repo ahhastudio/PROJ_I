@@ -49,7 +49,7 @@ const DIVEUI = (() => {
       const ar = (svg.clientWidth || 1) / (svg.clientHeight || 1); if (w / h < ar) { const nw = h * ar; x0 -= (nw - w) / 2; w = nw; } else { const nh = w / ar; y0 -= (nh - h) / 2; h = nh; }
       return `${x0.toFixed(1)} ${y0.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`; };
     CRAWL.attach(r); D.outfit(CRAWL.st, R, S); zoomInit(); run.lv0 = Object.fromEntries(Object.entries(S.roster).map(([c, h]) => [c, h.m.lv])); run.lootN = 0; run.skills = []; run.seen = snap();
-    run.team = R.party.filter(p => p.merc).map(p => p.merc.hid); run.xp0 = Object.fromEntries(run.team.map(c => [c, D.totalXp(S.roster[c]?.m || {})])); run.sup0 = { torch: CRAWL.st.items.torch || 0, camp: CRAWL.st.items.camp || 0 }; // 결과 보고서의 기준
+    run.team = R.party.filter(p => p.merc).map(p => p.merc.hid); run.xp0 = Object.fromEntries(run.team.map(c => [c, D.totalXp(S.roster[c]?.m || {})])); supSeen = null; run.sup0 = { torch: CRAWL.st.items.torch || 0, camp: CRAWL.st.items.camp || 0 }; // 결과 보고서의 기준
     document.body.dataset.dive = 'run'; put(S); // 명단에 새로 들인 영웅 · 도감의 빌드
   }
   // ── 원정 끝 (전멸 · 승리 · 돌아가기): 판에서 번 금화 + 깬 층 보너스 → 길드 ──
@@ -223,14 +223,16 @@ const DIVEUI = (() => {
   function recruit() {
     const box = panel('dv-rc'), B = S.board, n = D.heroes(S).length;
     const tiers = D.BOARD.map((b, i) => [false, true].map(big => { const c = D.postCost(i, big); return `<button class="rc-post" data-post="${i}" data-big="${big ? 1 : ''}"${S.gold < c ? ' disabled' : ''}><b>${esc(b.n)}</b><small>${big ? D.BIG_N : D.SMALL_N}명</small><span>${UI.px('coin')} ${c}</span></button>`; }).join('')).join('');
-    const row = (a, i) => { const m = a.m, why = D.canHire(S, i); return `<button class="rc-a" data-i="${i}"${why === true ? '' : ' disabled'}><canvas width="26" height="30"></canvas><b>${esc(m.name)}</b><small>${esc(clsN(m.cls))} · ${esc(G.Builds.byId(m.build)?.n || '')}</small>${stars(m.star)}<span class="dv-lv">Lv ${m.lv}</span><span>${UI.px('coin')} ${a.fee}</span></button>`; };
+    const row = (a, i) => { const m = a.m, why = D.canHire(S, i), st = Math.min(5, m.star || 1); return `<button class="rc-a s${st}${why === true ? '' : ' no'}" data-i="${i}"${rcFresh ? ` style="--d:${i * 0.13 + 0.15}s"` : ''}><canvas width="26" height="30"></canvas><b>${esc(m.name)}</b><small>${esc(clsN(m.cls))} · ${esc(G.Builds.byId(m.build)?.n || '')}</small>${stars(m.star)}<span class="dv-lv">Lv ${m.lv}</span><span>${UI.px('coin')} ${a.fee}</span></button>`; };
     box.innerHTML = `<header><h2>모집 <small>${n}/${D.ROSTER_CAP}</small></h2><div class="dv-res"><span class="chip c-gold">${UI.px('coin')} ${S.gold}</span><button class="chip dv-x">닫기</button></div></header>`
-      + `<div class="rc-tiers">${tiers}</div>` + (B?.list?.length ? `<div class="dv-picks rc-list">${B.list.map(row).join('')}</div>` : '');
+      + `<div class="rc-tiers">${tiers}</div>` + (B?.list?.length ? `<div class="dv-picks rc-list${rcFresh ? ' rv' : ''}">${B.list.map(row).join('')}</div>` : '');
     box.querySelectorAll('.rc-a canvas').forEach((cv, i) => { const draw = () => { if (box.isConnected && !UI.face(cv, B.list[i].m)) setTimeout(draw, 400); }; draw(); });
     box.onclick = ev => { const x = ev.target.closest('button'); if (!x || x.disabled) return; if (x.classList.contains('dv-x')) { box.remove(); guild(); return; }
-      if (x.dataset.post != null) { if (D.post(S, +x.dataset.post, !!x.dataset.big)) { put(S); recruit(); } return; }
-      if (x.dataset.i != null) { const id = D.hire(S, +x.dataset.i); if (id) { inC = id; put(S); recruit(); } } };
+      if (x.dataset.post != null) { if (D.post(S, +x.dataset.post, !!x.dataset.big)) { put(S); rcFresh = true; recruit(); } return; }
+      if (x.dataset.i != null) { const a0 = B.list[+x.dataset.i]; if (a0) hero(null, { m: JSON.parse(JSON.stringify(a0.m)), tr: [], hire: +x.dataset.i, fee: a0.fee }); } }; // 지원자: 등록증을 먼저 (2026-11-28 사용자: 「바로 고용되게 하지 말고」)
+    rcFresh = false;
   }
+  let rcFresh = false; // 공고를 막 냈다: 지원자 카드가 한 장씩 뒤집히며 나온다 (높은 성급은 빛이 터진다)
   // ── 명단 = 책 (2026-11-28 사용자: 직업별 페이지 탭 · 한 페이지 2×5 카드 · 누르면 등록증): 펼친 두 쪽(세로 화면은 한 쪽) · 산 영웅(파티 · 성급 · 레벨 순) 다음 묘비(최근 순) · 빈 칸은 자리만
   let bkCls = null, bkPg = 0;
   function book() {
@@ -264,7 +266,7 @@ const DIVEUI = (() => {
     for (let Y = y0; Y <= y0 + (y1 - y0) * 0.5; Y++) for (let X = 0; X < sp.w; X++) if (A(X, Y)) { sx += X; n++; } const mx = n ? sx / n : sp.w / 2, x = cv.getContext('2d');
     x.imageSmoothingEnabled = false; x.clearRect(0, 0, cv.width, cv.height); x.drawImage(TAVERNUI.bitmap(sp), Math.round(cv.width / 2 - (mx + 0.5) * k), Math.round(cv.height * 0.14 - y0 * k), sp.w * k, sp.h * k); return true; }
   function hero(c, h0) { // h0 = 묘비 카드 (읽기만)
-    const h = h0 || S.roster[c]; if (!h) return; const ro = !!h0, m = D.cardInit(h.m), sh = G.Tavern.sheet(m), v = G.Builds.view(m), need = G.Guild.needOf(m), mx = D.maxLv(m), st = m.star || 1, inh = ro ? [] : D.inheritOpts(S, c), line = D.isLine(m) && m.star;
+    const h = h0 || S.roster[c]; if (!h) return; const ro = !!h0, ap = h.hire != null, m = D.cardInit(h.m), sh = G.Tavern.sheet(m), v = G.Builds.view(m), need = G.Guild.needOf(m), mx = D.maxLv(m), st = m.star || 1, inh = ro ? [] : D.inheritOpts(S, c), line = D.isLine(m) && m.star;
     const Q = D.sheetOf(h), atk = `${Q.dmg.n + Q.dmg.b}~${Q.dmg.n * Q.dmg.d + Q.dmg.b}`, sg = n => (n >= 0 ? '+' : '') + n, [r, rd] = RANK[Math.min(5, st)], xp = m.lv >= mx ? 100 : Math.round(100 * Math.min(1, (m.xp || 0) / need));
     const core = G.Builds.byId(m.build)?.core || [], num = k => { const n0 = G.SkillNum_at?.(k, m.cls, m.lv), cdn = G.Res.cdOf ? G.Res.cdOf(k) : 0; return [skTag(m, k) || n0?.d, cdn ? `쿨 ${cdn}` : ''].filter(Boolean).join(' · '); };
     const cell = (c0, i) => { if (c0.s) return `<div class="lc-on" data-sk="${c0.s.k}">${SKUI.img(c0.s.k)}<span><b>${esc(c0.s.n)}</b><small>${esc(num(c0.s.k))}</small></span></div>`;
@@ -273,19 +275,20 @@ const DIVEUI = (() => {
     const eq = [sh.weapon?.n, sh.armor].filter(x => x && x !== '없음'), mg = Q.items;
     const knack = D.knacksOf(m).map(g => `<span>${UI.px(D.KNACK[g].ic)}${esc(D.KNACK[g].n)}</span>`).join('');
     const box = panel('dv-lic'), no = String(1000 + (parseInt(String(c ?? h.fall?.n ?? '').replace(/\D/g, ''), 10) || 1) * 37).padStart(5, '0');
-    box.innerHTML = `<div class="lc${ro ? ' dead' : ''}" style="--r:${r};--rd:${rd}"><div class="lc-in"><div class="lc-hd"><b>모험가 등록증</b> · 원정대 길드<span>${ro ? `${UI.px('skull')} ${h.fall.floor}층 · ` : ''}No. ${no}</span><button class="lc-x dv-x">✕</button></div>`
+    box.innerHTML = `<div class="lc${h.fall ? ' dead' : ''}${ap ? ' ap' : ''}" style="--r:${r};--rd:${rd}"><div class="lc-in"><div class="lc-hd"><b>${ap ? '지원서' : '모험가 등록증'}</b> · 원정대 길드<span>${h.fall ? `${UI.px('skull')} ${h.fall.floor}층 · ` : ''}${ap ? '' : `No. ${no}`}</span><button class="lc-x dv-x">✕</button></div>`
       + `<div class="lc-ph"><i class="lc-rar">${'★'.repeat(st)}</i><canvas width="112" height="136"></canvas></div><div class="lc-cls">${esc(sh.cls)}<small>${esc(G.Builds.byId(m.build)?.n || '')}</small></div>`
       + `<div class="lc-xp"><small>${m.lv >= mx ? 'MAX' : `경험치 ${xp}%`}</small><i><em style="width:${xp}%"></em></i></div>`
       + `<div class="lc-main"><div class="lc-name"><b>${esc(m.name)}</b><em>Lv ${m.lv} / ${mx}</em></div>`
       + `<div class="lc-st"><span><b>${Q.hp}</b>체력</span><span><b>${sg(Q.hit)}</b>명중</span><span><b>${atk}</b>공격</span><span><b>${Q.ac}</b>방어</span></div>`
       + `<div class="lc-sk">${v.slots.slice(0, 6).map((c0, i) => cell(c0, i)).join('')}</div>`
       + `<div class="lc-ft">${knack}${eq.map(n => `<span>${esc(n)}</span>`).join('')}${mg.map(x => `<span class="r${x.r}">${esc(x.n)}</span>`).join('')}</div></div><div class="lc-sig">길드장</div></div></div>`
-      + (!ro && (m.cardq || []).length || inh.length ? `<div class="lc-more">${(m.cardq || []).length ? `<button class="chip dv-pickb">${UI.px('star')} ${m.cardq.length}</button>` : ''}`
+      + (ap ? (() => { const why = D.canHire(S, h.hire); return `<div class="lc-more lc-hire"><button class="rc-hire" data-hire="1"${why === true ? '' : ' disabled'}>고용 · ${UI.px('coin')} ${h.fee}${why === true ? '' : ` · ${why === '명단' ? `명단 ${D.ROSTER_CAP}/${D.ROSTER_CAP}` : `${UI.px('coin')} ${S.gold}`}`}</button></div>`; })() : '') + (!ro && (m.cardq || []).length || inh.length ? `<div class="lc-more">${(m.cardq || []).length ? `<button class="chip dv-pickb">${UI.px('star')} ${m.cardq.length}</button>` : ''}`
         + (inh.length ? `<div class="lc-inh"><b>계승 ${stars(st + 1)}</b>${inh.map(o => { const g = S.roster[o.hid].m; return `<div><span>${esc(g.name)} ${stars(g.star)} Lv ${g.lv}</span>${o.sk.map(k => `<button class="chip" data-inh="${o.hid}" data-k="${k}">${SKUI.img(k)}${esc(G.D.MSKILLS[k]?.n || k)}</button>`).join('')}</div>`; }).join('')}</div>` : '') + '</div>' : '');
     const fitK = () => { const el = box.querySelector('.lc'), more = box.querySelector('.lc-more'), H0 = 328 + (more ? more.offsetHeight + 10 : 0), k = Math.min(1, (innerWidth - 16) / 520, (innerHeight - 24) / H0); box.style.setProperty('--k', k.toFixed(3)); }; fitK();
     const cv = box.querySelector('.lc-ph canvas'), draw = () => { if (box.isConnected && !photo(cv, m)) setTimeout(draw, 400); }; draw();
     const shut = () => { box.remove(); if ($('dv-book')) book(); }; // 책에서 열었으면 책을 다시 (계승으로 사라진 영웅)
     box.onclick = ev => { if (ev.target === box) return shut(); const sl = ev.target.closest('[data-sk]'); if (sl) return skPop(m, sl.dataset.sk); const b = ev.target.closest('button'); if (!b) return; if (b.classList.contains('dv-x')) return shut();
+      if (b.dataset.hire) { const id = D.hire(S, h.hire); if (id) { inC = id; put(S); box.remove(); recruit(); } return; }
       if (b.classList.contains('dv-pickb')) return cardWin(m, () => { put(S); hero(c); }, false); // 길드에서 고를 것
       if (b.dataset.inh) { const g = S.roster[b.dataset.inh]?.m, k = b.dataset.k; if (!g) return; if (b.dataset.sure) { const r0 = D.inherit(S, c, b.dataset.inh, k); if (r0 === true) { put(S); return hero(c); } b.textContent = r0 === '창고' ? '창고 가득' : '불가'; return; }
         box.querySelectorAll('[data-sure]').forEach(o => { delete o.dataset.sure; o.classList.remove('warn'); }); b.dataset.sure = 1; b.classList.add('warn'); b.innerHTML = `${UI.px('skull')} ${esc(g.name)} → ${esc(G.D.MSKILLS[k]?.n || k)}`; } // 두 번 눌러 확정 (바친 영웅은 사라진다)
@@ -350,15 +353,13 @@ const DIVEUI = (() => {
   }
   // 픽셀 지도 (시안 v1, 2026-11-23 — ?pix=1일 때만): DIVEMAP(js/app/dive_map.js)이 캔버스에 그린다. 누르기 · 경로 · 지우기는 SVG 지도와 같은 규칙
   // 픽셀 지도가 기본 (2026-11-23 — ?svg=1이면 예전 SVG 손그림 지도): DIVEMAP(js/app/dive_map.js)이 캔버스에 그린다. 누르기 · 경로 · 지우기 · 야영 지점 · 사건 판은 같은 규칙
-  let pixM = null;
+  let pixM = null, supSeen = null; // supSeen: 마지막으로 보인 야영 물자 수 (줄어든 순간을 알려고 — 원정마다 처음부터)
   let pixV = null, gchI = 0;
   function pixMap(box, fl, erase = null) {
     const V = D.view(S, fl), plan = null, wrap = box.querySelector('.dv-mapw'), keep = pixM && wrap.querySelector('canvas.dvpix') && wrap.dataset.fl === String(fl) ? pixM.scroll() : null;
     wrap.dataset.fl = fl; box.querySelector('#dvmap')?.remove();
     const prev = S.shown[fl] || '', cur0 = S.maps[fl]?.n || '', fresh = []; if (prev !== cur0) { for (let i = 0; i < cur0.length; i++) if ((parseInt(cur0[i], 16) & 4) && !(parseInt(prev[i] || '0', 16) & 4)) fresh.push(i); S.shown[fl] = cur0; put(S); } // 새로 밝힌 방 (한 번만)
-    let anim = null; // 원정 뒤 첫 길드: 이번에 밝힌 방을 깃펜이 그린다 (새로 들어간 방 · 새로 본 방이 있을 때만 — 자동 재출발 중이면 짧게)
-    if (post && !post.used) { post.used = true; const seen = []; if (prev !== cur0) for (let i = 0; i < cur0.length; i++) { const a = parseInt(prev[i] || '0', 16), b = parseInt(cur0[i], 16); if ((b & 8) && !(a & 8) && !(b & 4)) seen.push(i); }
-      if (fresh.length || seen.length) anim = { trail: S.trail[fl] || [0], vis: fresh, seen, dur: post.auto ? 1 : Math.min(2.5, 1.4 + 0.12 * (fresh.length + seen.length / 2)), done: () => postDone() }; else setTimeout(postDone, 0); }
+    const anim = null; if (post && !post.used) { post.used = true; setTimeout(postDone, 0); } // 원정 뒤 깃펜 그리기는 뺐다 (2026-11-28 사용자) — 새로 밝힌 방은 잠깐 밝게(fresh)만
     pixM = DIVEMAP.mount(wrap, V, { plan, trail: S.trail[fl] || [], fail: S.fail[fl] || [], camp: S.campPlan[fl] || [], S, gateInfo: q0 => D.gateInfo(S, V, q0), keep, fresh, anim }); pixV = V;
     { const n = pixM.gates().length, row = box.querySelector('.dv-fls'); let ch = row?.querySelector('.dv-gch'); if (!n) ch?.remove(); else if (row) { if (!ch) { ch = document.createElement('button'); ch.className = 'dv-gch'; row.append(ch); } ch.innerHTML = `${UI.px('lock')} ${n}`; } } // 못 연 관문 수 — 누르면 차례로 그 자리로 · 자세히 // keep: 경로를 고르는 동안 틀이 움직이지 않게
     const old = mapOld[fl] || [], from = plan ? (old.length && plan.slice(0, old.length).join() === old.join() ? old.length - 1 : 0) : 0;
@@ -742,11 +743,13 @@ const DIVEUI = (() => {
       const cv = el.querySelector('canvas'), draw = () => { if (el.isConnected && !UI.face(cv, d.who.hero)) setTimeout(draw, 400); }; if (cv && d.who?.hero) draw(); }); // 넘는 영웅의 얼굴 (인형 그림이 늦으면 다시)
     const bar = document.createElement('div'); bar.id = 'dv-pick'; bar.onpointerdown = stop; bar.onpointerup = stop;
     const restBtn = () => { const ok = D.canCamp(st) && !st.camped?.[`${st.floor}:${st.at}`] && st.party.some(m => !m.dead && m.hp < m.max); return `<button class="pk-rest" data-r="1"${ok ? '' : ' disabled'}>${UI.px('tent')} 야영 · ${D.restCost(st)}</button>`; };
-    bar.innerHTML = `<span class="pk-sup">${UI.px('tent')} <em>${st.items.camp || 0}</em></span>${restBtn()}<button class="pk-map" data-m="1">${mi('map')}</button>`;
+    const sup = () => { const n = st.items.camp || 0, need = D.toBoss(st), el = bar.querySelector('.pk-sup'); if (!el) return; el.querySelector('em').textContent = n; el.classList.toggle('low', n <= 2 || (Number.isFinite(need) && n < need)); // 적으면 빨갛게 (우두머리 방까지 드는 수보다 적거나 2 이하)
+      if (supSeen != null && n < supSeen) { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); const f = document.createElement('i'); f.className = 'pk-dn'; f.textContent = `−${supSeen - n}`; el.append(f); setTimeout(() => f.remove(), 1200); } supSeen = n; }; // 줄어든 순간: −N이 떠오르고 깜빡 (2026-11-28 — FTL 연료식)
+    bar.innerHTML = `<span class="pk-sup">${UI.px('tent')} <em></em></span>${restBtn()}<button class="pk-map" data-m="1">${mi('map')}</button>`;
     bar.onclick = ev => { const b = ev.target.closest('button'); if (!b || b.disabled) return; ev.stopPropagation();
-      if (b.dataset.r) { if (rest()) { bar.querySelector('.pk-sup em').textContent = st.items.camp || 0; b.outerHTML = restBtn(); } return; }
+      if (b.dataset.r) { if (rest()) { sup(); b.outerHTML = restBtn(); } return; }
       if (b.dataset.m) mapWin(st, take); };
-    $('stage').append(bar);
+    $('stage').append(bar); sup();
     if (!opts.some(x => !N[x.to].visited && !D.passInfo(st, x.ed || x.e, N[x.to])?.shut)) mapWin(st, take); // 새 방으로 가는 (넘을 수 있는) 문이 없다 (막다른 방 · 다 돈 방): 층 지도부터
     return true;
   }
