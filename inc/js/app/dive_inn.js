@@ -6,7 +6,7 @@ const DIVEINN = (() => {
   const { esc } = UI, D = G.Dive;
   const clsN = c => G.Guild.def({ cls: c })?.n || c;
   const merc = (S, c) => S.roster[c]?.m || null; // c = 영웅 번호 (2026-11-27 영웅 모델)
-  const stOf = (S, c) => (S.dead[c] ? 'dead' : 'in');
+  const stOf = () => 'in'; // 영구 사망: 죽은 영웅은 명단에 없다
   const stars = n => `<i class="dv-stars">${'★'.repeat(n || 1)}</i>`;
   // ── 장면: 화면 전체가 술집 한 칸. 인형과 같은 화소 크기로 그린다. F = 정보 칸에 가리지 않는 폭, B = 아래 줄에 가리지 않는 높이 ──
   const at = new Map(), acts = new Map(); // 영웅이 지금 서 있는 곳 (화면을 다시 그려도 이어진다) · 큰 그림의 동작이 시작한 때
@@ -110,7 +110,7 @@ const DIVEINN = (() => {
       // 정보 칸의 큰 그림
       if (big && cur) { const t0 = acts.get(cur) ?? -9, u = t - t0, st = stOf(S, cur), sp = merc(S, cur) && MD.pix ? MD.pix(merc(S, cur), u < 1.2 ? u + 0.35 : t, u < 1.2 && st !== 'dead' ? 'Act' : 'Idle') : null, c = big.getContext('2d'); if (sp) { c.imageSmoothingEnabled = false; c.clearRect(0, 0, big.width, big.height); c.filter = st === 'dead' ? 'grayscale(1)' : 'none'; c.drawImage(TAVERNUI.bitmap(sp), Math.floor(big.width / 2 - sp.w / 2), big.height - 4 - sp.foot); } }
     };
-    paint(); const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); if (!document.hidden && !document.querySelector('#dv-sheet,#dv-hero,#dv-lic,#dv-dex,#dv-pick,#dv-rc')) paint(); }, 66);
+    paint(); const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); if (!document.hidden && !document.querySelector('#dv-sheet,#dv-hero,#dv-lic,#dv-dex,#dv-pick,#dv-rc,#dv-book')) paint(); }, 66);
   }
   // 초상: 인형 그림이 아직이면 다시 시도
   const faces = (box, S) => box.querySelectorAll('canvas[data-f]').forEach(cv => { const go = () => { if (cv.isConnected && merc(S, cv.dataset.f) && !UI.face(cv, merc(S, cv.dataset.f))) setTimeout(go, 400); }; go(); });
@@ -125,7 +125,7 @@ const DIVEINN = (() => {
     const m = h.m, need = G.Guild.needOf(m), mx = D.maxLv(m);
     return top(m.name, `${clsN(m.cls)} · ${G.Builds.byId(m.build)?.n || ''}`) + `<div class="in-st">${stars(m.star)}</div>`
       + `<div class="in-lv">Lv ${m.lv}/${mx}<i><em style="width:${m.lv >= mx ? 100 : Math.round(100 * Math.min(1, (m.xp || 0) / need))}%"></em></i></div>`
-      + `<div class="in-act">${st === 'dead' ? `<button class="in-hire" data-rev="${c}">부활 ${UI.px('coin')} ${D.reviveCost(S, c)}</button>` : inT ? `<button data-out="${c}"${team.length < 2 ? ' disabled' : ''}>빼기</button>` : `<button data-add="${c}"${team.length >= D.seats(S) ? ' disabled' : ''}>넣기</button>`}<button data-hero="${c}">상태</button></div>`;
+      + `<div class="in-act">${inT ? `<button data-out="${c}"${team.length < 2 ? ' disabled' : ''}>빼기</button>` : `<button data-add="${c}"${team.length >= D.seats(S) ? ' disabled' : ''}>넣기</button>`}<button data-hero="${c}">상태</button></div>`;
   }
   return { scene, party, info, faces };
 })();

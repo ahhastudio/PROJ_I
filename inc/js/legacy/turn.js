@@ -157,6 +157,7 @@ G.Turn = (() => {
     st.order.sort((a, b) => b.init + lead(b) - a.init - lead(a));
     st.round++;
     st.i = -1;
+    if (T.onRound) T.onRound(f, rt, st); // 앱이 건다 (원정: 다음 무리 자리 표시)
     if (G.Foe.assess(f, rt, st) && !st.askedLose) { st.askedLose = true; G.Story.askRetreat(f, rt); } // 승산이 없으면 묻는다. 기본은 방침대로
     if (!st.mop && st.round >= 2 && st.low >= MOP_LOW && !st.downs) {
       const fs = foes(rt), hp = fs.reduce((a, o) => a + Math.max(0, o.hp), 0), max = fs.reduce((a, o) => a + (o.max || 0), 0);

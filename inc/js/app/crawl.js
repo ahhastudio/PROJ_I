@@ -371,6 +371,7 @@ const CRAWL = (() => {
   function foes(n, door) {
     syncToG();
     G.Encounter.spawnRoom(R, st.map._lay.room[n.id].cells.map(FL.tile), wave0(n), { x: door[0], y: door[1] }, { boss: n.type === 'boss' && !R.wave?.list.length, spots: st.map._lay.room[n.id].spawns }).forEach(wvMark);
+    if (R.wave) R.wave.door = door;
   }
   // 원정: 진형대로 선 파티 앞에 적이 보인다 → 배치(몇 초, 끌어 옮기기 — dive_ui.js POL.deploy) → 전투. 선공은 여기 한 곳에서 (2026-11-24 · 11-27):
   //   어둠(빛 없이 들어선 길 · 방) = 적 선공 · 배치 없음 / 잠든 무리 = 우리 선공 · 잠든 적은 첫 차례를 넘기고 맞으면 깬다 / 모르고 들어섬(탐사 규칙의 기습 시도 n.surprisedNow)은 영웅의 매복 살피기(G.Mission.roll 지각)로 — 성공 우리 선공 · 실패 적 선공(배치 없음).
@@ -409,11 +410,27 @@ const CRAWL = (() => {
   // 원정: 적이 차례로 몰려온다 (POL.waves — G.Dive). R.wave = { list: 남은 무리들, i: 지금 몇째, n: 모두, k: 값 배율, node }
   const wvMark = m => { if (R.wave) m.wvK = R.wave.k; };
   function wave0(n) { R.wave = null; if (!POL?.waves) return units(n.g); const w = POL.waves(n.g, n.type === 'boss' ? 'boss' : n.type === 'elite' ? 'elite' : 'fight', R.party.filter(p => p.merc && !p.dead).length, st.floor); R.wave = { list: w.list.slice(1), i: 1, n: w.list.length, k: w.k, node: n, all: w.list }; return w.list[0]; }
+  // 다음 무리가 들어오는 자리 (2026-11-28 사용자: 「뒷줄 쪽에서 갑자기 소환되는게 불합리」): 들어온 문이 아닌 다른 문 중 영웅에게서 먼 문 · 없으면 들어온 문에서 가장 먼 안쪽.
+  //   영웅과 WV_GAP타일 안에는 안 나온다 · 남은 적이 하나가 되면 라운드마다 그 자리에 표시 (G.Turn.onRound)
+  const WV_GAP = 4, hyp = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  function wvAt(w) {
+    if (w.A) return w.A; const id = w.node.id, cells = st.map._lay.room[id].cells.map(FL.tile), live = R.party.filter(p => !p.dead).map(p => [p.x, p.y]), d0 = w.door;
+    const far = c => (live.length ? Math.min(...live.map(e => hyp(e, c))) : 99);
+    const ds = FL.exits(st.map, id).map(e => e.door).filter(p => !d0 || hyp(p, d0) > 3);
+    return (w.A = ds.length ? ds.sort((a, b) => far(b) - far(a))[0] : d0 ? cells.slice().sort((a, b) => hyp(b, d0) - hyp(a, d0))[0] : cells[0]);
+  }
+  function wvCells(w) {
+    const A = wvAt(w), all = st.map._lay.room[w.node.id].cells.map(FL.tile), live = R.party.filter(p => !p.dead), busy = R.party.concat(R.mons.filter(m => m.hp > 0));
+    const free = all.filter(([x, y]) => !busy.some(e => Math.abs(e.x - x) < 1 && Math.abs(e.y - y) < 1)), ok = free.filter(c => !live.some(e => hyp([e.x, e.y], c) < WV_GAP));
+    return (ok.length ? ok : free.length ? free : all).sort((a, b) => hyp(a, A) - hyp(b, A)).slice(0, 12);
+  }
+  G.Turn.onRound = (f, rt) => { const w = R?.wave; if (!FIGHT.on || rt !== R || !w || !w.list.length || R.mons.filter(m => m.hp > 0).length > 1) return;
+    const A = wvAt(w); G.fx(R, { k: 'ring', x: A[0], y: A[1], r: 1.6, col: '#ff6a4a', t: 2.4 }); G.fx(R, { k: 'text', x: A[0], y: A[1] - 1.1, s: '!', col: '#ff6a4a', t: 1.6 }); };
   G.Turn.refill = (f, rt) => {
     const w = R?.wave; if (!FIGHT.on || rt !== R || !w || !w.list.length || !R.party.some(p => !p.dead && p.hp > 0)) return false;
     const us = w.list.shift(), boss = w.node.type === 'boss' && !w.list.length; w.i++;
-    const live = R.party.concat(R.mons.filter(m => m.hp > 0)), cells = st.map._lay.room[w.node.id].cells.map(FL.tile).filter(([x, y]) => !live.some(e => Math.abs(e.x - x) < 1 && Math.abs(e.y - y) < 1)), L = lead();
-    const ms = G.Encounter.spawnRoom(R, cells.length ? cells : st.map._lay.room[w.node.id].cells.map(FL.tile), us, { x: L.x, y: L.y }, { boss });
+    const cells = wvCells(w), A = wvAt(w); w.A = null; // 무리마다 자리를 새로 (그때 영웅 자리에서)
+    const ms = G.Encounter.spawnRoom(R, cells, us, { x: A[0], y: A[1] }, { boss });
     for (const m of ms) { wvMark(m); G.fx(R, { k: 'text', x: m.x, y: m.y - 1.1, s: '!', col: '#ffd45a', t: 0.8 }); } G.Story.heat(f, ms); G.Lore.meet(f, R, ms);
     return ms.length > 0;
   };

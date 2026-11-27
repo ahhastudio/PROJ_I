@@ -196,7 +196,9 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
     t('설계서 층: 모든 방이 입구에서 걸어서 닿는다 (타일 수준)', !bad.length, bad.slice(0, 5).join(' ')); }
   { const m1 = RUN.gen.make(5151, 1), b1 = m1.nodes.find(n => n.type === 'boss'), SP0 = RUN.SPECS; RUN.SPECS = undefined; const base = RUN.gen.make(5151, 1).nodes.find(n => n.type === 'boss'); RUN.SPECS = SP0;
     t('1층 적 구성 덮어쓰기: 방마다 거대 쥐 1 · 고블린 1 · 우두머리 홉고블린 1 (기존 게임은 구역 표 그대로)', m1.nodes.filter(n => n.hostile && n.type === 'fight').every(n => n.g.count === 1) && b1.g.units[0][0] === '홉고블린' && b1.g.count === 1 && base.g.units[0][0] !== '홉고블린', JSON.stringify([b1.g.units, base.g.units])); }
-  t('부활: 3레벨 미만은 0', (() => { const s5 = D.fresh(); G.newState(); s5.roster.dragoon = { m: D.member(G.S.w.fantasy, 'dragoon', 2), tr: [] }; return D.reviveCost(s5, 'dragoon') === 0 && (s5.roster.dragoon.m.lv = 3, D.reviveCost(s5, 'dragoon') === 75); })());
+  { const s5 = D.fresh(); s5.start2 = null; G.newState(); const F5 = G.S.w.fantasy, a = D.addHero(s5, D.member(F5, 'dragoon', 3)), b = D.addHero(s5, D.member(F5, 'cleric', 3)); s5.party = [a, b]; s5.form = { [a]: ['f', 0] };
+    D.bury(s5, [a]); t('영구 사망: 명단 · 파티 · 진형에서 지우고 묘비에 남긴다 · 부활은 없다', !s5.roster[a] && s5.party.join() === b && !s5.form[a] && s5.fallen.length === 1 && s5.fallen[0].cls === 'dragoon' && !D.reviveCost && !D.raise);
+    D.bury(s5, [b]); D.ensure(s5, F5); t('명단이 다 비면 신참 1성 둘', D.heroes(s5).length === 2 && D.heroes(s5).every(h => s5.roster[h].m.star === 1) && D.team(s5).length === 2, D.heroes(s5).join()); }
   // 옛 저장: 1 · 2층 기억 · 경로만 비운다
   const o = D.load(JSON.stringify({ v: 3, gold: 5, maps: { 1: { n: '4', e: '' }, 2: { n: '4', e: '' }, 3: { n: '44', e: '' } }, plan: { 1: [0, 1], 3: [0, 2] } }));
   t('옛 저장(지도 판 2 전): 모든 층의 지도 기억 · 경로를 비우고(작은 방으로 지도가 바뀌었다) 나머지는 그대로', !o.maps[1] && !o.maps[2] && !o.maps[3] && !o.plan[1] && !o.plan[3] && o.gold === 5 && o.fv === D.FV && D.load(D.dump(o)).fv === D.FV);
@@ -205,12 +207,9 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 
 // 죽음의 값 · 파티 짐 (2026-11-23)
 { const F = (G.newState(), G.S.w.fantasy), s = D.fresh(); s.roster.dragoon = { m: D.member(F, 'dragoon', 6), tr: [] }; s.roster.cleric = { m: D.member(F, 'cleric', 4), tr: [] }; s.up.cls = 1; s.party = ['dragoon', 'cleric'];
-  s.dead.dragoon = true; t('사망한 영웅은 파티에서 빠진다 · 넣을 수 없다', !D.team(s).includes('dragoon') && (D.toggle(s, 'dragoon'), !D.team(s).includes('dragoon')));
-  s.gold = 100; const c = D.reviveCost(s, 'dragoon'); t('부활 값 = 25 × 레벨', c === D.TUNE.REVIVE_K * 6 && c === 150);
-  D.raise(s, 'dragoon'); t('금화가 모자라도 부활 · 모자란 만큼 빚', !s.dead.dragoon && s.gold === -50);
+  s.gold = -50; // 빚 (옛 부활 빚이 남은 저장)
   t('빚이 있으면 해금을 못 산다', !D.buy(s, 'pot'));
   D.finish(s, 0, 80); t('버는 금화가 먼저 빚을 갚는다', s.gold === 30);
-  const all = D.fresh(); all.dead = { dragoon: true, cleric: true }; t('모두 죽었으면 빈 파티 (출발을 막는다)', D.team(all).length === 0);
   // 짐 칸: 기본 4 + 영웅마다 max(0, 힘 수정치) + 해금
   const sm = c0 => Math.max(0, D.strMod(s.roster[c0].m)), cap = D.TUNE.BAG_BASE + sm('dragoon') + sm('cleric');
   t('짐 칸 = 기본 + 힘 수정치 (+ 「짐 칸」 해금)', D.bagCap(s) === cap && (s.up.bag = 1, D.bagCap(s) === cap + D.TUNE.BAG_STEP), [D.bagCap(s), cap]);
@@ -276,7 +275,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   const sold = D.settleRun(s, st, f, false, []); t('살아 돌아오면 짐의 장비는 창고로 (팔지 않는다)', s.stash.length === 2 && sold === 0 && !st.loot.length);
   s.stash.length = D.STASH_CAP; s.stash.fill(E('it_weapon_1')); st.loot = [E('it_weapon_2')]; const sold2 = D.settleRun(s, st, f, false, []); t('창고가 차면 넘친 것은 반값에 판다', s.stash.length === D.STASH_CAP && sold2 > 0);
   st.loot = [E('it_weapon_2'), { gem: 'g', n: '보석', gold: 30, cnt: 1 }]; st.at = 6; D.settleRun(s, st, f, true, []); t('전멸하면 짐(보석까지)이 그 방 바닥에', D.dropsAt(s, st.floor, 6).length === 2);
-  const m = r.party[0].merc, t0 = G.Trinket.all(f).length; G.Trinket.all(f).push({ id: 999, k: 'it_weapon_1', lv: 3, on: m.uid }); st.died = { [m.uid]: 7 }; st.loot = []; D.settleRun(s, st, f, false, [m]); t('죽은 영웅이 낀 마법 물건은 쓰러진 방 바닥에', D.dropsAt(s, st.floor, 7).length === 1 && G.Trinket.all(f).length === t0);
+  const m = r.party[0].merc, t0 = G.Trinket.all(f).length; G.Trinket.all(f).push({ id: 999, k: 'it_weapon_1', lv: 3, on: m.uid }); st.died = { [m.uid]: 7 }; st.loot = []; D.settleRun(s, st, f, false, [m]); const dz = D.dropsAt(s, st.floor, 7); t('죽은 영웅의 장비 전부(마법 물건 + 기본 장비)가 쓰러진 방 바닥에 · 마법 무기가 든 칸의 기본 무기는 겹치지 않는다', dz.some(e => e.x?.t?.k === 'it_weapon_1') && dz.some(e => e.x?.kind === 'base' && e.x.e.slot === 'a') && !dz.some(e => e.x?.kind === 'base' && e.x.e.slot === 'w') && G.Trinket.all(f).length === t0, JSON.stringify(dz.map(e => e.x)));
   s.stash = [E('it_weapon_1')]; s.roster.dragoon = s.roster.dragoon || { m: D.member(G.S.w.fantasy, 'dragoon', 3), tr: [] }; const res = D.stashEquip(s, 'dragoon', 0);
   t('창고 → 영웅 (엔진 규칙대로) · 창고에서 빠지고 바꾼 무기가 창고로', res === true && !s.stash.some(e => e.x?.t?.k === 'it_weapon_1') && s.roster.dragoon.tr.some(q => q.k === 'it_weapon_1'), [res, JSON.stringify(s.stash).slice(0, 200), JSON.stringify(s.roster.dragoon.tr)]);
   const a0 = s.roster.dragoon.m.eq.a; D.stashUnequip(s, 'dragoon', 'a'); t('영웅 → 창고 (방어구 벗기 — 무기는 바꿔 들 뿐 벗지 않는다)', a0 && a0 !== 'none' && s.roster.dragoon.m.eq.a === 'none' && s.stash.some(e => e.x?.e?.k === a0), [a0, s.roster.dragoon.m.eq.a]);
@@ -558,6 +557,6 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   t('없는 영웅 · 고를 수 없는 스킬은 막는다', D.inherit(s2, to, fr, 'ln_parry') === '불가' && D.inherit(s2, lo, to, 'sr_cleave') === true && D.inherit(s2, to, ot, 'sr_rage') === '불가');
   // 옛 저장
   const old = D.member(F, 'paladin', 14), raw = JSON.stringify({ ...fresh1(), roster: { paladin: { m: { ...old, star: undefined, star0: undefined }, tr: [] }, rogue: { m: D.member(F, 'rogue', 3), tr: [] } }, party: ['paladin', 'rogue'], dead: { rogue: true }, form: { paladin: ['f', 0] }, start2: undefined }), s3 = D.load(raw), ids = D.heroes(s3);
-  t('옛 저장: 직업 열쇠 → 번호 열쇠 · 성급 = 레벨 ÷ 4 올림 · 파티 · 사망 · 진형도 번호로', ids.join() === 'h1,h2' && s3.roster.h1.m.star === 4 && s3.roster.h2.m.star === 1 && s3.party.join() === 'h1,h2' && s3.dead.h2 === true && s3.form.h1[0] === 'f' && !s3.start2, JSON.stringify([ids, s3.party, s3.dead, s3.form])); }
+  t('옛 저장: 직업 열쇠 → 번호 열쇠 · 성급 = 레벨 ÷ 4 올림 · 파티 · 진형도 번호로 · 예전 사망 표시는 지운다 (부활이 없어졌다)', ids.join() === 'h1,h2' && s3.roster.h1.m.star === 4 && s3.roster.h2.m.star === 1 && s3.party.join() === 'h1,h2' && !Object.keys(s3.dead).length && s3.form.h1[0] === 'f' && !s3.start2, JSON.stringify([ids, s3.party, s3.dead, s3.form])); }
 console.log(`dive_rules: 통과 ${ok} · 실패 ${bad}`);
 process.exit(bad ? 1 : 0);

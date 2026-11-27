@@ -119,8 +119,8 @@ G.Dive = (() => {
   const CAMP = [0, 30, 60, 100, 100];
   const BRANCH = [{ id: 'supply', n: '보급' }, { id: 'party', n: '원정대' }]; // 해금 갈래 (전술 갈래는 정해지면 — 2026-11-23)
   // ── 죽음의 값 · 파티 짐 (2026-11-23) — 시험값은 이 표 하나 ──
-  //   REVIVE_K: 부활 값 = 이것 × 레벨 · BAG_BASE: 짐 기본 칸 · BAG_STEP: 「짐 칸」 해금 한 단계 · SUP: 물자 하나 값(출발 때) · 힘 수정치(0 이상)만큼 영웅마다 칸이 는다
-  const TUNE = { REVIVE_FREE_LV: 3, REVIVE_K: 25, BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 3 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, FIT_W: 1, FIT_H: 1, PACE: 0.7, WAVE: { fight: 2, elite: 1.5, max: 4, pay: 1.2 },
+  //   BAG_BASE: 짐 기본 칸 · BAG_STEP: 「짐 칸」 해금 한 단계 · SUP: 물자 하나 값(출발 때) · 힘 수정치(0 이상)만큼 영웅마다 칸이 는다
+  const TUNE = { BAG_BASE: 4, BAG_STEP: 2, SUP: { torch: 5, camp: 3 }, RAID: 0.2, HIT: { pc: 5, mon: 3 }, SMALL_ROOMS: true, ROOM_TK: 3, FIT_ROOM: true, FIT_W: 1, FIT_H: 1, PACE: 0.7, WAVE: { fight: 2, elite: 1.5, max: 4, pay: 1.2 },
     VIEW_K: 0.87 }; /* VIEW_K: 작은 방 모드의 화면 배율 (2026-11-24 사용자: 「캐릭터는 조금 더 줄여야」 — 인형 45px → 39px쯤, 예전 전투 33px와의 사이) */ // SMALL_ROOMS: 작은 방 · PACE: ×1의 빠르기 배율 (2026-11-24 — 0.7 = 30% 느리게) // HIT: 원정의 명중 보정 (d20에 더함) — 실측 영웅 60% · 몬스터 40%라 빗나감이 절반이었다 (2026-11-24, 시험값) // 물자는 야영 물자 · 횃불 둘 (치유 물약은 원정에서 없앴다) · RAID: 안전하지 않은 방에서 야영할 때 이웃한 안 치운 적 무리마다 습격 확률 // 도둑 도구 · 열림 두루마리는 없앴다 (자물쇠 따기 = 로그의 스킬, 열림 = 주문 스킬)
   const SUP_KEYS = ['torch', 'camp']; // 계단 야영: 살아 있는 사람의 최대 체력 대비 회복 (4단계는 주문 슬롯 · 기술 횟수도 — 긴 휴식)
   const byId = id => TREE.find(t => t.id === id);
@@ -150,11 +150,11 @@ G.Dive = (() => {
   function addHero(s, m, tr = []) { const id = newHid(s); m.hid = id; s.roster[id] = { m, tr }; return id; }
   // 옛 저장 (직업 → 영웅): 영웅마다 번호를 주고 파티 · 사망 · 진형 기억도 번호로. 성급 = 레벨 ÷ 4 올림 (스킬 칸이 그대로 열려 있게). 영웅이 아직 없던 옛 저장은 앞의 두 직업으로 시작
   function migrate(s, o) {
-    if (heroes(s).some(k => !CLS.includes(k))) { if (s.start2) s.start2 = null; return; } // 이미 새 저장
+    if (heroes(s).some(k => !CLS.includes(k))) { if (s.start2 && heroes(s).length) s.start2 = null; s.dead = {}; return; } // 이미 새 저장 · 부활을 없앴으니 예전 사망 표시는 지운다 (그 영웅은 돌아온다)
     const old = Object.keys(s.roster).filter(k => CLS.includes(k)); if (!old.length) { if (!heroes(s).length && !s.start2) s.start2 = (o.party?.length ? o.party : o.order || CLS).filter(c => CLS.includes(c)).slice(0, 2); return; }
     const map = {}, R = {}; for (const [k, h] of Object.entries(s.roster)) { if (!CLS.includes(k)) { R[k] = h; continue; } const id = newHid(s); map[k] = id; h.m.hid = id; h.m.star = h.m.star0 = h.m.star || starOf(h.m.lv); h.m.inh = h.m.inh || {}; R[id] = h; }
     const re = (O, keep = v => v) => Object.fromEntries(Object.entries(O || {}).filter(([k, v]) => map[k] && keep(v)).map(([k, v]) => [map[k], v]));
-    s.roster = R; s.party = (s.party || []).map(k => map[k]).filter(Boolean); s.dead = re(s.dead, v => !!v); if (s.form) s.form = re(s.form); delete s.order; delete s.cls0; s.start2 = null;
+    s.roster = R; s.party = (s.party || []).map(k => map[k]).filter(Boolean); s.dead = {}; /* 부활을 없앴다: 예전 사망 표시는 지운다 */ if (s.form) s.form = re(s.form); delete s.order; delete s.cls0; s.start2 = null;
   }
   // 새 저장의 첫 두 영웅 (1성 · 1레벨 · 무작위 빌드): 엔진 세계가 있어야 사람을 만든다
   function ensure(s, f = G.S?.w?.fantasy, rng = Math.random) { if (heroes(s).length || !s.start2 || !f) return; for (const c of s.start2) addHero(s, JSON.parse(JSON.stringify(member(f, c, START_LV, rng, null, 1)))); s.party = heroes(s).slice(0, 2); delete s.start2; }
@@ -213,10 +213,11 @@ G.Dive = (() => {
   // 원정이 끝났다: cleared = 깬 층 (우두머리를 잡았으면 그 층, 아니면 0) · earned = 판에서 번 금화 (전멸해도 번 만큼은 들어온다) → 길드에 들어온 금화
   // min: 걸린 분 (있으면 정산용 기록에 — 최근 REC판)
   // start: 출발 층 · xp: 이번 판에 영웅 한 명이 번 평균 경험치 (정산용)
-  // 사망 · 부활: 부활 값 = REVIVE_K × 레벨. 금화가 모자라도 되살리고 모자란 만큼 빚(음수 금화) — 빚이 있으면 살 수 없고, 버는 금화가 먼저 빚을 갚는다
-  const reviveCost = (s, cls) => { const lv = s.roster[cls]?.m?.lv || START_LV; return lv < TUNE.REVIVE_FREE_LV ? 0 : TUNE.REVIVE_K * lv; }; // 3레벨 미만은 공짜
-  function raise(s, cls) { if (!s.dead?.[cls]) return false; s.gold -= reviveCost(s, cls); delete s.dead[cls]; return true; }
-  const deadList = s => Object.keys(s.dead || {}).filter(c => s.dead[c]);
+  // 영구 사망 (2026-11-27 영웅 모델 3번): 원정에서 죽은 영웅은 명단에서 사라진다 — 부활 없음. 장비는 쓰러진 방에 떨어진다 (settleRun). fallen = 묘비 (최근 FALLEN_N)
+  //   명단이 다 비면 길드가 신참 1성 둘을 보낸다 (새 저장과 같은 앞줄 + 다른 줄 — ensure가 세계가 선 뒤 만든다)
+  const FALLEN_N = 30;
+  function bury(s, ids) { for (const id of ids) { const m = s.roster[id]?.m; if (!m) continue; (s.fallen = s.fallen || []).push({ n: m.name, cls: m.cls, star: m.star || 1, lv: m.lv, floor: s.deep || 0, m: JSON.parse(JSON.stringify(m)) }); /* m = 명단 책의 사망 카드 */ delete s.roster[id]; if (s.form) delete s.form[id]; if (s.dead) delete s.dead[id]; }
+    s.party = (s.party || []).filter(h => s.roster[h]); if (s.fallen) s.fallen = s.fallen.slice(-FALLEN_N); if (!heroes(s).length) s.start2 = firstPair().start2; }
   // 짐: 칸 = 기본 + 해금 + 나가는 영웅마다 max(0, 힘 수정치). 물자(하나에 한 칸)와 원정 중 주운 장비 · 마법 물건(하나에 한 칸)이 같은 칸을 쓴다 — 금화는 칸을 쓰지 않는다
   const strMod = m => Math.floor(((m?.ab?.str ?? 10) - 10) / 2);
   const bagCap = (s, t = team(s)) => TUNE.BAG_BASE + step(s, 'bag') * TUNE.BAG_STEP + t.reduce((a, c) => a + Math.max(0, strMod(s.roster[c]?.m)), 0);
@@ -289,8 +290,15 @@ G.Dive = (() => {
   function settleRun(s, st, f, lose, deadMs) { let sold = 0; const gear = (st.loot || []).filter(e => !e.gem && e.x).concat((st.pend || []).filter(e => e.x));
     if (lose) floorDrop(s, st.floor, st.at, gear.concat((st.loot || []).filter(e => e.gem)));
     else { s.stash = s.stash || []; for (const e of gear) { if (s.stash.length < STASH_CAP) s.stash.push(e); else sold += e.gold || 0; } }
-    for (const m of deadMs) { const A = G.Trinket.all(f), mine = A.filter(t => t.on === m.uid); if (!mine.length) continue; const items = mine.map(t => entryOf(xDesc({ kind: 'magic', t }))); for (const t of mine) A.splice(A.indexOf(t), 1); floorDrop(s, st.floor, st.died?.[m.uid] ?? st.at, items); }
+    for (const m of deadMs) { const A = G.Trinket.all(f), mine = A.filter(t => t.on === m.uid), items = baseOf(f, m).concat(mine.map(t => entryOf(xDesc({ kind: 'magic', t })))); for (const t of mine) A.splice(A.indexOf(t), 1); if (items.length) floorDrop(s, st.floor, st.died?.[m.uid] ?? st.at, items); } // 죽은 영웅의 장비 전부(기본 장비 + 마법 물건) → 쓰러진 방 바닥
     st.loot = []; st.pend = []; return sold; }
+  // 죽은 영웅의 기본 장비 (마법 무기 · 갑옷 · 방패가 그 칸을 차지했으면 그것이 곧 그 칸이라 빼고): 무기 · 보조 손 무기 · 갑옷 · 방패
+  function baseOf(f, m) { const e = G.SRD.eq(m), h = G.Gear.held(f, m), W = G.SRD.WEAPON, L = [];
+    if (e.w && W[e.w] && e.w !== 'unarmed' && !(h.w && G.Gear.kindOf(h.w) === 'weapon')) L.push({ kind: 'base', e: { slot: 'w', k: e.w } });
+    if (e.w2 && W[e.w2]) L.push({ kind: 'base', e: { slot: 'w', k: e.w2 } });
+    if (e.a && e.a !== 'none' && G.SRD.ARMOR[e.a] && !h.a) L.push({ kind: 'base', e: { slot: 'a', k: e.a } });
+    if (e.shield && !h.s) L.push({ kind: 'base', e: { slot: 's', k: 'shield' } });
+    return L.map(entryOf); }
   // 그 방에 떨어진 것 (다음 판에 들어서면 짐으로)
   const dropsAt = (s, fl, room) => (s?.drops?.[fl] || []).find(q => q.room === room)?.items || [];
   function pickDrops(s, st) { const L = s?.drops?.[st.floor]; if (!L) return []; const i = L.findIndex(q => q.room === st.at); if (i < 0) return []; const got = L.splice(i, 1)[0].items; for (const e of got) bagAdd(st, e); if (got.length) st.log.push({ t: `떨어진 장비 ${got.length}개를 주웠다`, k: 'dv' }); return got; }
@@ -447,7 +455,7 @@ G.Dive = (() => {
     const k0 = G.Guild.onKill; G.Guild.onKill = function (f, rt, mo) { if (cur && mo) cur.gold += killGold(mo); if (curS && mo?.n) { const e = curS.dex.m[mo.n] = curS.dex.m[mo.n] || { met: 1, kill: 0 }; e.kill++; }
       const out = k0.apply(this, arguments); if (curS) for (const a of rt.party || []) if (a.merc) { if (G.Reward.pending(a.merc)) autoPick(a.merc); if (curS.cardOn === false) cardAuto(a.merc); } return out; }; // 레벨업 카드를 끄면 빌드대로 // 원정 중에만 저절로 고른다 (기존 게임은 레벨업 창)
     const sp0 = G.Fantasy.spawnMon; G.Fantasy.spawnMon = function () { const o = sp0.apply(this, arguments); if (curS && o?.n && loreIn(live.filter(Boolean))) affMark(curS, o.n); if (curS && o?.n) { const e = curS.dex.m[o.n] = curS.dex.m[o.n] || { met: 0, kill: 0 }; e.met++; } return o; }; // 도감: 그 방에 선 몬스터 = 만난 것
-    if (typeof RUN !== 'undefined') { RUN.SPECS = SPECS; RUN.FIXDOORS = true; RUN.X = XRUN; RUN.SMALL = TUNE.SMALL_ROOMS; RUN.COMPACT = TUNE.SMALL_ROOMS; } // SMALL: 작은 방 (폰 화면 — 줌아웃 없이 전투 방이 들어오게) // 설계서 · 문 잇기 · 탐험 판정(영웅 수치)은 원정 페이지에서만 // 설계서 · 문 잇기는 원정 페이지에서만
+    if (typeof RUN !== 'undefined') { RUN.SPECS = SPECS; RUN.FIXDOORS = true; RUN.X = XRUN; RUN.SMALL = TUNE.SMALL_ROOMS; RUN.TK = TUNE.ROOM_TK; RUN.COMPACT = TUNE.SMALL_ROOMS; } /* 2026-11-28 사용자: 전투방이 작다 — 작은 방의 칸 수는 그대로, 1칸 = 2×2 → 3×3 타일(ROOM_TK): 10~14타일 방 → 15~21 */ // SMALL: 작은 방 (폰 화면 — 줌아웃 없이 전투 방이 들어오게) // 설계서 · 문 잇기 · 탐험 판정(영웅 수치)은 원정 페이지에서만 // 설계서 · 문 잇기는 원정 페이지에서만
     // 원정 화면의 떠오르는 글자: 피해 숫자(치명타 포함) · 빗나감 · 회복 · 레벨 업 · 면역 · 저항 · 약점만 (버프 · 「방에 들어선다!」 · 「차례를 넘긴다」 · 금화 · 경계 표시 ! ?는 띄우지 않는다)
     // 겹침은 화면 쪽(render/fxlayer.js)이 화면 픽셀로 쌓아 푼다 (여기서 칸을 밀면 많이 맞을수록 숫자가 적에게서 멀어졌다)
     const fx0 = G.fx; G.fx = function (rt, o) {
@@ -841,5 +849,5 @@ G.Dive = (() => {
   function evOut(evId, choiceName) { const ev = RUN.EVENTS.find(x => x.id === evId); if (!ev) return { ok: [], no: [] }; const o = ev.opts.find(q => choiceName === q.n || choiceName.endsWith(`] ${q.n}`)); if (!o) return { ok: [], no: [] };
     const f = r => (!r ? [] : [r.gold ? `금화 +${r.gold}` : '', r.ally ? '동료 +1' : '', r.healAll ? `체력 +${r.healAll}` : '', r.hurt ? `체력 −${r.hurt}` : '', r.fight ? '싸움' : '', r.mapPiece || r.revealRow || r.scoutAhead ? '지도' : '', r.bless ? '가호' : '', r.curse ? '저주' : '', r.warn || r.alert ? '경보' : ''].filter(Boolean));
     return { ok: f(o.ok), no: o.sk ? f(o.no) : [], cost: o.cost || 0 }; }
-  return { DEP, depZone, depForm, depSave, restCost, REST, REST_CAMP, CAMP_FREE, STASH_CAP, gearBan, bagAdd, bagDrop, bagEquip, bagUnequip, settleRun, dropsAt, xInfo, fitOf, stashWorn, stashFit, pickDrops, stashEquip, stashUnequip, stashSell, entryOf, KNACK, knacksOf, rollXsp, known, learn, KEYUSE, STATE, stateOf, passInfo, gateShut, USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, drawState, segPts, reward, SPECS, FV, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, heroes, teamCls: s => team(s).map(h => s.roster[h]?.m?.cls || h), camp, speeds, kit, team, toggle, bonus, bonusTo, starts, startFloor, reach, routes, toBoss, floorSeed, remember, recall, explored, view, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, POL, STAR_MAX, ROSTER_CAP, maxLv, starOf, addHero, ensure, migrate, BOARD, BIG_K, BIG_N, SMALL_N, FEE, FEE_LV, postCost, fee, post, canHire, hire, isLine, inheritOpts, inherit };
+  return { DEP, depZone, depForm, depSave, restCost, REST, REST_CAMP, CAMP_FREE, STASH_CAP, gearBan, bagAdd, bagDrop, bagEquip, bagUnequip, settleRun, dropsAt, xInfo, fitOf, stashWorn, stashFit, pickDrops, stashEquip, stashUnequip, stashSell, entryOf, KNACK, knacksOf, rollXsp, known, learn, KEYUSE, STATE, stateOf, passInfo, gateShut, USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, bury, FALLEN_N, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, drawState, segPts, reward, SPECS, FV, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, heroes, teamCls: s => team(s).map(h => s.roster[h]?.m?.cls || h), camp, speeds, kit, team, toggle, bonus, bonusTo, starts, startFloor, reach, routes, toBoss, floorSeed, remember, recall, explored, view, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, POL, STAR_MAX, ROSTER_CAP, maxLv, starOf, addHero, ensure, migrate, BOARD, BIG_K, BIG_N, SMALL_N, FEE, FEE_LV, postCost, fee, post, canHire, hire, isLine, inheritOpts, inherit };
 })();
