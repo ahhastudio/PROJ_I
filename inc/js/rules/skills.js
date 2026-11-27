@@ -51,12 +51,13 @@ G.Skill = (() => {
     resOf: k => SK[k]?.res || AUTO_RES[k] || null,
     // 쿨타임 (2026-11-21, 사용자: 「쿨타임이나 시너지 넣는 거는 좋아」): SK[k].cd 라운드 — 쓴 라운드에서 cd 라운드 뒤에 다시. 전투가 바뀌면 처음부터
     cdLeft: (rt, a, k) => { const S = SK[k], u = a.cdU?.[k]; if (!S?.cd || !u || u.st !== rt?.turn) return 0; return Math.max(0, u.r + S.cd - rt.turn.round); },
+    cdStart: (rt, a, k) => { if (SK[k]?.cd && rt.turn) (a.cdU = a.cdU || {})[k] = { st: rt.turn, r: rt.turn.round }; }, // 쿨타임 시작 (이 전투의 이 라운드) — 원정은 이 둘을 제 시계로 바꾼다 (js/game/dive.js cdHook)
     desc(m, k) { const S = D.MSKILLS[k], R0 = Sk.resOf(k); const kd = Sk.kindOf(k); return `${kd === '늘 적용' || kd === '탐험' ? '' : `[${kd}] `}${Sk.text(m, k)}${R0 ? ` · ${G.Res.usesOf(m, R0, k)}번` : ''}`; },
     // 지금 그 기술을 쓸 수 있나 (차례 계획이 후보를 고를 때 — tick과 같은 검사, 부작용 없이). slotOk = 이번 차례 슬롯 주문은 이것 하나 (행동이 슬롯을 안 쓴다)
     usable(f, rt, a, k, seen, kind, slotOk, swapConc) { // swapConc = 집중 중이어도 후보로 (갈아탈지는 계획이 값으로 정한다)
       const S = SK[k]; if (!S || S.rider || !a.merc) return false; const quick = kind !== 'action' && S && !S.bonus && S.res?.slot && G.Opt.can(a, 'sr_quicken');
       if (kind === 'free' ? !S.free : S.free) return false; if (kind !== 'free' && (!!S.bonus !== (kind === 'bonus') && !quick)) return false;
-      if (S.cd && Sk.cdLeft(rt, a, k) > 0) return false; // 쿨타임 (라운드)
+      if (Sk.cdLeft(rt, a, k) > 0) return false; // 쿨타임 (라운드)
       if (!G.Res.can(a.merc, k, S.res)) return false; if (S.res?.slot && (a.slotUsed || (kind === 'bonus' && !slotOk))) return false;
       if (S.conc && a.concK && !G.Res.concSpent(a) && !swapConc) return false; if (a.wild && S.res?.slot && !G.Guild.skill(a.merc, 'ft_beastsp')) return false;
       const reach = D.SK_RANGE[k], x = { f, rt, c: a, reach, base: S.base, seen: reach == null ? seen : seen.filter(o => G.Opt.inReach(a, rt, o, reach)) };
@@ -109,7 +110,7 @@ G.Skill = (() => {
         if (ran === false) continue;
         if (G.Dnd.acted) G.Dnd.acted(a); // 운명판: 주사위가 없는 행동(강화 · 보호)도 그 라운드의 칸을 쓴다
         G.Res.pay(a.merc, k, S.res);
-        if (S.cd && rt.turn) (a.cdU = a.cdU || {})[k] = { st: rt.turn, r: rt.turn.round }; // 쿨타임 시작 (이 전투의 이 라운드)
+        Sk.cdStart(rt, a, k);
         if (S.res?.slot) a.slotUsed = true;
         if (bonus === 'free') { (a.freeDone = a.freeDone || {})[k] = 1; } else if (bonus) { a.lastBonus = k; if (P) P.bonusDone = true; } else a.lastSk = k;
         if (!G.quiet && rt.turn) { (a.skLog = a.skLog || []).push(k); G.SkillFx.cast(rt, a, k, x.seen, fx0); } // 쓰는 순간: 이름 + 아이콘 번쩍임 (그리는 쪽이 꺼내 간다)

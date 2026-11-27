@@ -12,10 +12,9 @@ function frame(tt) {
   if (r.map?.redraw) { r.map.redraw = false; win.map = null; }
   if (win.map !== r.map) { fxLive.length = 0; for (const P of r.map.props || []) { P._fx = null; P._zz = null; P._zzOn = false; P._cand = null; } const b0 = now(); bakeFloor(r.map); bake0 = now() - b0; canvas.style.transition = 'none'; canvas.style.opacity = 0; requestAnimationFrame(() => requestAnimationFrame(() => { canvas.style.transition = 'opacity .35s'; canvas.style.opacity = 1; })); for (const e of r.party.concat(r.mons)) { e._rx = e._dx = e.x; e._ry = e._dy = e.y; e._ldx = e.x; e._ldy = e.y; } const c0 = camFor(ref.x, ref.y); cam.x = c0[0]; cam.y = c0[1]; }
   // 싸울 때는 싸우는 사람들 가운데를, 아니면 파티 가운데를 본다
-  // 원정 모드의 전투: DIVEUI.camAt이 고른 자리(행동하는 사람이 화면 가장자리 20% 밖으로 나갈 때만 옮긴다)로, 이동 속도 상한을 두고 따라간다
-  const dc = r.turn && typeof DIVEUI !== 'undefined' && DIVEUI.on ? DIVEUI.camAt(r) : null, hf = typeof DIVEUI !== 'undefined' && DIVEUI.on && DIVEUI.follow ? DIVEUI.follow(r) : null; // hf: 원정의 직접 조종 — 조종 영웅을 늘 가운데 (탐험 · 전투, 표시 위치 기준)
-  if (hf) { const c1 = camFor(hf[0], hf[1]), k = 1 - Math.exp(-dt * 12); cam.x += (c1[0] - cam.x) * k; cam.y += (c1[1] - cam.y) * k; }
-  else if (dc) { const c1 = camFor(dc[0], dc[1]), k = 1 - Math.exp(-dt * 3.2); let mx = (c1[0] - cam.x) * k, my = (c1[1] - cam.y) * k; const l = Math.hypot(mx, my), cap = 160 * dt; if (l > cap) { mx *= cap / l; my *= cap / l; } cam.x += mx; cam.y += my; }
+  // 원정 모드: DIVEUI.camAt이 고른 자리(방에 있는 동안은 그 방 가운데 — 들어섬 · 배치 · 전투 · 문 고르기가 한 틀)로, 이동 속도 상한을 두고 따라간다
+  const dc = typeof DIVEUI !== 'undefined' && DIVEUI.on ? DIVEUI.camAt(r) : null;
+  if (dc) { const c1 = camFor(dc[0], dc[1]), k = 1 - Math.exp(-dt * 3.2); let mx = (c1[0] - cam.x) * k, my = (c1[1] - cam.y) * k; const l = Math.hypot(mx, my), cap = (r.turn ? 160 : 600) * dt; /* 전투 중에는 천천히 · 방에 들어설 때는 배치 전에 방이 다 보이게 빨리 */ if (l > cap) { mx *= cap / l; my *= cap / l; } cam.x += mx; cam.y += my; }
   else { const list = (r.turn ? r.turn.order.map(x => x.e).filter(e => e.kind !== 'mon' ? !e.dead : r.mons.includes(e)) : r.party.filter(p => !p.dead)); let ax = 0, ay = 0, n0 = 0; for (const e of list) { ax += e.x; ay += e.y; n0++; } if (n0) { const c1 = camFor(ax / n0, ay / n0), k = 1 - Math.exp(-dt * 3.2); cam.x += (c1[0] - cam.x) * k; cam.y += (c1[1] - cam.y) * k; } }
   syncFog(r); copyView(); if (VOXON) VOX.light(r, t); /* 복셀 층: 파티 둘레만 빛 */
   if (win.map === r.map) document.body.dataset.floor = 'ready';
@@ -25,7 +24,7 @@ function frame(tt) {
     settle(r, dt);
     const recs = r.mons.concat(r.party).map(e => prep(e, r, t, dt)).filter(Boolean);
     flushShadow(); applyShadows(bakedZ); shadeEdges(); HDBG.mark(1); // 그림자까지
-    drawRange(r); drawTele(r); drawAim(r, t); stepFx(dt); paintFx(true); HDBG.mark(2); // 바닥 이펙트(횃불 빛)까지
+    drawRange(r); drawAim(r, t); stepFx(dt); paintFx(true); HDBG.mark(2); // 바닥 이펙트(횃불 빛)까지
     for (const R0 of QPX.corpses(r, recs)) drawRec(R0, t);
     for (const R0 of recs) drawRec(R0, t);
     if (MINI_ON) MD.snap();

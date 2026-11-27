@@ -194,15 +194,6 @@ function floorCell(r, k, c, a, edge) {
     pix[i] = rgb(lerp(d & 255, c[0], u), lerp(d >> 8 & 255, c[1], u), lerp(d >> 16 & 255, c[2], u));
   }
 }
-// 적의 예고 동작 (실시간 — G.MonAct가 r.tele에 둔다): 맞을 칸을 바닥에만 붉게, 차오를수록 진하게. 한 사람을 노린 것은 그 사람이 선 칸
-//   (2026-11-25 사용자: 「예고는 바닥에만 보이게 해야지. 인형 아래에 깔리게」 — 전에는 무대 SVG라 인형 위에 덮였다)
-const OV_TELE = [235, 60, 50];
-function drawTele(r) {
-  const L = r.turn && r.tele; if (!L || !L.length) return; const w = r.map.w, done = new Map();
-  for (const q of L) { const k = Math.min(1, 1 - Math.max(0, q.t) / (q.T || 1)), cells = q.cells || (q.tg ? [[q.tg._dx ?? q.tg.x, q.tg._dy ?? q.tg.y]] : []);
-    for (const [x, y] of cells) { const id = Math.round(y) * w + Math.round(x); if ((done.get(id) || 0) < k) done.set(id, k); } } // 겹치는 칸은 한 번만 (가장 찬 것으로)
-  for (const [id, k] of done) { const a = .14 + .42 * k; floorCell(r, id, OV_TELE, a, Math.min(.95, a + .3)); }
-}
 function drawRange(r) {
   const ov = r.turn && r.turn.ov; if (!ov) return;
   const cell = (k, c, a, edge) => floorCell(r, k, c, a, edge);

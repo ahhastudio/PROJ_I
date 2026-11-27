@@ -4,7 +4,7 @@
 // - 탐사가 묻는 곳은 CRAWL.policy(G.Dive.POL + 여기의 기다림 · 끝 · 계단)가 고른다. 플레이어가 누르는 것은 배속 · 「돌아가기」뿐.
 // - 운명판 칸(side.js) · 위 바(hud.js) 대신 이 파일의 바 (층 · 구역 · 금화 · 물자 · 파티 체력).
 // - 방치형으로 켜 두기 (2026-11-22): 「작은 창으로」(팝업) · 자리를 비운 동안의 정산(G.Dive.settle — 다시 열 때 · 창이 다시 보일 때) · 도감 · 자동 재출발 기본 켬.
-// - 시험용 주소: ?save=max (트리를 다 연 저장 + 파티 넷 · ?lv=N 레벨, 기본 14) · ?save=new (새 저장) · ?go=1 (바로 출발) · ?floor=N (그 층에서 시작 — crawl.js)
+// - 시험용 주소: ?save=max (트리를 다 열고 9층까지 깬 저장 + 파티 다섯 · ?lv=N 레벨, 기본 14) · ?save=new (새 저장) · ?go=1 (바로 출발) · ?floor=N (그 층에서 시작 — crawl.js)
 const DIVEUI = (() => {
   // 전체 화면 (2026-11-25 사용자: 「가로모드테스트하려니까 인터넷주소창때문에 스마트폰 전체화면으로 못하네」): 지원하는 브라우저(안드로이드 크롬 등)에서만 단추가 보인다 — 누르면 전체 화면 + 가로 고정.
   // 아이폰 사파리는 이 기능이 없어 「홈 화면에 추가」로 연다 (dive.html의 manifest · apple-mobile-web-app-capable). 이미 그렇게 열렸으면 단추를 숨긴다
@@ -25,7 +25,7 @@ const DIVEUI = (() => {
     S = get();
     if (q.get('save') === 'new') S = D.fresh();
     D.hook(); // 5~10층 구역 · 경험치 배율 · 레벨업 저절로 (층을 세우기 전에)
-    if (q.get('save') === 'max') { for (const t of D.TREE) S.up[t.id] = t.cost.length; S.party = ['dragoon', 'cleric', 'mage', 'paladin']; S.deep = 9; G.newState(); for (const c of S.party) S.roster[c] = { m: D.member(G.S.w.fantasy, c, +q.get('lv') || 14), tr: [] }; }
+    if (q.get('save') === 'max') { for (const t of D.TREE) S.up[t.id] = t.cost.length; S.party = ['dragoon', 'cleric', 'mage', 'paladin', 'rogue']; S.deep = 9; G.newState(); for (const c of S.party) S.roster[c] = { m: D.member(G.S.w.fantasy, c, +q.get('lv') || 14), tr: [] }; }
     if (q.get('save')) put(S);
     if (!G.S?.w) G.newState(); // 정산의 레벨업이 엔진 상태를 읽는다 (세계는 아래 D.world가 새로 세운다)
     away = D.settle(S, Date.now()); put(S); // 자리를 비운 동안의 정산 (1분 미만이면 0 — 원정마다 화면을 다시 여는 사이)
@@ -36,7 +36,7 @@ const DIVEUI = (() => {
   function attach(r) {
     R = r; on = true; document.body.classList.add('dive'); if (typeof setZoom === 'function') setZoom(HUD.zoom(false), true); watch(); if (away?.gold) awayBox(away);
     if (!run) { FXUI.attach(R); PMAP.hide(); return guild(); }
-    CRAWL.policy = { ...D.POL, waves: D.waves, routeWin, wantRest: st => D.wantCamp(S, st), chest: k => chestShow(k), tap: ev => handTap(ev), busy: () => !!$('dv-card') || !!$('dv-ev') || !!$('dv-fork') || gateBusy(), event: (st, sc) => D.evDecide(S, st, sc), eventWin: (st, sc, pick) => evWin(st, sc, pick), wait: () => 1500 / spd(), end: finish, note, seed: fl => D.floorSeed(S, fl), leave: st => { D.remember(S, st); }, descend: st => D.descend(st, S, G.Party.members(G.S.w.fantasy)) };
+    CRAWL.policy = { ...D.POL, waves: D.waves, routeWin, slots: (Z, ps) => D.depForm(S, ps, Z), deploy: depWin, wantRest: st => D.wantCamp(S, st), chest: k => chestShow(k), busy: () => !!$('dv-card') || !!$('dv-ev') || !!$('dv-fork') || gateBusy(), event: (st, sc) => D.evDecide(S, st, sc), eventWin: (st, sc, pick) => evAuto(st, sc, pick), wait: () => 1500 / spd(), end: finish, note };
     PMAP.view = st => D.drawState(S, st); // 원정 중 지도 = 지도 기억 + 이번 판
     PMAP.render = (box, st, big) => { if (!box) return; box.querySelector('#pmap')?.style.setProperty('display', 'none'); let w = box.querySelector('.dvpmw'); if (!w) { w = document.createElement('div'); w.className = 'dvpmw'; box.append(w); const t = document.createElement('b'); t.className = 'dvpm-t'; box.append(t); }
       const V = D.drawState(S, st), ex = D.explored(S, st.floor); box.querySelector('.dvpm-t').textContent = `${RUN.zone(st.floor).n} · ${st.floor}층${ex ? ` · 탐사 ${ex[0]}/${ex[1]}` : ''}`; // 큰 지도 머리는 칸 밖(위)에 따로
@@ -47,7 +47,7 @@ const DIVEUI = (() => {
       const xs = cs.map(c => c[0]), ys = cs.map(c => c[1]); let x0 = M6 + (Math.min(...xs) - 2) * T13, y0 = M6 + (Math.min(...ys) - 4) * T13, w = (Math.max(...xs) - Math.min(...xs) + 4) * T13, h = (Math.max(...ys) - Math.min(...ys) + 6) * T13;
       const ar = (svg.clientWidth || 1) / (svg.clientHeight || 1); if (w / h < ar) { const nw = h * ar; x0 -= (nw - w) / 2; w = nw; } else { const nh = w / ar; y0 -= (nh - h) / 2; h = nh; }
       return `${x0.toFixed(1)} ${y0.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`; };
-    CRAWL.attach(r); D.outfit(CRAWL.st, R, S); handInit(); zoomInit(); dragInit(); run.lv0 = Object.fromEntries(Object.entries(S.roster).map(([c, h]) => [c, h.m.lv])); run.lootN = 0; run.skills = []; run.seen = snap();
+    CRAWL.attach(r); D.outfit(CRAWL.st, R, S); zoomInit(); run.lv0 = Object.fromEntries(Object.entries(S.roster).map(([c, h]) => [c, h.m.lv])); run.lootN = 0; run.skills = []; run.seen = snap();
     run.team = R.party.filter(p => p.merc).map(p => p.merc.cls); run.xp0 = Object.fromEntries(run.team.map(c => [c, D.totalXp(S.roster[c]?.m || {})])); run.sup0 = { torch: CRAWL.st.items.torch || 0, camp: CRAWL.st.items.camp || 0 }; // 결과 보고서의 기준
     document.body.dataset.dive = 'run'; put(S); // 명단에 새로 들인 영웅 · 도감의 빌드
   }
@@ -56,16 +56,16 @@ const DIVEUI = (() => {
     if (run.over) return; run.over = true; $('dv-ev')?.remove();
     const min = Math.round((performance.now() - run.t0) / 6000) / 10;
     D.remember(S, st);
-    const maps = []; for (let fl = run.start; fl <= st.floor; fl++) { const ex = D.explored(S, fl); if (ex) maps.push([fl, ex[0], ex[1], ex[0] - (run.ex0[fl] || 0), run.blk[fl] || 0]); } // 층별 탐사 (새로 밝힌 수 · 막힌 잠긴 문)
+    const ex1 = D.explored(S, st.floor), maps = ex1 ? [[st.floor, ex1[0], ex1[1], ex1[0] - (run.ex0[st.floor] || 0), run.blk[st.floor] || 0]] : []; // 이 층의 탐사 (새로 밝힌 수 · 막힌 잠긴 문) — 한 판 = 한 층
     logPoll(); S.lastLog = (run.log || []).slice(-200); // 지난 판 로그 (길드에서 지난 판 결과를 펼치면)
     // 사망: 엔진에서 죽은(dead) 영웅 · 전멸이면 전원. 살아 돌아오면 짐 속 전리품이 금화, 전멸하면 잃는다
     const lose = st.done === 'lose', deadC = lose ? D.team(S) : R.party.filter(p => p.merc && p.dead).map(p => p.merc.cls);
     for (const c of deadC) S.dead[c] = true;
     const loot = (st.loot || []).filter(e => !e.dropped), lootG = lose ? 0 : D.lootGold(st), gemN = loot.filter(e => e.gem).reduce((a, e) => a + (e.cnt || 1), 0);
-    const f = G.S.w.fantasy, xp = D.bank(S, f), ups = Object.entries(S.roster).filter(([c, h]) => h.m.lv > (run.lv0[c] || 0)).map(([c, h]) => [h.m.name, run.lv0[c], h.m.lv]), won = st.done === 'win', cleared = won ? D.LAST : st.floor - 1, earned = st.gold - (st.gold0 ?? 0) + lootG, deep0 = S.deep, g = D.finish(S, cleared, earned, min, run.start, xp); S.seen = Date.now(); put(S);
+    const f = G.S.w.fantasy, xp = D.bank(S, f), ups = Object.entries(S.roster).filter(([c, h]) => h.m.lv > (run.lv0[c] || 0)).map(([c, h]) => [h.m.name, run.lv0[c], h.m.lv]), won = st.done === 'win', cleared = won ? st.floor : 0, /* 한 판 = 한 층: 우두머리를 잡았으면 그 층을 깼다 · 못 잡았으면 깬 층 없음 */ earned = st.gold - (st.gold0 ?? 0) + lootG, deep0 = S.deep, g = D.finish(S, cleared, earned, min, run.start, xp); S.seen = Date.now(); put(S);
     document.body.dataset.dive = won ? 'won' : 'result'; document.body.dataset.diveMin = min;
     const items = D.LOOT.filter(e => e.r >= 1).map(e => ({ ...e }));
-    const res = { maps, items, skills: run.skills.slice(), won, how: won ? '붉은 성룡을 쓰러뜨렸다' : st.done === 'lose' ? '전멸' : '귀환', start: run.start, floor: st.floor, g, earned: Math.max(0, earned), bonus: D.bonusTo(cleared, run.start), min, ups, best: cleared > deep0, lootN: loot.filter(e => !e.gem).length, gemN, lootG, lost: lose && loot.length > 0,  deadN: deadC.length };
+    const res = { maps, items, skills: run.skills.slice(), won, how: won ? (st.floor >= D.LAST ? '붉은 성룡을 쓰러뜨렸다' : '승리') : st.done === 'lose' ? '전멸' : '귀환', start: run.start, floor: st.floor, g, earned: Math.max(0, earned), bonus: D.bonusTo(cleared, run.start), min, ups, best: cleared > deep0, lootN: loot.filter(e => !e.gem).length, gemN, lootG, lost: lose && loot.length > 0,  deadN: deadC.length };
     // 결과 보고서 (2026-11-23): 끝난 이유 · 얻은 것 · 잃은 것 · 쓴 물자 · 영웅마다 레벨 · 경험치 · 피해 · 회복 · 처치 (집계는 D — st.stat)
     const stt = st.stat || { h: {}, fights: 0, foes: 0 }, fin = R.party.filter(p => p.merc), gemL = {};
     for (const e of loot.filter(e => e.gem)) { const q = gemL[e.n] = gemL[e.n] || [e.n, 0, e.gold, e.gem]; q[1] += e.cnt || 1; }
@@ -75,7 +75,6 @@ const DIVEUI = (() => {
       rev: deadC.map(c => [S.roster[c]?.m?.name || clsN(c), D.reviveCost(S, c)]), gold: S.gold, chest: run.chest || null, fights: stt.fights, foes: stt.foes,
       heroes: (run.team || []).map(c => { const m = S.roster[c]?.m || {}, q = stt.h[c] || {}, p = fin.find(x => x.merc.cls === c); return { c, n: m.name || clsN(c), lv0: run.lv0[c] || m.lv, lv1: m.lv, xp: Math.max(0, Math.round(D.totalXp(m) - (run.xp0?.[c] || 0))), dmg: Math.round(q.dmg || 0), took: Math.round(q.took || 0), heal: Math.round(q.heal || 0), kills: q.kills || 0, downs: q.downs || 0, tk: q.tk || null, dead: !!S.dead[c], down: !!p?.dead && !S.dead[c] }; }) };
     S.lastRep = res.rep; put(S);
-    // 성룡을 잡아도 길드로 (자동 재출발은 계속)
     const go = S.autoOn && !(deadC.length && S.deadStop) && D.team(S).length; // 사망자가 있으면 자동 재출발을 멈춘다 (설정으로 끌 수 있다 — 끄면 남은 사람끼리)
     cd = go ? { res, n: WAIT, stop: false } : { res, n: 0, stop: true, why: deadC.length ? 'dead' : '' }; post = { rep: res.rep, auto: !!go, used: false }; step = 'map'; /* 돌아오면 지도에 밝힌 방부터 그린다 → 보고서 → 길드 */ guild(); setTimeout(() => { if (post && !post.used) postDone(); }, 500); // 지도 그리기 연출(pixMap — 길드 지도는 틀이 자리 잡은 뒤에 그린다)이 끝나면 보고서 · 카운트다운 — 연출이 없으면 곧바로
   }
@@ -87,7 +86,7 @@ const DIVEUI = (() => {
   const WHY = { lose: ['skull', '전멸', ''], win: ['crown', '용 처치', ''], plan: ['target', '귀환', '경로 완주'], full: ['chest', '귀환', '짐 가득'], risk: ['warn', '귀환', '파티 위험'], quit: ['x', '귀환', '직접'], back: ['down', '귀환', ''] };
   const repCnt = () => { const b = $('dv-rep')?.querySelector('.rp-go'); if (b) b.textContent = cd && !cd.stop && cd.n > 0 ? `다시 출발 ${cd.n}` : '다시 출발'; };
   function repWin(r, now) {
-    if (!r) return; const box = panel('dv-rep'), w = WHY[r.why] || WHY.back, hs = r.heroes || [], top = k => Math.max(1, ...hs.map(h => h[k]));
+    if (!r) return; const box = panel('dv-rep'), w = r.why === 'win' && r.floor < D.LAST ? ['crown', '승리', ''] : WHY[r.why] || WHY.back, hs = r.heroes || [], top = k => Math.max(1, ...hs.map(h => h[k]));
     const num = (h, k, lab) => `<span${k !== 'took' && h[k] && h[k] === top(k) && hs.length > 1 ? ' class="top"' : ''}>${h[k].toLocaleString()}<small>${lab}</small></span>`;
     const sup = Object.entries(r.sup || {}).filter(([, n]) => n > 0).map(([k, n]) => `<span class="chip">${ico({ sup: k }) || UI.px(SUP_N[k][1])} ${SUP_N[k][0]} −${n}</span>`).join('');
     const revT = (r.rev || []).reduce((a, q) => a + q[1], 0);
@@ -117,7 +116,7 @@ const DIVEUI = (() => {
   // ── 길드 (지도가 첫 화면, 2026-11-23): 위 = 지난 판 한 줄 · 층 고르기(자동 · 가 본 층 탐사 수) / 가운데 = 그 층 지도와 경로 / 아래 = 경로 요약 · 파티 · 원정 출발 / 맨 아래 탭 = 명단 · 해금 · 도감
   //    가로로 낮은 창은 지도 왼쪽 · 나머지 오른쪽 기둥 (app.css)
   let mapFl = null; // 지금 보고 있는 층 (없으면 출발 층)
-  const lastLine = () => { const r = cd?.res; return r ? `<div class="dv-last"><b>${esc(r.how)}</b> · ${r.start}→${r.floor}층 · ${UI.px('coin')} +${r.g} · ${r.min}분${r.best ? ' · 최고 층' : ''}${r.lootN || r.gemN ? (r.lost ? ` · <span class="dv-bad">${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} 잃음</span>` : ` · ${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} · ${UI.px('coin')} +${r.lootG}`) : ''}${r.deadN ? ` · <span class="dv-bad">${UI.px('skull')} 사망 ${r.deadN}</span>` : ''}${upsTxt(r.ups)}${gotTxt(r)}${(r.maps || []).length ? `<p class="dv-maps">${r.maps.map(([f, a, b, d, k]) => `${f}층 ${a}/${b}${d ? ` (+${d})` : ''}${k ? ` · 잠긴 문 ✕${k}` : ''}`).join(' · ')}</p>` : ''}<p class="dv-cnt">${cntTxt()}</p>${(S.lastLog || []).length ? `<ul class="dv-lastlog">${logRows(S.lastLog, 200)}</ul>` : ''}</div>` : ''; }; // 지난 판 한 줄 (누르면 펼친다 — 로그 포함)
+  const lastLine = () => { const r = cd?.res; return r ? `<div class="dv-last"><b>${esc(r.how)}</b> · ${r.floor}층 · ${UI.px('coin')} +${r.g} · ${r.min}분${r.best ? ' · 최고 층' : ''}${r.lootN || r.gemN ? (r.lost ? ` · <span class="dv-bad">${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} 잃음</span>` : ` · ${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} · ${UI.px('coin')} +${r.lootG}`) : ''}${r.deadN ? ` · <span class="dv-bad">${UI.px('skull')} 사망 ${r.deadN}</span>` : ''}${upsTxt(r.ups)}${gotTxt(r)}${(r.maps || []).length ? `<p class="dv-maps">${r.maps.map(([f, a, b, d, k]) => `${f}층 ${a}/${b}${d ? ` (+${d})` : ''}${k ? ` · 잠긴 문 ✕${k}` : ''}`).join(' · ')}</p>` : ''}<p class="dv-cnt">${cntTxt()}</p>${(S.lastLog || []).length ? `<ul class="dv-lastlog">${logRows(S.lastLog, 200)}</ul>` : ''}</div>` : ''; }; // 지난 판 한 줄 (누르면 펼친다 — 로그 포함)
   // 선술집: 장면 · 오른쪽 정보 · 아래 파티 줄 · 지도로
   function inn(box) {
     const team = D.team(S), open = D.classes(S), dc = D.dexCount(S), mini = window.name === MINI; if (!open.includes(inC)) inC = team[0] || open[0];
@@ -153,7 +152,7 @@ const DIVEUI = (() => {
     const box = panel('dv-guild'); box.classList.toggle('inn', step === 'inn'); box.classList.toggle('mapv', step === 'map');
     if (step === 'inn') return inn(box);
     const team = D.team(S), sf = D.startFloor(S);
-    const fl = mapFl || sf, fls = [...new Set(Object.keys(S.maps).map(Number).concat([sf]))].sort((a, b) => a - b);
+    const fl = mapFl || sf, fls = [...new Set(D.starts(S).concat(Object.keys(S.maps).map(Number), [sf]))].sort((a, b) => a - b); // 출발할 수 있는 층 (1 ~ 깬 층 + 1)
     const last = lastLine();
     const tab = f => { const ex = D.explored(S, f), st = D.starts(S).includes(f); const eo = D.evOpen(S, f); return `<button data-fl="${f}" class="${f === fl ? 'on' : ''}${st ? ' st' : ''}">${f}층${ex ? ` <small>${ex[0]}/${ex[1]}</small>` : ''}${eo ? ` <small class="dv-bad">사건 ${eo}</small>` : ''}</button>`; };
     box.innerHTML = `<header><h2><button class="chip dv-back">‹ 길드</button> 지도</h2><div class="dv-res"><span class="chip c-gold${S.gold < 0 ? ' neg' : ''}">${UI.px('coin')} ${S.gold}</span><span class="chip">최고 ${S.deep}층</span>${fsBtn()}</div></header>`
@@ -200,14 +199,11 @@ const DIVEUI = (() => {
       + `<div class="dv-tog"><span>짐 가득</span><button data-full="1" class="${S.fullBack ? 'on' : ''}">켬</button><button data-full="0" class="${S.fullBack ? '' : 'on'}">끔</button></div>`
       + `<div class="dv-tog"><span>파티 위험</span><button data-risk="1" class="${S.risk !== false ? 'on' : ''}">켬</button><button data-risk="0" class="${S.risk !== false ? '' : 'on'}">끔</button></div>`
       + `<h3 class="dv-togh">기타</h3><div class="dv-tog"><span>레벨업 카드</span><button data-card="1" class="${S.cardOn !== false ? 'on' : ''}">켬</button><button data-card="0" class="${S.cardOn !== false ? '' : 'on'}">끔</button></div>`
-      + `<div class="dv-tog"><span>실시간 전투</span><button data-rt="1" class="${S.rt ? 'on' : ''}">켬</button><button data-rt="0" class="${S.rt ? '' : 'on'}">끔</button></div>`
-      + `<div class="dv-tog"><span>선택 영웅 스킬 자동</span><button data-rta="1" class="${S.rtAuto !== false ? 'on' : ''}">켬</button><button data-rta="0" class="${S.rtAuto !== false ? '' : 'on'}">끔</button></div>`
-      + `<div class="dv-tog"><span>직접 조종</span><button data-hand="1" class="${S.hand ? 'on' : ''}">켬</button><button data-hand="0" class="${S.hand ? '' : 'on'}">끔</button></div>`
       + `<div class="dv-tog"><span>${UI.px('skull')} 사망 후 재출발</span><button data-ds="0" class="${S.deadStop ? '' : 'on'}">켬</button><button data-ds="1" class="${S.deadStop ? 'on' : ''}">끔</button></div>`;
     box.onclick = ev => { const x = ev.target.closest('button'); if (!x || x.disabled) return;
       if (x.classList.contains('dv-x')) { box.remove(); guild(); return; }
       if (x.dataset.sup) { const nb = { ...D.bagPlan(S) }; nb[x.dataset.sup] = Math.max(0, nb[x.dataset.sup] + +x.dataset.d); S.bag = nb; }
-      if (x.dataset.end) S.endMode = x.dataset.end; if (x.dataset.full) S.fullBack = x.dataset.full === '1'; if (x.dataset.ds) S.deadStop = x.dataset.ds === '1'; if (x.dataset.risk) S.risk = x.dataset.risk === '1'; if (x.dataset.card) S.cardOn = x.dataset.card === '1'; if (x.dataset.hand) S.hand = x.dataset.hand === '1'; if (x.dataset.rt) S.rt = x.dataset.rt === '1'; if (x.dataset.rta) S.rtAuto = x.dataset.rta === '1';
+      if (x.dataset.end) S.endMode = x.dataset.end; if (x.dataset.full) S.fullBack = x.dataset.full === '1'; if (x.dataset.ds) S.deadStop = x.dataset.ds === '1'; if (x.dataset.risk) S.risk = x.dataset.risk === '1'; if (x.dataset.card) S.cardOn = x.dataset.card === '1';
       put(S); bagPanel(); };
   }
   const TUNE_SUP = k => (D.TUNE.SUP[k] ? `${UI.px('coin')} ${D.TUNE.SUP[k]}` : '—');
@@ -250,7 +246,7 @@ const DIVEUI = (() => {
     const base = [slot('무기', inS('w')?.n || sh.weapon.n, inS('w')?.r || 0, mx(inS('w')) || { kind: 'base', e: { slot: 'w', k: eq.w } }), slot('방어구', inS('a')?.n || (eq.a && eq.a !== 'none' ? sh.armor : ''), inS('a')?.r || 0, mx(inS('a')) || { kind: 'base', e: { slot: 'a', k: eq.a } }), slot('방패', inS('s')?.n || (eq.shield ? '방패' : ''), inS('s')?.r || 0, mx(inS('s')) || { kind: 'base', e: { slot: 's', k: 'shield' } })];
     const tk = mg.filter(x => x.slot === 't'), right = [0, 1, 2].map(i => slot('물건', tk[i]?.n || '', tk[i]?.r || 0, mx(tk[i])));
     const cell = c0 => { if (!c0.s && G.Builds.CARD?.on) return '<li class="hs-lock"><b>+</b><small></small></li>'; /* 카드 모드: 빈 칸 (다음 카드로 찬다) */ if (!c0.s) { const wl = c0.will; return `<li class="hs-lock"><b>${wl ? esc(wl.n) : '?'}</b><small>Lv ${wl?.lv || c0.open}</small></li>`; }
-      const num = G.SkillNum_at?.(c0.s.k, m.cls, m.lv), cdn = G.Res.cdOf ? (G.Res.cdOf(c0.s.k) || G.Skill.SK[c0.s.k]?.cd || 0) : /쿨 (\d+)/.exec(c0.s.tag || '')?.[1]; // 원정: 쿨타임 하나 (횟수 · 주문 칸 표시 없음)
+      const num = G.SkillNum_at?.(c0.s.k, m.cls, m.lv), cdn = G.Res.cdOf ? G.Res.cdOf(c0.s.k) : /쿨 (\d+)/.exec(c0.s.tag || '')?.[1]; // 원정: 쿨타임 하나 (횟수 · 주문 칸 표시 없음)
       return `<li><b>${esc(c0.s.n)}</b><small>${[skTag(m, c0.s.k) || num?.d, !G.Res.cdOf && c0.s.left != null && c0.s.left < 20 ? `${c0.s.left}회` : '', cdn ? `쿨 ${cdn}` : ''].filter(Boolean).join(' · ')}</small></li>`; };
     const box = panel('dv-hero');
     box.innerHTML = `<header><h2>${esc(m.name)} <small>${esc(sh.cls)} · Lv ${m.lv}</small></h2><div class="dv-res"><button class="chip dv-x">닫기</button></div></header>`
@@ -319,7 +315,7 @@ const DIVEUI = (() => {
     for (const q of V.map.edges) { const k = q.kind === 'locked' ? q.lock || 'lock' : q.kind === 'trap' ? 'trap' : q.kind === 'dark' ? 'dark' : null; if (k && D.STATE[k]) add(k); }
     for (const n of V.map.nodes) { if (n.dark) add('dark'); if (n.sleepy) add('sleep'); }
     if (!cnt.size) return '';
-    const t = D.team(S), li = [...cnt].map(([nm, o]) => { const S0 = D.STATE[o.k], h = S0.by.map(([g]) => t.find(c => D.keysOf(c).includes(g))).find(Boolean), v = h ? clsN(h) : o.k === 'sleep' ? S0.none : S0.torch && D.bagPlan(S).torch ? `횃불 ${D.bagPlan(S).torch}` : S0.none, ok = !!h || o.k === 'sleep' || (S0.torch && D.bagPlan(S).torch > 0);
+    const hs = D.team(S).map(c => S.roster[c]?.m).filter(Boolean), li = [...cnt].map(([nm, o]) => { const S0 = D.STATE[o.k], g = S0.by.find(g0 => hs.some(m => D.knacksOf(m).includes(g0))), h = g && hs.find(m => D.knacksOf(m).includes(g)), torch = S0.torch && D.bagPlan(S).torch > 0, v = h ? clsN(h.cls) : o.k === 'sleep' ? S0.none : torch ? `횃불 ${D.bagPlan(S).torch}` : S0.gate ? '닫힘' : S0.none, ok = !!h || o.k === 'sleep' || torch;
       return `<li class="pl-gate${ok ? '' : ' no'}">${esc(nm)} ${o.n} · ${esc(v)}</li>`; });
     return `<ul class="dv-plines">${li.join('')}</ul>`;
   }
@@ -467,7 +463,7 @@ const DIVEUI = (() => {
   function cardWin(m, done, timed) {
     const q = (m.cardq || [])[0]; if (!q) return done && done(); const offer = D.cardOffer(m), full = q.kind === 'swap' || (m.picks || []).length >= G.Builds.SLOT_N, K = G.D.MSKILLS;
     let el = $('dv-card'); if (!el) { el = document.createElement('div'); el.id = 'dv-card'; el.className = 'dv-panel'; el.onpointerup = ev => ev.stopPropagation(); document.body.append(el); }
-    const cd = k => { const c = (G.Res.cdOf ? G.Res.cdOf(k) : 0) || G.Skill.SK[k]?.cd || 0; return c ? `쿨 ${c}` : ''; }, num = k => skTag(m, k);
+    const cd = k => { const c = G.Res.cdOf ? G.Res.cdOf(k) : 0; return c ? `쿨 ${c}` : ''; }, num = k => skTag(m, k);
     let pick = null, t0 = performance.now();
     const draw = () => { el.innerHTML = `<header><h2>${esc(m.name)} <small>Lv ${q.lv}${(m.cardq || []).length > 1 ? ` · ${m.cardq.length}` : ''}</small></h2>${timed ? '<span class="chip dv-ct"></span>' : '<button class="chip dv-x">닫기</button>'}</header>`
       + `<div class="dv-cards">${offer.map((k, i) => `<button data-k="${k}" class="${pick === k ? 'on' : ''}${i === 0 ? ' rec' : ''}"><b>${esc(K[k]?.n || k)}</b><small>${[num(k), cd(k)].filter(Boolean).join(' · ')}</small>${i === 0 ? `<i>${UI.px('star')}</i>` : ''}</button>`).join('')}</div>`
@@ -483,20 +479,15 @@ const DIVEUI = (() => {
     draw();
   }
   // 사건 선택 창 (처음 만났을 때 · 계획에서 안 골랐을 때): 선택지마다 이름 · 판정 확률 · 결과 숫자, 맨 아래 「자리를 피한다」. 20초 안에 답이 없으면 피함 · 떠 있는 동안 원정은 멈춘다
-  const EV_WAIT = 20;
-  function evWin(st, sc, pick) {
-    if (run.over) return; /* 돌아간 뒤에는 묻지 않는다 */
-    const el = document.createElement('div'); el.id = 'dv-ev'; el.className = 'dv-panel'; el.onpointerup = ev => ev.stopPropagation(); document.body.append(el);
-    const n = st.map.nodes[st.at], t0 = performance.now(), fl = st.floor, id = st.at;
-    const row = (c, i) => { const o = D.evOut(n.ev, c.n), off = c.off && c.off(); return `<button data-i="${i}"${off || c.lock ? ' disabled' : ''}><b>${esc(c.n.replace(/^\[([^\]]*)\] /, '$1 · '))}</b><small>${[c.p != null && c.p < 1 ? `${Math.round(c.p * 100)}%` : '', o.ok.join(' · '), o.no.length ? `실패 ${o.no.join(' · ')}` : '', c.lock ? '' : c.sub || ''].filter(Boolean).join(' · ')}</small></button>`; };
-    el.innerHTML = `<header><h2>${esc(sc.title)}</h2><span class="chip dv-ct"></span></header><div class="dv-evs">${sc.choices.map((c, i) => (D.evPass(n.ev, c.n) ? '' : row(c, i))).join('')}<button data-i="x" class="x">자리를 피한다</button></div>`;
-    const end = i => { clearInterval(tm); el.remove(); if (i == null) { D.evMark(S, fl, id, { st: 'skip' }); put(S); st.log.push({ t: `${sc.title} · 자리를 피함`, k: 'dv' }); } pick(i); };
-    const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); const left = Math.ceil(EV_WAIT - (performance.now() - t0) / 1000), c = el.querySelector('.dv-ct'); if (c) c.textContent = left; if (left <= 0) end(null); }, 250);
-    el.onclick = ev => { const b = ev.target.closest('button'); if (!b || b.disabled) return; end(b.dataset.i === 'x' ? null : +b.dataset.i); };
+  // 사건은 파티 구성으로 저절로 (오토배틀러 축, 2026-11-26): 할 수 있는 선택지 중 성공률 × 얻는 것이 가장 큰 것. 얻을 것이 없으면 자리를 피한다
+  function evAuto(st, sc, pick) {
+    if (run.over) return; const n = st.map.nodes[st.at], fl = st.floor, id = st.at;
+    let best = null, bs = 0; sc.choices.forEach((c, i) => { if (c.lock || (c.off && c.off()) || D.evPass(n.ev, c.n)) return; const o = D.evOut(n.ev, c.n), p = c.p != null ? c.p : 1, v = p * o.ok.length - (1 - p) * o.no.length * 0.6 - (o.cost || 0) / 40; if (v > bs) { bs = v; best = i; } });
+    setTimeout(() => { if (run.over) return; if (best == null) { D.evMark(S, fl, id, { st: 'skip' }); put(S); st.log.push({ t: `${sc.title} · 지나감`, k: 'dv' }); } pick(best); }, 900 / Math.max(1, spd() / (D.speeds(D.fresh())[0] || 1)));
   }
   // 원정 중: 전투가 아닐 때 고를 것이 있는 영웅이 있으면 창 (레벨업 카드를 끄면 빌드대로)
   function cardTick() {
-    if ($('dv-card') || FIGHT.on || !CRAWL.st || run.over) return; const ms = G.Party.members(G.S.w.fantasy).filter(m => (m.cardq || []).length); if (!ms.length) return;
+    if ($('dv-card') || FIGHT.on || !CRAWL.st || CRAWL.st.done || run.over) return; /* 판이 끝났으면(우두머리를 잡고 길드로 돌아가는 사이) 묻지 않는다 — 다음 판에 */ const ms = G.Party.members(G.S.w.fantasy).filter(m => (m.cardq || []).length); if (!ms.length) return;
     if (S.cardOn === false) { for (const m of ms) D.cardAuto(m); return; }
     cardWin(ms[0], null, true);
   }
@@ -525,21 +516,21 @@ const DIVEUI = (() => {
   function bar() {
     const v = CRAWL.view(), st = CRAWL.st; if (!v || !st) return; let el = $('dv-bar');
     if (!el) { el = document.createElement('div'); el.id = 'dv-bar'; el.onpointerup = ev => ev.stopPropagation(); el.innerHTML = '<div class="dv-top"></div><div class="dv-ps"></div>'; $('stage').append(el);
-      el.onclick = ev => { if (D.HAND.on && handClick(ev)) return; const b = ev.target.closest('button'); if (!b) return; const f = G.S.w.fantasy, sp = D.speeds(S);
+      el.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; const f = G.S.w.fantasy, sp = D.speeds(S);
         if (b.classList.contains('dv-spd')) { f.turnX = sp[(sp.indexOf(f.turnX || sp[0]) + 1) % sp.length]; S.spdX = f.turnX; put(S); barK = ''; } // 단계는 f.turnX로 (G.Turn.speed에는 PACE가 곱해져 있다)
         if (b.dataset.z) { setZk(zk * (b.dataset.z > 0 ? 1.2 : 1 / 1.2)); put(S); }
-        if (b.classList.contains('dv-quit') && !run.over) finish(CRAWL.st, 'quit');
+        if (b.classList.contains('dv-quit') && !run.over && !CRAWL.view()?.fighting) finish(CRAWL.st, 'quit'); // 귀환은 방 사이에서만 (전투 중에는 못 돌아간다 — 2026-11-27)
         if (b.classList.contains('dv-bagchip')) bagPop(); }; } // 돌아가기: 여기까지 번 금화 · 깬 층으로 끝낸다
     if (v.fighting !== wasFight) { wasFight = v.fighting; } // 전투가 끝나면 기본 배율로 (전투 중은 fitZoom)
     const earned = Math.max(0, st.gold - (st.gold0 ?? 0)), ps = v.party.map(p => ({ m: p.m, lv: p.m?.lv || 0, n: p.m?.name || '?', c: clsN(p.m?.cls), hp: Math.max(0, p.hp), max: p.max, xp: p.m ? Math.min(1, (p.m.xp || 0) / G.Guild.needOf(p.m)) : 0, dead: p.dead || p.hp <= 0 }));
-    const k = JSON.stringify([handKey(), st.floor, v.sub, earned, st.items, (st.loot || []).length, G.Res.clock || 0, G.Turn.speed(G.S.w.fantasy), ps.map(p => [p.lv, p.n, p.hp, p.max, Math.round(p.xp * 50), p.dead])]); if (k === barK) return; barK = k;
+    const k = JSON.stringify([st.floor, !!v.fighting, v.sub, earned, st.items, (st.loot || []).length, G.Res.clock || 0, G.Turn.speed(G.S.w.fantasy), ps.map(p => [p.lv, p.n, p.hp, p.max, Math.round(p.xp * 50), p.dead])]); if (k === barK) return; barK = k;
     const its = ITEM.filter(([id]) => st.items[id] > 0).map(([id, n]) => `<span class="chip">${n} ${st.items[id]}</span>`).join('') + `<button class="chip dv-bagchip${D.bagFull(st) ? ' full' : ''}">짐 ${D.bagUsed(st)}/${st.bagCap || 0}</button>`; // 파티 짐 (누르면 목록)
-    el.firstChild.innerHTML = `<div><b>${st.floor}층</b><small>${esc(RUN.zone(st.floor).n)} · ${esc(v.sub)}</small></div><div class="dv-r"><span class="chip c-gold">${UI.px('coin')} ${earned}</span>${its}<button class="dv-spd"${D.speeds(S).length > 1 ? '' : ' disabled'}>×${(G.S.w.fantasy.turnX || D.speeds(D.fresh())[0]) / D.speeds(D.fresh())[0]}</button><button class="dv-zm" data-z="-1">−</button><button class="dv-zm" data-z="1">＋</button>${fsBtn()}<button class="dv-quit">돌아가기</button></div>`;
+    el.firstChild.innerHTML = `<div><b>${st.floor}층</b><small>${esc(RUN.zone(st.floor).n)} · ${esc(v.sub)}</small></div><div class="dv-r"><span class="chip c-gold">${UI.px('coin')} ${earned}</span>${its}<button class="dv-spd"${D.speeds(S).length > 1 ? '' : ' disabled'}>×${(G.S.w.fantasy.turnX || D.speeds(D.fresh())[0]) / D.speeds(D.fresh())[0]}</button><button class="dv-zm" data-z="-1">−</button><button class="dv-zm" data-z="1">＋</button>${fsBtn()}<button class="dv-quit"${v.fighting ? ' disabled' : ''}>돌아가기</button></div>`;
     // 파티 카드 (시안 ①): 얼굴 · 레벨 · 이름 · 직업 · 체력 막대와 숫자 · 경험치 막대
-    el.querySelector('.dv-ps').innerHTML = ps.map(p => `<div class="dv-p${p.dead ? ' dead' : ''}${D.HAND.on && p.m && p.m.uid === D.HAND.uid ? ' hand' : ''}${D.HAND.res?.ally?.merc && p.m?.uid === D.HAND.res.ally.merc.uid ? ' ally' : ''}" data-u="${p.m?.uid ?? ''}">${p.dead ? UI.px('skull') : ''}<canvas width="26" height="30"></canvas><em>${p.lv}</em><b>${esc(p.n)}</b><small>${esc(p.c)}</small><i class="hp"><em style="width:${Math.round(100 * p.hp / Math.max(1, p.max))}%"></em></i><span>${p.hp}/${p.max}</span>${p.m ? `<i class="dv-cd">${G.Builds.slots(p.m).filter(Boolean).map(k => `<em data-cu="${p.m.uid}" data-ck="${k}" style="background-image:url(${SKUI.icon(k)})"></em>`).join('')}</i>` : ''}<i class="xp"><em style="width:${Math.round(100 * p.xp)}%"></em></i></div>`).join('');
+    el.querySelector('.dv-ps').innerHTML = ps.map(p => `<div class="dv-p${p.dead ? ' dead' : ''}" data-u="${p.m?.uid ?? ''}">${p.dead ? UI.px('skull') : ''}<canvas width="26" height="30"></canvas><em>${p.lv}</em><b>${esc(p.n)}</b><small>${esc(p.c)}</small><i class="hp"><em style="width:${Math.round(100 * p.hp / Math.max(1, p.max))}%"></em></i><span>${p.hp}/${p.max}</span>${p.m ? `<i class="dv-cd">${G.Builds.slots(p.m).filter(Boolean).map(k => `<em data-cu="${p.m.uid}" data-ck="${k}" style="background-image:url(${SKUI.icon(k)})"></em>`).join('')}</i>` : ''}<i class="xp"><em style="width:${Math.round(100 * p.xp)}%"></em></i></div>`).join('');
     const pse = el.querySelector('.dv-ps'); pse.innerHTML += '<div class="dv-p empty"></div>'.repeat(Math.max(0, D.seats(S) - ps.length)); pse.style.gridTemplateColumns = `repeat(${Math.max(ps.length, D.seats(S))}, 1fr)`; // 자리 수만큼 칸 (빈 자리는 빈 칸)
     pse.querySelectorAll('canvas').forEach((cv, i) => { if (ps[i]?.m) UI.face(cv, ps[i].m); });
-    { const hm = handM(); if (hm) pse.insertAdjacentHTML('afterbegin', `<div class="dv-hand">${G.Builds.slots(hm).filter(Boolean).map(k => { const left = cdL(hm, k); const nk = D.HAND.ack && !D.HAND.ack.ok && D.HAND.ack.k === k && Date.now() - D.HAND.ack.t < 700; return `<button data-hk="${k}" data-cu="${hm.uid}" data-ck="${k}" class="hk ${D.HAND.res?.k === k ? 'on' : ''}${left ? '' : ' rdy'}${nk ? ' no' : ''}${D.HAND.fired && D.HAND.fired.k === k && Date.now() - D.HAND.fired.t < 1200 ? ' fired' : ''}">${SKUI.img(k)}<b>${esc(G.D.MSKILLS[k]?.n || k)}</b><small>${nk ? '안 됨' : ''}</small><u></u></button>`; }).join('')}</div>`); } // 직접 조종: 그 영웅의 스킬 칸 (쿨타임 남은 수 · 준비되면 밝게 · 누르면 예약)
+    { const [ct, cb] = cover(); if (typeof camCover !== 'undefined') camCover = Math.max(0, cb - ct); }
     document.body.dataset.diveFl = st.floor;
   }
   // 교착 풀기: 전투가 6라운드 넘게 아무도 다치지 않고 돌면(양쪽이 서로에게 닿지 못하는 자리 — 원인은 못 찾았다, 몇십 판에 한 번) 남은 적이 달아난 것으로 끝낸다
@@ -561,15 +552,15 @@ const DIVEUI = (() => {
   // 전투 카메라 (main.js가 부른다): 배율은 기본 그대로, 행동하는 사람(대상이 있으면 둘의 가운데)이 화면 가장자리 20% 밖으로 나갈 때만 그쪽으로 옮긴다 — 차례마다 휙휙 튀지 않게
   let camPt = null;
   // 전투 중인 작은 방이 화면에 다 들어오는 배율 (벽 높이만큼 위아래 여유) — 넘치지 않으면 null
-  function roomFit() { const st = CRAWL.st; if (!D.TUNE.SMALL_ROOMS || !st || !R?.turn || !PXS) return null; const n = st.map.nodes[st.at]; if (!n) return null; const b = st.map._lay.room[st.at], K = G.Floor.K;
+  // 위 막대 · 아래 파티 칸이 가리는 높이 (CSS px): 방은 그 사이에 담고(roomFit) 카메라도 그 가운데를 본다 (camCover — render/bake.js camFor)
+  const cover = () => { const el = $('dv-bar'); return el ? [el.firstChild.offsetHeight || 0, el.lastChild.offsetHeight || 0] : [0, 0]; };
+  function roomFit() { const st = CRAWL.st; if (!D.TUNE.SMALL_ROOMS || !st || !PXS) return null; const n = st.map.nodes[st.at]; if (!n) return null; const b = st.map._lay.room[st.at], K = G.Floor.K;
     const ps = [[b.x * K - 0.5, b.y * K - 0.5], [(b.x + b.w) * K - 0.5, b.y * K - 0.5], [b.x * K - 0.5, (b.y + b.h) * K - 0.5], [(b.x + b.w) * K - 0.5, (b.y + b.h) * K - 0.5]].map(([x, y]) => project(wx(x), wy(y), 0)), xs = ps.map(p => p.sx), ys = ps.map(p => p.sy);
-    const w = Math.max(...xs) - Math.min(...xs), hr = Math.max(...ys) - Math.min(...ys), h = hr + VH * 0.12; if (!(w > 0)) return null; const wide = VW > VH * 1.4, k = Math.min(VW * 0.96 * (D.TUNE.FIT_W || 1) / w, wide ? VH * (D.TUNE.FIT_H || 0.95) / Math.max(1, hr) : VH * 0.78 / h); /* 가로 화면(2026-11-24): 낮은 높이에 방을 다 담으면 캐릭터가 25px까지 줄었다 — 가로에서는 방 바닥이 높이의 FIT_H배에 들어오게 (벽 윗부분은 위 막대 밑으로 들어가도 된다) */ /* FIT_W: 방 폭의 몇 배까지 화면에 담나 (1 = 전부 · 1.2 = 좌우 끝 20%는 잘려도) */ return PXS * k; } // 지금 배율 기준의 맞는 배율 (넘치지 않으면 지금보다 크다 — 부르는 쪽이 min)
+    const w = Math.max(...xs) - Math.min(...xs), hr = Math.max(...ys) - Math.min(...ys), h = hr + VH * 0.12; if (!(w > 0)) return null; const wide = VW > VH * 1.4, [ct, cb] = cover(), k = Math.min(VW * 0.96 * (D.TUNE.FIT_W || 1) / w, wide ? (VH - (ct + cb) * DPR / PXS) * (D.TUNE.FIT_H || 0.95) / Math.max(1, hr) : VH * 0.78 / h); /* 가로 화면: 방 바닥이 위 막대와 파티 칸 사이 높이의 FIT_H배에 들어오게 (2026-11-27 — 배치 구역이 파티 칸 밑에 깔리지 않게. 벽 윗부분은 위 막대 밑으로 들어가도 된다) */ /* FIT_W: 방 폭의 몇 배까지 화면에 담나 (1 = 전부 · 1.2 = 좌우 끝 20%는 잘려도) */ return PXS * k; } // 지금 배율 기준의 맞는 배율 (넘치지 않으면 지금보다 크다 — 부르는 쪽이 min)
   // 작은 방(TUNE.SMALL_ROOMS, 우두머리 방 빼고): 방 전체가 화면에 들어오니 싸우는 사람을 쫓지 않고 방 가운데에 선다
   const roomMid = () => { const st = CRAWL.st; if (!D.TUNE.SMALL_ROOMS || !st) return null; const n = st.map.nodes[st.at]; if (!n) return null; const b = st.map._lay.room[st.at], K = G.Floor.K; return [b.x * K + b.w * K / 2 - 0.5, b.y * K + b.h * K / 2 - 0.5]; };
   function camAt(r) {
-    if (G.Turn.rt && drag?.cam) return drag.cam; // 끄는 동안 카메라를 멈춘다 (놓을 자리가 손가락 밑에서 미끄러지지 않게)
-    if (zk > 1.15 && D.HAND.uid != null) { const p = r.party.find(q => q.merc?.uid === D.HAND.uid && !q.dead); if (p) return drag ? (drag.cam = [p._dx ?? p.x, p._dy ?? p.y]) : [p._dx ?? p.x, p._dy ?? p.y]; }
-    if (G.Turn.rt) { const all = r.party.filter(p => !p.dead).concat(r.mons.filter(m => m.hp > 0)); if (all.length) return drag ? (drag.cam = [all.reduce((a, e) => a + (e._dx ?? e.x), 0) / all.length, all.reduce((a, e) => a + (e._dy ?? e.y), 0) / all.length]) : [all.reduce((a, e) => a + (e._dx ?? e.x), 0) / all.length, all.reduce((a, e) => a + (e._dy ?? e.y), 0) / all.length]; } // 실시간: 싸우는 사람 모두의 가운데를 부드럽게 (걸어 들어온 파티에서 카메라가 튀지 않게)
+    if (CRAWL.between) return null; // 방 사이를 걷는 동안은 파티를 따라간다 (main.js)
     { const m = roomMid(); if (m) return m; }
     const T = r.turn, cur = T?.cur;
     if (!camPt && T) { const all = r.party.filter(p => !p.dead).concat(r.mons.filter(m => m.hp > 0)); if (all.length) { camPt = [all.reduce((a, e) => a + e.x, 0) / all.length, all.reduce((a, e) => a + e.y, 0) / all.length]; return camPt; } } // 전투가 시작되면 아군 + 살아 있는 적의 가운데로
@@ -583,7 +574,7 @@ const DIVEUI = (() => {
   // 전투 때 조금 물러난다 (2026-11-23 사용자: 「전투시 약간 줌아웃」): 기본 배율 × FIGHT_K로 0.4초쯤에 걸쳐 부드럽게, 끝나면 돌아온다
   const FIGHT_K = 0.75; let zc = 0;
   function fitZoom(dt = 0) {
-    if (typeof setZoom !== 'function') return; const base = HUD.zoom(false), fz = roomFit(); let want = R.turn && !D.TUNE.SMALL_ROOMS ? base * FIGHT_K : base * (D.TUNE.SMALL_ROOMS ? D.TUNE.VIEW_K || 1 : 1); if (fz && fz < want) want = fz; want = Math.max(0.5, want * zk); // zk: 플레이어가 정한 배율 · 작은 방이 화면보다 넓으면 그만큼만 물러난다 (방 전체가 들어오게) // 작은 방(TUNE.SMALL_ROOMS)이면 전투에도 줌아웃 없이 — 우두머리 방(21타일)만 예전처럼 물러난다
+    if (typeof setZoom !== 'function' || (typeof TOP !== 'undefined' && TOP.on)) return; const base = HUD.zoom(false), fz = roomFit(); let want = R.turn && !D.TUNE.SMALL_ROOMS ? base * FIGHT_K : base * (D.TUNE.SMALL_ROOMS ? D.TUNE.VIEW_K || 1 : 1); if (fz && fz < want) want = fz; want = Math.max(0.5, want * zk); // zk: 플레이어가 정한 배율 · 작은 방이 화면보다 넓으면 그만큼만 물러난다 (방 전체가 들어오게) // 작은 방(TUNE.SMALL_ROOMS)이면 전투에도 줌아웃 없이 — 우두머리 방(21타일)만 예전처럼 물러난다
     if (!zc) zc = PXS || base; const d = want - zc; zc = Math.abs(d) < 0.02 ? want : zc + d * Math.min(1, dt * 8);
     if (Math.abs(zc - PXS) > 0.01) setZoom(zc, true); if (!R.turn) camPt = null;
   }
@@ -595,24 +586,23 @@ const DIVEUI = (() => {
     const onStage = t => run && !run.over && (t.id === 'c' || (t.closest?.('#stage') && t.tagName === 'CANVAS'));
     document.addEventListener('wheel', ev => { if (!onStage(ev.target)) return; ev.preventDefault(); ev.stopPropagation(); setZk(zk * (ev.deltaY < 0 ? 1.12 : 1 / 1.12)); }, { capture: true, passive: false });
     const gap = () => { const [a, b] = [...pinch.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]); };
-    document.addEventListener('pointerdown', ev => { if (ev.pointerType !== 'touch' || !onStage(ev.target)) return; pinch.set(ev.pointerId, [ev.clientX, ev.clientY]); if (pinch.size === 2) { pin0 = { d: Math.max(20, gap()), z: zk }; dragEnd(); dragAt = performance.now(); } }, true);
-    document.addEventListener('pointermove', ev => { if (!pinch.has(ev.pointerId)) return; pinch.set(ev.pointerId, [ev.clientX, ev.clientY]); if (pin0 && pinch.size === 2) { dragEnd(); dragAt = performance.now(); setZk(pin0.z * gap() / pin0.d); ev.stopPropagation(); } }, true);
-    for (const n of ['pointerup', 'pointercancel']) document.addEventListener(n, ev => { if (!pinch.delete(ev.pointerId)) return; if (pin0) { dragAt = performance.now(); ev.stopPropagation(); if (!pinch.size) pin0 = null; put(S); } }, true); }
+    document.addEventListener('pointerdown', ev => { if (ev.pointerType !== 'touch' || !onStage(ev.target)) return; pinch.set(ev.pointerId, [ev.clientX, ev.clientY]); if (pinch.size === 2) { pin0 = { d: Math.max(20, gap()), z: zk }; } }, true);
+    document.addEventListener('pointermove', ev => { if (!pinch.has(ev.pointerId)) return; pinch.set(ev.pointerId, [ev.clientX, ev.clientY]); if (pin0 && pinch.size === 2) { setZk(pin0.z * gap() / pin0.d); ev.stopPropagation(); } }, true);
+    for (const n of ['pointerup', 'pointercancel']) document.addEventListener(n, ev => { if (!pinch.delete(ev.pointerId)) return; if (pin0) { ev.stopPropagation(); if (!pinch.size) pin0 = null; put(S); } }, true); }
   // ── 스킬 보이기 (js/app/skill_ui.js): 쓴 순간 · 쿨타임 덮개 ──
-  const cdSeen = new Map(); let rollSeen = null;
+  let rollSeen = null;
   function skillSee() {
     const by = m => R.party.find(p => p.merc && p.merc.uid === m.uid), show = (p, k) => { if (p && G.D.MSKILLS[k] && R.turn) SKUI.cast(p, k, skTag(p.merc, k).split(' · ').filter(x => x !== '추가 행동').slice(0, 2).join(' · ')); };
     for (const q of D.USED.splice(0)) show(by(q.m), q.k);
-    if (D.HAND.fired && D.HAND.fired !== skillSee.f) { skillSee.f = D.HAND.fired; show(R.party.find(p => p.merc?.uid === D.HAND.fired.uid), D.HAND.fired.k); }
-    for (const p of R.party) if (p.cdU) for (const k in p.cdU) { const key = p.merc?.uid + ':' + k, u = p.cdU[k]; if (cdSeen.get(key) !== u) { cdSeen.set(key, u); show(p, k); } }
     SKUI.tick();
   }
-  const cdFull = (m, k) => Math.max(1, G.Res.cdOf ? G.Res.cdOf(k) || 0 : 0, G.Skill.SK[k]?.cd || 0);
+  const cdL = (m, k) => (G.Res.cdLeftOf ? G.Res.cdLeftOf(m, k) : 0); // 남은 쿨타임 (라운드) — 스킬 종류와 상관없이 한 시계
+  const cdFull = (m, k) => Math.max(1, G.Res.cdOf ? G.Res.cdOf(k) || 0 : 0);
   function cdTick() {
-    const el = $('dv-bar'); if (!el) return; const sp = Math.max(0.1, G.Turn.speed(G.S.w.fantasy)), RT = G.Turn.rt?.round || 1;
-    for (const b of el.querySelectorAll('[data-ck]')) { const p = R.party.find(q => q.merc?.uid === +b.dataset.cu); if (!p) continue; const k = b.dataset.ck, n = cdL(p.merc, k), w = n && R.turn && G.Turn.rt ? D.handWait(R, p, k) : 0, f = n ? Math.max(0.02, Math.min(1, (w ? w / RT : n) / cdFull(p.merc, k))) : 0, pv = +(b._p || 0);
+    const el = $('dv-bar'); if (!el) return;
+    for (const b of el.querySelectorAll('[data-ck]')) { const p = R.party.find(q => q.merc?.uid === +b.dataset.cu); if (!p) continue; const k = b.dataset.ck, n = cdL(p.merc, k), f = n ? Math.max(0.02, Math.min(1, n / cdFull(p.merc, k))) : 0, pv = +(b._p || 0);
       if (Math.abs(f - pv) > 0.004 || (!f && pv)) { b.style.setProperty('--skp', f.toFixed(3)); if (pv && !f) { b.classList.remove('back'); void b.offsetWidth; b.classList.add('back'); } b._p = f; b.classList.toggle('cd', f > 0); }
-      const u = b.querySelector('u'); if (u) { const t = n ? (w ? String(Math.ceil(w / sp)) : String(n)) : ''; if (u.textContent !== t) u.textContent = t; } }
+      const u = b.querySelector('u'); if (u) { const t = n ? String(n) : ''; if (u.textContent !== t) u.textContent = t; } }
   }
   // ── 전투 시작 · 다음 무리 · 승리 띠 ──
   let wvKey = '', wvOn = false;
@@ -625,80 +615,84 @@ const DIVEUI = (() => {
     document.body.classList.toggle('dv-fight', on); if (!$('dv-vig')) { const v = document.createElement('div'), c = $('stage').querySelector('canvas'); v.id = 'dv-vig'; if (c) c.after(v); } // 전투 중 가장자리 붉게 (인형 · 막대 아래)
   }
   // ── 다음 방 고르기 (2026-11-26 사용자: 「방클리어하면 지도 띄우고 갈수있는 방을 선택하는 ftl스타일」): 층 지도에 고를 수 있는 방 번호 · 목록에 방 종류 · 상태 · 넘는 사람(없으면 결과) · 야영(물자)
-  //   ROUTE_WAIT초 안에 답이 없으면 자동(G.Dive.POL.fork — 다쳤으면 먼저 야영). 자동 재출발 중이면 묻지 않는다
-  const ROUTE_WAIT = 12, RT_IC = { fight: 'battle', elite: 'battle', boss: 'battle', treasure: 'gold', shop: 'shop', event: 'map', camp: 'inventory', start: 'map' };
-  function routeWin(st, opts, pick, auto, rest) {
-    if (run.over || S.autoOn || q.get('fork') === '0') return false; $('dv-fork')?.remove();
-    const el = document.createElement('div'); el.id = 'dv-fork'; el.onpointerup = ev => ev.stopPropagation(); el.onpointerdown = ev => ev.stopPropagation();
-    const N = st.map.nodes, V = D.drawState(S, st);
-    const row = (x, i) => { const n = N[x.to], pi = D.passInfo(st, x.ed || x.e, n), nm = (n.visited && n.name) || RUN.TYPE[n.type] || '방';
-      return `<button class="rt-o" data-i="${i}"><i class="rt-n">${i + 1}</i>${mi(RT_IC[n.type] || 'map')}<b>${esc(nm)}</b>${pi ? `<small class="${pi.ok ? 'ok' : 'no'}">${esc(pi.st)} · ${esc(pi.who || pi.out)}</small>` : ''}${n.visited ? '<small>가 봄</small>' : ''}</button>`; };
-    const restBtn = () => { const ok = D.canCamp(st) && !st.camped?.[`${st.floor}:${st.at}`] && st.party.some(m => !m.dead && m.hp < m.max); /* 다친 사람이 있을 때만 */ return `<button class="rt-rest" data-r="1"${ok ? '' : ' disabled'}>${UI.px('tent')} 야영 · ${D.restCost(st)}</button>`; };
-    el.innerHTML = `<div class="fk-t"><b>다음 방</b><span class="rt-sup">${UI.px('tent')} <em>${st.items.camp || 0}</em></span><i class="rt-bar"></i></div><div class="rt-map"></div><div class="fk-l">${opts.map(row).join('')}${restBtn()}</div>`;
-    let t0 = performance.now();
-    const end = i => { clearInterval(tm); if (!el.isConnected) return; el.remove(); if (run && !run.over) pick(i); };
-    const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); const u = 1 - (performance.now() - t0) / 1000 / ROUTE_WAIT; el.querySelector('.rt-bar').style.width = `${Math.max(0, u * 100)}%`; if (u <= 0) end(auto()); }, 100);
-    const take = i => { st.log.push({ t: `다음 방 · ${N[opts[i].to].name || RUN.TYPE[N[opts[i].to].type] || '방'}`, k: 'fork' }); end(i); };
-    el.onclick = ev => { const b = ev.target.closest('button'); if (!b || b.disabled) return;
-      if (b.dataset.r) { if (rest()) { el.querySelector('.rt-sup em').textContent = st.items.camp || 0; b.outerHTML = restBtn(); t0 = performance.now(); } return; }
-      take(+b.dataset.i); };
-    $('stage').append(el);
-    const wrap = el.querySelector('.rt-map'), m = DIVEMAP.mount(wrap, V, { trail: st.path, fail: [], camp: [], S, gateInfo: q0 => D.gateInfo(S, V, q0), here: st.at, pick: opts.map((x, i) => [x.to, i + 1]) });
-    wrap.onclick = ev => { if (m.dragged()) return; const id = m.cell(ev), i = opts.findIndex(x => x.to === id); if (i >= 0) take(i); };
+  //   플레이어가 고를 때까지 기다린다 (2026-11-27 사용자: 「자동선택은 일단 없애봐」). 자동 재출발 중 · ?fork=0이면 묻지 않는다 (G.Dive.POL.fork — 다쳤으면 먼저 야영)
+  // 문 표지 (2026-11-27 사용자: 「얻을수있느것과 필요한것 두가지만」): 윗칸 = 얻는 것(상자 · 금화 · 왕관 …) · 아랫줄 = 필요한 것(해골 = 싸움의 세기 · 문의 장애물)
+  //   장애물: 넘으면 초록 아이콘 + 넘는 영웅 얼굴 · 못 넘는 문(잠긴 문 · 봉인 · 무너진 길)은 회색이고 못 누른다 — 넘어 본 재주가 있으면 그 아이콘 (겪으면 기억) · 함정 · 어둠은 못 막으면 붉은 아이콘 + 결과
+  const SKULLS = { fight: 1, elite: 2, boss: 3 }, chestImg = k => `<img src="assets/ll/chest_${k}.png" alt="">`;
+  function doorSign(st, n, pi) {
+    if (n.visited) return { cls: ' seen', html: `<div class="ds-get">${UI.px('down')}</div>` };
+    const bonus = pi && D.STATE[pi.k].gate && pi.k !== 'rubble' && !n.hostile; // 잠긴 문 · 봉인 너머의 상자는 한 등급 위
+    const get = n.type === 'boss' ? UI.px('crown') + chestImg('gold') : n.type === 'elite' ? chestImg('silver') : n.type === 'treasure' || n.chest ? chestImg(bonus ? 'silver' : 'wood') : n.type === 'fight' ? UI.px('coin') : n.type === 'shop' ? UI.px('coin') + UI.px('arrow') + UI.px('armor') : n.type === 'camp' ? UI.px('tent') : '?';
+    const sk = SKULLS[n.type] ? `<span class="ds-sk">${UI.px('skull').repeat(SKULLS[n.type] + (n.tier === 'heavy' ? 1 : 0))}</span>` : '';
+    const ob = !pi ? '' : pi.shut ? `<span class="ds-shut">${UI.px(pi.ic)}${D.known(S, pi.k).map(g => UI.px(D.KNACK[g].ic)).join('')}</span>`
+      : pi.sk ? `<span class="ds-ok">${UI.px(pi.ic)}<canvas width="26" height="30"></canvas></span>`
+        : pi.k === 'sleep' ? '<span class="ds-ok">선공</span>' : pi.ok ? `<span class="ds-ok">${UI.px(pi.ic)}</span>` : `<span class="ds-no">${UI.px(pi.ic)}${esc(pi.tag)}</span>`;
+    return { cls: `${pi?.shut ? ' shut' : ''}${n.type === 'boss' ? ' boss' : ''}`, html: `<div class="ds-get">${get}</div>${sk || ob ? `<div class="ds-need">${sk}${ob}</div>` : ''}`, who: pi?.sk ? pi.who : null, shut: !!pi?.shut };
+  }
+  // 다음 방 고르기 (2026-11-26 — Dungeon of the Endless · 하데스처럼): 창을 띄우지 않고 이 방의 문 위에 그 너머 방 종류 · 상태 표지. 표지를 누르면 그 문으로.
+  //   위 왼쪽 작은 줄: 물자 · 야영 · 층 지도. 지나온 방은 건너뛴다 (2026-11-27): 층 지도에서 가 본 방을 거쳐 닿는 방을 바로 고른다 (G.Dive.routes — 드는 물자가 방마다 보인다) · 새 방으로 가는 문이 없으면 지도부터 띄운다
+  let doorEls = [];
+  const doorsOff = () => { for (const d of doorEls) d.el.remove(); doorEls = []; $('dv-pick')?.remove(); $('dv-fork')?.remove(); };
+  function routeWin(st, opts, go, rest) {
+    if (run.over || S.autoOn || q.get('fork') === '0') return false; doorsOff();
+    const N = st.map.nodes, fl = $('floats');
+    const take = path => { const n = N[path[path.length - 1]]; if (!doorEls.length && !$('dv-pick')) return; st.log.push({ t: `다음 방 · ${n.name || RUN.TYPE[n.type] || '방'}`, k: 'fork' }); doorsOff(); if (run && !run.over) go(path); }; // path: 지나는 방 차례 (끝이 가려는 방)
+    const stop = ev => ev.stopPropagation();
+    opts.forEach(x => { const n = N[x.to], d = doorSign(st, n, n.visited ? null : D.passInfo(st, x.ed || x.e, n)), el = document.createElement('div');
+      el.className = `dv-door${d.cls}`; el.innerHTML = `<div class="ds-card">${d.html}</div><i class="ds-tip"></i>`;
+      el.onpointerdown = stop; el.onpointerup = stop; el.onclick = ev => { ev.stopPropagation(); if (!d.shut) take([x.to]); };
+      fl.append(el); doorEls.push({ el, x: x.door[0], y: x.door[1] });
+      const cv = el.querySelector('canvas'), draw = () => { if (el.isConnected && !UI.face(cv, d.who.hero)) setTimeout(draw, 400); }; if (cv && d.who?.hero) draw(); }); // 넘는 영웅의 얼굴 (인형 그림이 늦으면 다시)
+    const bar = document.createElement('div'); bar.id = 'dv-pick'; bar.onpointerdown = stop; bar.onpointerup = stop;
+    const restBtn = () => { const ok = D.canCamp(st) && !st.camped?.[`${st.floor}:${st.at}`] && st.party.some(m => !m.dead && m.hp < m.max); return `<button class="pk-rest" data-r="1"${ok ? '' : ' disabled'}>${UI.px('tent')} 야영 · ${D.restCost(st)}</button>`; };
+    bar.innerHTML = `<span class="pk-sup">${UI.px('tent')} <em>${st.items.camp || 0}</em></span>${restBtn()}<button class="pk-map" data-m="1">${mi('map')}</button>`;
+    bar.onclick = ev => { const b = ev.target.closest('button'); if (!b || b.disabled) return; ev.stopPropagation();
+      if (b.dataset.r) { if (rest()) { bar.querySelector('.pk-sup em').textContent = st.items.camp || 0; b.outerHTML = restBtn(); } return; }
+      if (b.dataset.m) mapWin(st, take); };
+    $('stage').append(bar);
+    if (!opts.some(x => !N[x.to].visited && !D.passInfo(st, x.ed || x.e, N[x.to])?.shut)) mapWin(st, take); // 새 방으로 가는 (넘을 수 있는) 문이 없다 (막다른 방 · 다 돈 방): 층 지도부터
     return true;
   }
-  // 열쇠를 쓴 순간: 그 영웅 머리 위에 열쇠 아이콘 · 이름
-  function keySee() { for (const u of D.KEYUSE.splice(0)) { const p = R.party.find(q => q.merc && u.who.hero && q.merc.uid === u.who.hero.uid); if (p) SKUI.castRaw(p, UI.px(D.KEYS[u.k]?.ic || 'star'), u.t || D.KEYS[u.k]?.n || ''); } }
-  // ── 직접 조종 시험판 (2026-11-24, 흐름식 — 규칙은 D.HAND): 카드를 누르면 그 영웅을 조종 · 다시 누르면 전원 AI. 적을 누르면 표적 고정. 스킬을 누르면 다음 차례에 (치유는 누른 뒤 카드로 대상)
-  const cdL = (m, k) => { const p = R?.turn && R.party.find(q => q.merc === m); return p ? D.handCd(R, p, k) : G.Res.cdLeftOf ? G.Res.cdLeftOf(m, k) : 0; }; // 남은 쿨타임 (라운드) — 전투 중엔 무기 기술 쿨타임까지
-  const handM = () => (D.HAND.on && D.HAND.uid != null ? R?.party.find(p => p.merc?.uid === D.HAND.uid)?.merc || null : null);
-  function handInit() { const H = D.HAND, rtOn = /[?&]rt=0/.test(location.search) ? false : !!S.rt || /[?&]rt=1/.test(location.search); H.cmd = {}; H.multi = rtOn; H.auto = rtOn && S.rtAuto !== false; G.Turn.rt = rtOn ? { round: D.TUNE.RT_ROUND, walk: D.TUNE.RT_WALK, lunge: D.TUNE.RT_LUNGE } : null; document.body.classList.toggle('rt', rtOn); // 실시간 시험판: 넷 모두 끌어서 조종 · 유닛마다 시계
-    H.on = rtOn || !!S.hand || /[?&]hand=1/.test(location.search); H.uid = H.on && !rtOn && S.handCls ? R.party.find(p => p.merc?.cls === S.handCls)?.merc?.uid ?? null : null; } // 원정이 다시 시작돼도 같은 직업을
-  const handKey = () => { const m = handM(); const fr = D.HAND.fired && Date.now() - D.HAND.fired.t < 1200 ? D.HAND.fired.k : ''; const nk = D.HAND.ack && Date.now() - D.HAND.ack.t < 700 ? D.HAND.ack.t : 0; return D.HAND.on ? [fr, nk, D.HAND.uid, D.HAND.res?.k, D.HAND.res?.ally?.merc?.uid, m ? G.Builds.slots(m).filter(Boolean).map(k => cdL(m, k)) : 0] : 0; };
-  function handClick(ev) {
-    if (performance.now() - dragAt < 400) return true; // 방금 끌어다 놓았다 (칸 누르기로 치지 않는다)
-    const H = D.HAND, sk = ev.target.closest('[data-hk]');
-    if (sk) { const k = sk.dataset.hk; if (H.res?.k === k) { D.handSet(null); barK = ''; return true; }
-      if (H.multi && R?.turn) { const p = R.party.find(q => q.merc?.uid === H.uid), w = p ? D.handWait(R, p, k) / Math.max(0.1, G.Turn.speed(G.S.w.fantasy)) : 0; if (w > 1) { H.ack = { uid: H.uid, ok: false, k, t: Date.now() }; barK = ''; return true; } } // 실시간: 쿨타임이 1초 넘게 남았으면 받지 않는다 (흔들림) · 1초 안이면 이어서 예약
-      D.handSet(k, { wantAlly: !!G.Skill.SK[k]?.heal && !H.multi }); if (H.cmd[H.uid]) H.cmd[H.uid].seq = (H.cmd[H.uid].seq || 0) + 1; barK = ''; return true; }
-    const pc = ev.target.closest('.dv-p[data-u]'); if (!pc || pc.dataset.u === '') return false; const uid = +pc.dataset.u, p = R.party.find(q => q.merc?.uid === uid); if (!p) return true;
-    if (H.res?.wantAlly) { H.res.ally = p; H.res.wantAlly = false; barK = ''; return true; } // 치유 스킬을 누른 뒤: 그 아군에게
-    if (H.uid === uid) { D.handPick(null); S.handCls = null; } else { D.handPick(uid); S.handCls = p.merc.cls; } H.lock = null; H.res = null; put(S); barK = ''; return true;
+  // ── 전투 전 배치 (2026-11-27): 진형대로 선 파티 앞에 적이 보이는 채 DEP.T초 — 영웅을 끌어 배치 구역 안의 칸으로 (마우스 · 터치 pointer). 남은 시간 막대 · 시작. 안 건드리면 그대로 시작
+  //   옮긴 자리는 저장(S.form — G.Dive.depSave)에 남아 다음 전투의 기본 진형. 자동 재출발 중이면 묻지 않는다 (routeWin과 같게)
+  function depWin(Z, slots, go) {
+    if (run.over || S.autoOn || q.get('fork') === '0') return false;
+    const sv = UI.svg('dvdepsvg', 3), bar = document.createElement('div'), stop = ev => ev.stopPropagation(); let t0 = performance.now(), moved = false, drag = null, tm = 0;
+    bar.id = 'dv-dep'; bar.onpointerdown = stop; bar.onpointerup = stop; bar.innerHTML = `<span class="dp-n">${UI.px('sword')}<em></em></span><button class="dp-go">시작</button><i class="pk-bar"></i>`; $('stage').append(bar);
+    const quad = ([x, y], cls) => { const P = [[x - 0.5, y - 0.5], [x + 0.5, y - 0.5], [x + 0.5, y + 0.5], [x - 0.5, y + 0.5]].map(([a, b]) => UI.toStage(a, b).map(v => v.toFixed(1)).join(',')); return `<path class="${cls}" d="M${P.join('L')}Z"/>`; };
+    const draw = () => { sv.innerHTML = Z.tiles.map(t => quad(t, 'dp-z')).join('') + (drag?.to ? quad(drag.to, 'dp-to') : '') + [...slots].filter(([p]) => !p.dead).map(([p]) => `<path class="dp-p${drag?.p === p ? ' on' : ''}" d="${UI.ring(p._dx ?? p.x, p._dy ?? p.y, 0.45)}"/>`).join(''); };
+    const heroAt = ev => { const sb = $('stage').getBoundingClientRect(), X = ev.clientX - sb.left, Y = ev.clientY - sb.top; let best = null, bd = 44; for (const [p] of slots) { if (p.dead) continue; for (const z of [0, 1]) { const [px, py] = UI.toStage(p._dx ?? p.x, p._dy ?? p.y, z), d = Math.hypot(px - X, py - Y); if (d < bd) { bd = d; best = p; } } } return best; };
+    const target = ev => { const [tx, ty] = UI.tileAt(ev.clientX, ev.clientY); return Z.near(tx, ty); };
+    const down = ev => { if (!ev.target.closest?.('#stage') || ev.target.tagName !== 'CANVAS') return; const p = heroAt(ev); if (!p) return; drag = { p, to: null }; ev.stopPropagation(); ev.preventDefault(); };
+    const move = ev => { if (!drag) return; drag.to = target(ev); ev.stopPropagation(); };
+    const up = ev => { if (!drag) return; const d = drag; drag = null; ev.stopPropagation(); const to = ev.type === 'pointercancel' ? d.to : target(ev); if (!to) return;
+      const was = slots.get(d.p), o = [...slots].find(([q, t]) => q !== d.p && !q.dead && t[0] === to[0] && t[1] === to[1])?.[0]; if (o) slots.set(o, was); slots.set(d.p, to.slice()); moved = true; }; // 다른 영웅이 선 칸이면 자리를 바꾼다
+    const ons = [['pointerdown', down], ['pointermove', move], ['pointerup', up], ['pointercancel', up]]; for (const [k, f] of ons) document.addEventListener(k, f, true);
+    const end = () => { clearInterval(tm); for (const [k, f] of ons) document.removeEventListener(k, f, true); bar.remove(); sv.innerHTML = ''; if (moved) { D.depSave(S, Z, slots); put(S); } go(); };
+    bar.querySelector('.dp-go').onclick = ev => { ev.stopPropagation(); end(); };
+    let last = performance.now();
+    tm = setInterval(() => { if (!bar.isConnected) return clearInterval(tm); const now = performance.now(); if (drag) t0 += now - last; last = now; draw(); // 끄는 동안은 시간이 멈춘다
+      const left = D.DEP.T - (now - t0) / 1000; bar.querySelector('.pk-bar').style.width = `${Math.max(0, left / D.DEP.T * 100)}%`; bar.querySelector('.dp-n em').textContent = Math.max(0, Math.ceil(left)); if (left <= 0) end(); }, 50);
+    draw(); document.body.dataset.dep = (+(document.body.dataset.dep || 0) + 1); return true;
   }
-  function handTap(ev) { // 전투 중 적을 누르면 조종 영웅의 표적 (넉넉하게 — 누른 칸에서 1.6칸 안의 가장 가까운 적)
-    if (performance.now() - dragAt < 400) return true; // 방금 끌어다 놓았다
-    if (!D.HAND.on || !handM() || !R?.turn) return false; const [tx, ty] = UI.tileAt(ev.clientX, ev.clientY);
-    let best = null, bd = 1.6; for (const o of R.mons) { if (o.hp <= 0 || o.down) continue; const d = Math.hypot((o._dx ?? o.x) - tx, (o._dy ?? o.y) - ty); if (d < bd) { bd = d; best = o; } }
-    if (!best) return false; const p = R.party.find(q => q.merc?.uid === D.HAND.uid); if (D.HAND.multi && p) dragApply(p, { k: 'foe', e: best }); else D.HAND.lock = best; return true; }
-  function handRing() { const H = D.HAND, sv = UI.svg('dvhandsvg', 3); if (!R?.turn) { sv.innerHTML = ''; return; }
-    const ls = H.multi ? Object.entries(H.cmd).filter(([, c]) => c.lock && c.lock.hp > 0).map(([u, c]) => [c.lock, +u === H.uid]) : (H.lock && handM() ? [[H.lock, true]] : []);
-    const now = Date.now(), fl = c => c && c.at && now - c.at < 600 ? ' flash' : '', P = u => R.party.find(q => q.merc?.uid === +u);
-    let h = ls.map(([L, me]) => { const u = Object.keys(H.cmd).find(u => H.cmd[u].lock === L); return `<path class="dv-lock${me ? '' : ' dim'}${fl(H.cmd[u])}" d="${UI.ring(L._dx ?? L.x, L._dy ?? L.y, 0.62)}"/>`; }).join('');
-    { const me = H.multi && H.uid != null && P(H.uid); if (me && !me.dead) h += `<path class="dv-sel" d="${UI.ring(me._dx ?? me.x, me._dy ?? me.y, 0.5)}"/>`; } // 고른 영웅의 발밑
-    for (const [u, c] of Object.entries(H.cmd)) if (c.go && P(u)) h += `<path class="dv-go${+u === H.uid ? '' : ' dim'}${fl(c)}" d="${UI.ring(c.go.x, c.go.y, 0.4)}"/>`; // 바닥 명령: 설 칸
-    const ak = H.ack && now - H.ack.t < 600 ? H.ack : null, fr = H.fired && now - H.fired.t < 700 ? H.fired : null; // 명령이 먹힌 영웅(초록) · 안 먹힌 영웅(빨강) · 스킬이 나간 영웅(밝게)
-    for (const [o, cl] of [[ak && P(ak.uid), ak && (ak.ok ? 'ok' : 'no')], [fr && P(fr.uid), 'fired']]) if (o) h += `<path class="dv-ack ${cl}" d="${UI.ring(o._dx ?? o.x, o._dy ?? o.y, 0.55)}"/>`;
-    sv.innerHTML = h; } // 표적 고리 (실시간: 영웅마다 · 고른 영웅은 진하게)
-  // ── 끌어다 놓기 (실시간 시험판, 2026-11-24): 파티 칸이나 영웅 인형에서 끌기 시작 → 선 → 놓은 곳: 적 = 그 영웅의 표적 고정 · 아군 = 그 영웅의 아군 대상 스킬(다쳤으면 치유 먼저, 아니면 강화)을 그 아군에게 예약 · 바닥 = 없음
-  let drag = null, dragAt = 0;
-  const entAt = (cx, cy) => { const [tx, ty] = UI.tileAt(cx, cy); let best = null, bd = 1.7; for (const o of R.mons) { if (o.hp <= 0 || o.down) continue; const d = Math.hypot((o._dx ?? o.x) - tx, (o._dy ?? o.y) - ty); if (d < bd) { bd = d; best = { k: 'foe', e: o }; } } for (const p of R.party) { if (p.dead || !p.merc) continue; const d = Math.hypot((p._dx ?? p.x) - tx, (p._dy ?? p.y) - ty); if (d < bd) { bd = d; best = { k: 'ally', e: p }; } } return best || { k: 'ground' }; };
-  const allySk = (m, hurt) => { const ks = [...new Set(G.Builds.slots(m).filter(Boolean).concat(G.Guild.active(m)))].filter(k => G.Skill.SK[k]), SK = G.Skill.SK, heal = ks.find(k => SK[k]?.heal), buff = ks.find(k => !SK[k]?.heal && (G.SkillEff_at?.(k, m.cls, m.lv)?.buf || []).some(b => b.to && b.to !== 'self')); return hurt ? heal || buff : buff || heal; };
-  function dragApply(p, t, cx, cy) { const H = D.HAND; D.handPick(p.merc.uid); const c = H.cmd[p.merc.uid] = H.cmd[p.merc.uid] || { lock: null, res: null }; let ok = true;
-    if (t.k === 'foe') { c.lock = t.e; c.go = null; } else if (t.k === 'ally') { const k = allySk(p.merc, t.e.hp < t.e.max * 0.9); if (k && !(D.handWait(R, p, k) / Math.max(0.1, G.Turn.speed(G.S.w.fantasy)) > 1)) c.res = { k, ally: t.e }; else ok = false; }
-    else { const [tx, ty] = UI.tileAt(cx, cy), x = Math.round(tx), y = Math.round(ty); if (R?.turn && G.Grid.pass(R.map, x, y)) { c.go = { x, y }; c.lock = null; } else ok = false; } // 바닥: 그 칸에 가 서서 닿는 적만 (D.handLane)
-    if (ok) { c.seq = (c.seq || 0) + 1; c.at = Date.now(); } H.ack = { uid: p.merc.uid, ok, k: null, t: Date.now() }; barK = ''; }
-  function dragDraw(ev) { let sv = $('dv-drag'); if (!sv) { sv = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); sv.id = 'dv-drag'; document.body.append(sv); } const t = entAt(ev.clientX, ev.clientY), col = t.k === 'foe' ? '#ff6a55' : t.k === 'ally' ? '#9fe79f' : '#c9c2b2';
-    sv.innerHTML = `<line x1="${drag.x0}" y1="${drag.y0}" x2="${ev.clientX}" y2="${ev.clientY}" stroke="${col}" stroke-width="4" stroke-dasharray="8 5" stroke-linecap="round"/><circle cx="${ev.clientX}" cy="${ev.clientY}" r="${t.k === 'ground' ? 8 : 16}" fill="none" stroke="${col}" stroke-width="3"/>`;
-    UI.svg('dvdragsvg', 4).innerHTML = t.e ? `<path class="dv-drop ${t.k}" d="${UI.ring(t.e._dx ?? t.e.x, t.e._dy ?? t.e.y, 0.7)}"/>` : ''; }
-  function dragEnd() { drag = null; $('dv-drag')?.remove(); const s2 = $('dvdragsvg'); if (s2) s2.innerHTML = ''; }
-  function dragInit() { if (dragInit.done) return; dragInit.done = true;
-    document.addEventListener('pointerdown', ev => { if (!D.HAND.multi || !R || !run || run.over) return; let p = null; const card = ev.target.closest?.('#dv-bar .dv-p[data-u]'); if (card && card.dataset.u !== '') p = R.party.find(q => q.merc?.uid === +card.dataset.u);
-      else if (ev.target.id === 'c' || ev.target.closest?.('#stage canvas')) { const t = entAt(ev.clientX, ev.clientY); if (t.k === 'ally' && R.turn) p = t.e; }
-      if (p && !p.dead) drag = { p, card: !!card, x0: ev.clientX, y0: ev.clientY, moved: false }; }, true);
-    document.addEventListener('pointercancel', ev => { if (!drag) return; const d = drag; if (d.moved && d.lx != null) { dragApply(d.p, entAt(d.lx, d.ly), d.lx, d.ly); dragAt = performance.now(); } dragEnd(); }, true); // 브라우저가 끌기를 가로채도(pointercancel) 마지막 자리에 놓는다
-    document.addEventListener('pointermove', ev => { if (!drag) return; drag.lx = ev.clientX; drag.ly = ev.clientY; if (!drag.moved && Math.hypot(ev.clientX - drag.x0, ev.clientY - drag.y0) > 10) drag.moved = true; if (drag.moved) dragDraw(ev); }, true);
-    document.addEventListener('pointerup', ev => { if (!drag) return; const d = drag; if (d.moved) { dragApply(d.p, entAt(ev.clientX, ev.clientY), ev.clientX, ev.clientY); dragAt = performance.now(); ev.stopPropagation(); } else if (!d.card && D.HAND.uid !== d.p.merc.uid) { pickHero(d.p); dragAt = performance.now(); } /* 싸움판의 영웅을 누르면 그 영웅을 고른다 */ dragEnd(); }, true); }
-  const pickHero = p => { D.handPick(p.merc.uid); S.handCls = p.merc.cls; put(S); barK = ''; };
+  // 문 표지 자리: 화면 밖이면 가장자리에 붙이고 화살표로 그쪽을 가리킨다 (방이 화면보다 클 때)
+  function doorTick() { if (!doorEls.length) return; const sg = $('stage'), W = sg.clientWidth, H = sg.clientHeight, x0 = 46, x1 = W - 46, y0 = 120, y1 = H - 96;
+    const P = doorEls.map(d => { const [X, Y] = UI.toStage(d.x, d.y, 1.1); return { d, X, Y, cx: Math.max(x0, Math.min(x1, X)), cy: Math.max(y0, Math.min(y1, Y)) }; });
+    for (let k = 0; k < 4; k++) for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) { const a = P[i], b = P[j], dx = b.cx - a.cx, dy = b.cy - a.cy; if (Math.abs(dx) >= 78 || Math.abs(dy) >= 62) continue; // 겹치면 밀어낸다 (가장자리에 붙은 표지끼리)
+      if (78 - Math.abs(dx) < 62 - Math.abs(dy)) { const m = (78 - Math.abs(dx)) / 2 * (dx >= 0 ? 1 : -1); a.cx -= m; b.cx += m; } else { const m = (62 - Math.abs(dy)) / 2 * (dy >= 0 ? 1 : -1); a.cy -= m; b.cy += m; } }
+    for (const p of P) { const { d, X, Y, cx, cy } = p, far = Math.abs(cx - X) > 1 || Math.abs(cy - Y) > 1;
+      d.el.style.transform = `translate(${Math.round(cx)}px,${Math.round(cy)}px) translate(-50%,-100%)`; d.el.classList.toggle('far', far);
+      let a = d.el.querySelector('.dv-ar'); if (far && !a) { a = document.createElement('i'); a.className = 'dv-ar'; d.el.append(a); } if (a) { a.style.display = far ? '' : 'none'; a.style.transform = `rotate(${Math.atan2(Y - cy, X - cx)}rad)`; } } }
+  // 층 지도: 갈 수 있는 방(가 본 방만 거쳐 닿는 방 — G.Dive.routes)은 금색 테두리 · 드는 물자. 누르면 사이의 가 본 방을 지나 그 방으로 (가 본 방을 누르면 거기서 멈춘다)
+  function mapWin(st, take) {
+    $('dv-fork')?.remove(); const el = document.createElement('div'); el.id = 'dv-fork'; el.onpointerup = ev => ev.stopPropagation(); el.onpointerdown = ev => ev.stopPropagation();
+    el.innerHTML = '<div class="rt-map"></div><button class="rt-x">✕</button>'; $('stage').append(el);
+    const V = D.drawState(S, st), wrap = el.querySelector('.rt-map'), rs = D.routes(st), m = DIVEMAP.mount(wrap, V, { trail: st.path, fail: [], camp: [], S, gateInfo: q0 => D.gateInfo(S, V, q0), here: st.at, pick: rs.map(r => [r.to, r.cost]), fit: [st.at, ...rs.map(r => r.to)], cell: 16 });
+    wrap.onclick = ev => { if (m.dragged()) return; const id = m.cell(ev), r = rs.find(x => x.to === id); if (r) { el.remove(); take(r.path); } };
+    el.querySelector('.rt-x').onclick = ev => { ev.stopPropagation(); el.remove(); };
+  }
+  // 열쇠를 쓴 순간: 그 영웅 머리 위에 열쇠 아이콘 · 이름
+  function keySee() { for (const u of D.KEYUSE.splice(0)) { const p = R.party.find(q => q.merc && u.who.hero && q.merc.uid === u.who.hero.uid); if (p) SKUI.castRaw(p, UI.px(D.KNACK[u.k]?.ic || 'star'), u.t || D.KNACK[u.k]?.n || ''); } }
   // ── 관문 · 탐험 스킬 알림 판 (2026-11-24, 사용자: 「잠긴문 부수는거나 탐험 스킬 사용할때 그냥 로그만 찍히고 넘어가니까 뭘했는지 전혀 파악이 안돼」) ──
   //   탐사 규칙의 구조 있는 기록(.g — 관문 · 방법 · 수치 · 성공, .r — 판정)을 화면 가운데 판으로. 읽힐 만큼 탐사를 잠깐 멈춘다 (×1 0.9초, 배속만큼 줄되 0.35초 아래로는 안 내려감) — 판정 규칙은 그대로
   const R_GATE = { 자물쇠: ['잠긴 문', '따기'], '문 부수기': ['잠긴 문', '부수기'], '함정 해제': ['함정', '해제'], 정찰: ['정찰', '정찰'], 추적: ['흔적', '추적'] }; // 방마다 굴리는 조사(못 찾음)는 판을 띄우지 않는다 — 찾으면 그 기록(.g)으로
@@ -714,17 +708,10 @@ const DIVEUI = (() => {
   function firstLine() { const T = R.turn; if (!T || T._dvF || !CRAWL.st) return; T._dvF = 1; const w = R.dvWhy; R.dvWhy = null;
     const t = D.firstLineOf(T.first, w);
     if (t) CRAWL.st.log.push({ t, k: 'dv' }); }
-  // 예고 동작 (실시간 — 규칙은 G.MonAct.teleTick, R.tele): 범위는 바닥 칸이 붉게 차오르고 · 한 사람을 노리면 그 발밑 고리 · 몬스터 머리 위에 차오르는 막대와 이름
-  function teleDraw() { const sv = UI.svg('dvtelesvg', 2), L = R?.turn && R.tele; if (!L || !L.length) { if (sv.innerHTML) sv.innerHTML = ''; return; }
-    const cellD = (x, y) => [[x - 0.5, y - 0.5], [x + 0.5, y - 0.5], [x + 0.5, y + 0.5], [x - 0.5, y + 0.5]].map(([a, b], i) => { const [X, Y] = UI.toStage(a, b); return `${i ? 'L' : 'M'}${X.toFixed(1)},${Y.toFixed(1)}`; }).join('') + 'Z';
-    sv.innerHTML = L.map(q => { const k = Math.min(1, 1 - Math.max(0, q.t) / q.T), op = (0.12 + 0.55 * k).toFixed(2), e = q.e, [hx, hy] = UI.toStage((e._dx ?? e.x) - 1.2, (e._dy ?? e.y) - 1.2);
-      return `<rect class="tl-bg" x="${(hx - 24).toFixed(1)}" y="${(hy - 4).toFixed(1)}" width="48" height="7" rx="2"/><rect class="tl-fill" x="${(hx - 24).toFixed(1)}" y="${(hy - 4).toFixed(1)}" width="${(48 * k).toFixed(1)}" height="7" rx="2"/><text class="tl-n" x="${hx.toFixed(1)}" y="${(hy - 8).toFixed(1)}">${esc(q.name)}</text>`; }).join(''); }
   function frame(dt) {
     if (!R) return;
     if (run && run.over) return; // 끝난 뒤에는 탐사를 멈춘다 (결과 창 아래)
-    CRAWL.frame(dt); if (run) { cardTick(); if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); teleDraw(); gateTick(); D.statTick(CRAWL.st, R); if (D.HAND.on) { D.handTick(R); handRing(); } bar(); cdTick(); skillSee(); keySee(); waveSee(); logPoll(); logBox(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
+    CRAWL.frame(dt); doorTick(); if (run) { cardTick(); if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); gateTick(); D.statTick(CRAWL.st, R); bar(); cdTick(); skillSee(); keySee(); waveSee(); logPoll(); logBox(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
   }
-  // 직접 조종: 조종 영웅이 있으면 카메라가 그 영웅(표시 위치 _dx · _dy)을 따라간다 — 없으면 null (지금 카메라 그대로)
-  const follow = r => { if (!D.HAND.on || D.HAND.uid == null || !run || run.over) return null; if (r.turn && roomMid()) return null; /* 전투 중 작은 방은 방 전체가 들어오니 방 가운데 (영웅을 가운데 두면 방 한쪽이 밀려 나간다) */ const p = r.party.find(q => q.merc?.uid === D.HAND.uid && !q.dead); return p ? [p._dx ?? p.x, p._dy ?? p.y] : null; };
-  return { world, attach, frame, zoom, camAt, follow, chest: k => chestShow(k), get on() { return ON && on; } };
+  return { world, attach, frame, zoom, camAt, chest: k => chestShow(k), get on() { return ON && on; }, get zk() { return zk; } };
 })();

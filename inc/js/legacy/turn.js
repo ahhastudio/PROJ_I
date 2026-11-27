@@ -115,7 +115,6 @@ G.Turn = (() => {
       if (php.max) st.low = Math.min(st.low, php.hp / php.max);
       for (const p of rt.party) { p.moving = false; const c = p.cds; if (c) for (const k in c) if ((c[k] -= (rt.gdt || 0)) <= 0) delete c[k]; } // 재사용 대기: 라운드 시간으로
       for (const o of rt.mons) o.moving = false;
-      if (T.rt) { laneRun(f, rt, st, dt); return true; } // 실시간 (원정 시험판): 유닛마다 시계 · 동시에
       step(f, rt, st, dt);
       for (let k = 0; k < 120 && rt.turn === st && st.fast && st.t <= 0 && (st.ph === 'wait' || st.ph === 'pre' || st.ph === 'move'); k++) step(f, rt, st, 0); // 같은 선제권 무리는 한 프레임에
       return true;
@@ -193,12 +192,12 @@ G.Turn = (() => {
     const m = rt.map;
     if ((st.ph === 'show' || st.ph === 'move' || st.ph === 'back') && !foes(rt).length) { pause(st, 0); return; } // 적이 다 쓰러졌으면 걸음을 마저 걷지 않는다
     if (st.ph === 'input') { if (!foes(rt).length || gone(rt, st.cur) || st.cur.dying) pause(st, 0); return; } // 플레이어의 명령을 기다린다 (G.Ctrl.cmd)
-    if (st.ph === 'wait') { G.Tactics.snap(rt); if ((st.t -= dt) > 0) return; if (st.lane) { laneEnd(f, rt, st); return; } next(f, rt, st); return; }
+    if (st.ph === 'wait') { G.Tactics.snap(rt); if ((st.t -= dt) > 0) return; next(f, rt, st); return; }
     if (st.ph === 'idle') return; // 실시간 차선: 다음 시계까지 쉰다 // 행동이 끝나면 밀리거나 소환된 인물을 칸 위로
     if (st.ph === 'show') { G.Tactics.snap(rt, st.cur); if ((st.t -= dt) <= 0) { st.ph = 'move'; st.t = 0; } return; }
     if (st.ph === 'pre') {
       if ((st.t -= dt) > 0) return;
-      if (T.smooth && st.t > (T.rt?.walk ? -12 : -3.5) && st.cur && st.cur._dx != null && Math.hypot(st.cur._dx - st.cur.x, st.cur._dy - st.cur.y) > 0.12) return; // 그림이 다 걸어올 때까지 (3.5초까지 — 그림은 초당 8칸 × 배속으로 걷는다: render/actors settle. 가장 긴 질주 24칸 = 3초)
+      if (T.smooth && st.t > -3.5 && st.cur && st.cur._dx != null && Math.hypot(st.cur._dx - st.cur.x, st.cur._dy - st.cur.y) > 0.12) return; // 그림이 다 걸어올 때까지 (3.5초까지 — 그림은 초당 8칸 × 배속으로 걷는다: render/actors settle. 가장 긴 질주 24칸 = 3초)
       const e = st.cur, tg = st.tg;
       if (gone(rt, e) || !tg || (tg.kind === 'mon' ? gone(rt, tg) : tg.dead)) { T.pre = null; pause(st, SKIP); return; }
       act(f, rt, st, e, tg); T.pre = null;
@@ -321,9 +320,9 @@ G.Turn = (() => {
   function startTurn(f, rt, st, x) {
     const e = st.cur = x.e;
     e.ready = false; e.reacted = false; // 반응은 자기 차례 시작에 되찾는다 (SRD)
-    st.fast = !st.lane && !T.smooth && (sameNext(st) || st.prevInit === x.init); /* 흐르는 턴제: 같은 무리도 하나씩 — 누가 누구를 쳤는지 보이게 */ st.prevInit = x.init; // 무리로 함께 움직인다: 미리 보기 · 걷기 · 겨누기를 기다리지 않는다
-    // SRD 라운드 시계: 차례마다 한 라운드를 차례 수로 나눠 올린다. 지속 시간 · 반응(라운드에 한 번)은 실제 시간이 아니라 라운드를 따른다 (실시간 차선은 실제 시간으로 흘린다 — laneRun)
-    if (!st.lane) { const q = G.Res_ROUND / Math.max(1, st.order.length); G.S.runTime += q; F().roundTick(f, rt, q); } T.turnNo = (T.turnNo || 0) + 1;
+    st.fast = !T.smooth && (sameNext(st) || st.prevInit === x.init); /* 흐르는 턴제: 같은 무리도 하나씩 — 누가 누구를 쳤는지 보이게 */ st.prevInit = x.init; // 무리로 함께 움직인다: 미리 보기 · 걷기 · 겨누기를 기다리지 않는다
+    // SRD 라운드 시계: 차례마다 한 라운드를 차례 수로 나눠 올린다. 지속 시간 · 반응(라운드에 한 번)은 실제 시간이 아니라 라운드를 따른다
+    { const q = G.Res_ROUND / Math.max(1, st.order.length); G.S.runTime += q; F().roundTick(f, rt, q); } T.turnNo = (T.turnNo || 0) + 1;
     F().startTurnFx(f, rt, e); /* 지속 피해: 그 몸의 차례가 시작될 때 주사위로 (SRD) */
     G.Skill.startOf?.(f, rt, e); /* 원소 소환 같은 이어지는 효과 */
     G.MonAct.startOf(f, rt, e); /* 악취 같은 차례 시작의 오라 (SRD) */
@@ -432,35 +431,8 @@ G.Turn = (() => {
     if (back && back.length) { st.path = back; st.ph = 'back'; return; }
     pause(st, BEAT);
   }
-  // ── 실시간 차선 (2026-11-24, 원정 시험판 — T.rt = { round: 한 라운드의 실제 초 }): 차례 엔진의 한 차례 상태(st)를 유닛마다 하나씩 두고 매 프레임 모두 돌린다.
-  //   시계가 차면 그 유닛의 차례 시작(startTurn) → 그 차례의 이동 · 행동을 마치면 쉰다(idle). 시계는 차례 중에도 흐른다 (한 라운드마다 한 차례).
-  //   선제권 = 처음 시계를 얼마나 채우고 시작하나(선제권 차례로 나눔) · 기습(st.first) = 당한 쪽이 한 라운드 늦게. 라운드 시계(지속 시간 · 쿨타임)는 실제 시간을 라운드로 바꿔 흘린다
-  //   반응 · 「차례에 한 번」은 그 유닛의 차례 시작에 되찾는다 (= 그 유닛의 한 라운드에 한 번)
-  function laneAdd(rt, st, e, clk) { (rt.lanes = rt.lanes || new Map()).set(e, { map: st.map, round: 1, order: st.order, i: 0, cur: e, ph: 'idle', t: 0, path: [], tg: null, low: st.low, downs: 0, lane: true, clk, main: st }); }
-  function laneRun(f, rt, st, dt) {
-    const RT = Math.max(0.3, T.rt.round);
-    if (!rt.lanes || rt.lanesOf !== st) { rt.lanes = new Map(); rt.lanesOf = st; const n = st.order.length; st.order.forEach((x, i) => laneAdd(rt, st, x.e, RT * 0.85 * i / Math.max(1, n) + (st.first && ((x.e.kind === 'mon') !== (st.first === 'foes')) ? RT : 0))); }
-    for (const e of rt.party.filter(p => !p.dead || p.dying).concat(G.Sum.alive(rt), foes(rt))) if (!rt.lanes.has(e)) laneAdd(rt, st, e, RT * 0.5); // 새로 낀 유닛 (소환 · 깨어난 적)
-    { const q = dt * G.Res_ROUND / RT; G.S.runTime += q; F().roundTick(f, rt, q); st.rtT = (st.rtT || 0) + dt; st.round = 1 + Math.floor(st.rtT / RT); G.MonAct.teleTick?.(f, rt, dt); if (rt.turn !== st) return; } // 라운드 시계 · 예고 동작 (G.MonAct): 실제 시간 → 라운드
-    for (const [e, L] of rt.lanes) {
-      if (rt.turn !== st && rt.turn !== L) break; // 전투가 끝났다
-      if (gone(rt, e) && !e.dying) { if (L.ph !== 'idle') L.ph = 'idle'; rt.lanes.delete(e); continue; }
-      L.round = st.round; // 무기 기술의 쿨타임(SK.cd — 쓴 차선의 라운드로 잰다)이 실시간에도 돈다
-      if (T.laneCmd) { rt.turn = L; T.laneCmd(f, rt, L, RT, false); if (rt.turn === L) rt.turn = st; if (rt.turn === null) return; } // 직접 조종 명령을 시계와 따로 (원정 — G.Dive)
-      L.clk -= dt;
-      if (L.ph === 'idle') { if (L.clk > 0) continue; L.clk += RT; rt.turn = L; startTurn(f, rt, L, { e, init: 0 }); if (rt.turn === L && T.laneCmd) T.laneCmd(f, rt, L, RT, true); if (rt.turn === L) rt.turn = st; }
-      else { rt.turn = L; step(f, rt, L, dt); if (rt.turn === L) rt.turn = st; }
-      if (rt.turn === null) return; // finish
-      if (!foes(rt).length) { if (T.refill && T.refill(f, rt, st)) return; rt.lanes = null; finish(f, rt, st); return; }
-    }
-  }
-  function laneEnd(f, rt, L) {
-    if (L.cur && !gone(rt, L.cur)) G.Skill.endTurn?.(f, rt, L.cur); /* 차례를 마칠 때의 효과 (SRD) */
-    L.done = null; G.Foe.turnEnd(f, rt, L); if (L.cur && rt.phase !== 'dead') G.MonAct.legendary(f, rt, L.cur); G.MonAct.flush();
-    L.ph = 'idle'; L.ov = null; L.path = []; if (L.cur) L.cur.longNow = false;
-  }
   function finish(f, rt, st) {
-    if (st.main) st = st.main; if (!foes(rt).length && T.refill && T.refill(f, rt, st)) { rt.turn = st; if (!T.rt) { st.i = st.order.length; st.ph = 'wait'; st.t = 0.3; } return; } /* 다음 무리 (원정) */ rt.lanes = null; rt.tele = null; // 실시간: 차선 · 예고 동작을 접는다
+    if (!foes(rt).length && T.refill && T.refill(f, rt, st)) { rt.turn = st; st.i = st.order.length; st.ph = 'wait'; st.t = 0.3; return; } // 다음 무리 (원정)
     if (st.round >= 5 || st.downs) dm(rt, `전투 끝 · ${st.round}라운드`);
     G.Story.endFight(f, rt);
     G.Foe.endFight(rt);
@@ -500,6 +472,6 @@ G.Turn = (() => {
     }
   }
   // 조종 모듈(G.Ctrl)이 쓰는 차례 엔진의 손잡이 — 걷기 · 기회 공격 · 치기 · 보고 · 차례 끝은 AI 차례와 같은 함수다
-  T.io = { foes, gone, seenBy, moveOf, reach, canHit, opportunity, strike, decide, pause, report, snapshot, laneEnd, BEAT, SKIP, MOVE_V };
+  T.io = { foes, gone, seenBy, moveOf, reach, canHit, opportunity, strike, decide, pause, report, snapshot, BEAT, SKIP, MOVE_V };
   return T;
 })();

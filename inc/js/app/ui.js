@@ -39,7 +39,7 @@ const UI = (() => {
     const g = unproject(sx, sy); return [g.x / T + win.cx, g.y / T + win.cy];
   }
   // 바닥 위 원(중심 x, y · 반지름 r타일)을 쿼터뷰로 꺾은 SVG 경로 (무대 좌표)
-  function ring(x, y, r, n = 28) { let d = ''; for (let i = 0; i <= n; i++) { const a = i / n * Math.PI * 2, [X, Y] = toStage(x + Math.cos(a) * r, y + Math.sin(a) * r); d += `${i ? 'L' : 'M'}${X.toFixed(1)},${Y.toFixed(1)}`; } return d + 'Z'; }
+  function ring(x, y, r, n = 28) { let d = ''; for (let i = 0; i <= n; i++) { const a = i / n * Math.PI * 2, [X, Y] = (UI.toStage || toStage)(x + Math.cos(a) * r, y + Math.sin(a) * r); /* 탑뷰는 UI.toStage를 바꿔 끼운다 */ d += `${i ? 'L' : 'M'}${X.toFixed(1)},${Y.toFixed(1)}`; } return d + 'Z'; }
   // 무대 위에 깔리는 SVG 한 장 (없으면 만든다)
   function svg(id, z = 2) { let el = $(id); if (!el) { el = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); el.id = id; el.classList.add('stagesvg'); el.style.zIndex = z; $('stage').append(el); } return el; }
   // 진행 글: 그 기록(log: [{ t }])에 새로 쌓인 줄만 화면 위 dm 줄에 잠깐

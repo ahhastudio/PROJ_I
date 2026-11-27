@@ -2,7 +2,7 @@
 // 문 열기 연출 (화면 쪽, 설계 5-11): 적이 있는 방의 문 앞에 서면 저절로 연다 — 누르는 것 없음.
 // 2026-11-18: 손으로 하는 준비(엿듣기 · 자리 잡기 · 기름 · 마름쇠 창)는 뺐다 (사용자: 「이 과정이 너무 번거롭다」).
 // 어떻게 여나는 규칙 쪽 G.Prep.next가 고른다 (살살 → 자물쇠 따기 두 번 → 걷어차기). 판정이 있으면 누가 할지는 쓰는 쪽에 묻는다 (o.ask — 없으면 규칙이 고른 사람). 여기는 걷는 모습 · 머리 위 주사위 · 문이 열리는 연출뿐.
-// 쓰는 쪽: PREPUI.open(rt, { fast: 굴림 장면 없이(원정 모드), door, doorTiles, out, locked, mons, others, items, intro(Map 사람 → 걸어올 자리), reveal(), onOpen(setup), ask({ n, dc, who: 추천, cands: [{ w, bonus }] }, cb(사람)) }).
+// 쓰는 쪽: PREPUI.open(rt, { door, doorTiles, out, locked, mons, others, items, intro(Map 사람 → 걸어올 자리), reveal(), onOpen(setup), ask({ n, dc, who: 추천, cands: [{ w, bonus }] }, cb(사람)) }).
 // 매 틱 PREPUI.frame(dt) — 문을 여는 동안 true (그동안 탐사 걸음 · 전투 시계는 멈춘다).
 const PREPUI = (() => {
   const { $ } = UI;
@@ -33,7 +33,7 @@ const PREPUI = (() => {
       const r = G.Prep.open(P, n.who, n.id, io); if (!r) { busy = false; return; }
       const then = () => { G.Feed.push(r.ev); if (r.ok) startOpening(); else { busy = false; wait = 0.5; } }, e = [].concat(r.ev || []).find(x => x && x.k === 'try') || {};
       // 판정이 있으면 굴림 장면으로 (d20 → 보정 → 성공 / 실패), 판정 없는 행동은 머리 위에서 바로
-      if (r.nat != null && e.dc != null && !new URLSearchParams(location.search).get('auto') && !O.fast) CHECKUI.show({ who: n.who.merc?.name || '', skill: e.n || '문 열기', dc: e.dc, r: r.nat, g: 0, bonus: e.mod || 0, tot: r.nat + (e.mod || 0), ok: !!r.ok, text: r.ok ? '문이 열린다.' : '열리지 않는다. 소리가 났다.' }, then);
+      if (r.nat != null && e.dc != null && !new URLSearchParams(location.search).get('auto')) CHECKUI.show({ who: n.who.merc?.name || '', skill: e.n || '문 열기', dc: e.dc, r: r.nat, g: 0, bonus: e.mod || 0, tot: r.nat + (e.mod || 0), ok: !!r.ok, text: r.ok ? '문이 열린다.' : '열리지 않는다. 소리가 났다.' }, then);
       else roll(n.who, r.nat, then);
     });
   }

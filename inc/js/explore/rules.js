@@ -106,9 +106,9 @@ RUN.HINT2 = { event: '뭔가 있다', camp: '쉴 만한 곳', shop: '불빛 · �
   RUN.roomActs = st => {
     if (st.roomDark != null && st.roomDark === st.at) return []; // 어두운 방에서는 조사 못 함
     const acts = [], outs = G().outs(st.map, st.at);
-    if (RUN.X?.keyed) { const s = RUN.X.keyHolder(st, 'deft'); if (s && !st.here.search && outs.some(e => (e.kind === 'trap' && !e.seen.trap) || (e.kind === 'hidden' && !e.seen.hidden))) acts.push({ id: 'search', label: '숨은 길', who: s.n, check: null, p: 1, run: () => { st.here.search = true;
-        for (const e of outs) { if (e.kind === 'trap' && !e.seen.trap) { e.seen.trap = true;  } if (e.kind === 'hidden' && !e.seen.hidden) { e.seen.hidden = true; note(node(st, st.at), '숨은 통로!', 'ink'); say(st, `${s.n} · 숨은 길`, 'good'); gl(st, { who: s.n, gate: '숨은 길', how: '찾음', ok: true }); RUN.X.onKey(st, s, 'deft', '숨은 길'); } } } });
-      return acts; } // 손재주가 있으면 숨은 길을 찾는다 (없으면 못 찾는다)
+    if (RUN.X?.keyed) { const s = RUN.X.holder(st, 'eye'); if (s && !st.here.search && outs.some(e => (e.kind === 'trap' && !e.seen.trap) || (e.kind === 'hidden' && !e.seen.hidden))) acts.push({ id: 'search', label: '숨은 길', who: s.n, check: null, p: 1, run: () => { st.here.search = true;
+        for (const e of outs) { if (e.kind === 'trap' && !e.seen.trap) { e.seen.trap = true;  } if (e.kind === 'hidden' && !e.seen.hidden) { e.seen.hidden = true; note(node(st, st.at), '숨은 통로!', 'ink'); say(st, `${s.n} · 숨은 길`, 'good'); gl(st, { who: s.n, gate: '숨은 길', how: '찾음', ok: true }); RUN.X.onKnack(st, s, 'eye', '숨은 길'); } } } });
+      return acts; } // 눈썰미가 있으면 숨은 문을 찾는다 (없으면 안 보인다)
     const iv = best(st, '조사');
     if (iv && !st.here.search) {
       const c = mkCheck(st, '조사', 13, iv), c2 = { ...c, dc: 15 };
@@ -136,18 +136,18 @@ RUN.HINT2 = { event: '뭔가 있다', camp: '쉴 만한 곳', shop: '불빛 · �
   // ── 이동 (4-3) ──────────────────────────────────────────────────
   RUN.moveActs = (st, e) => {
     const n = node(st, e.b), acts = [], go = (label, cost, extra = {}) => ({ id: 'go', label, who: null, check: null, p: 1, cost, run: () => traverse(st, e, extra) });
-    if (RUN.X?.keyed) { // 방 상태 (2026-11-26, FTL처럼 막지 않는다): 넘는 사람이 있으면 넘고, 없으면 결과를 안고 들어간다 — 고르는 것은 다음 방 고르기에서. 하나만 돌려준다
-      const X = RUN.X, K = g => X.keyHolder(st, g), lt = e.lock || 'lock', extra = {};
-      const pre = () => { if (e.passed) return; e.passed = true; let who = null, g = null, how = null;
-        if (e.kind === 'locked' && !e.opened) {
-          if (lt === 'rubble') { const m = K('str'); if (m) { who = m; g = 'str'; how = '치움'; } else { X.spend?.(st, 1, '돌아감'); say(st, '무너진 길 · 돌아간다', 'bad'); } }
-          else if (lt === 'seal') { const m = K('spell'); if (m) { who = m; g = 'spell'; how = '봉인을 풂'; if (!n.hostile) n.bonus = true; } else n.shut = true; }
-          else { const d = K('deft'), b = K('str'); if (d) { who = d; g = 'deft'; how = '엶'; } else if (b) { who = b; g = 'str'; how = '부숨'; if (n.hostile) n.alert = true; } else n.shut = true; if (who && !n.hostile) n.bonus = true; }
-          e.opened = true; if (n.shut) { say(st, `${LOCK_N[lt] || '잠김'} · 못 엶`, 'bad'); gl(st, { gate: LOCK_N[lt], how: '못 엶', val: '보상 없음', ok: false }); }
-        } else if (e.kind === 'trap' && !e.disarmed) { const m = K('deft'); e.seen.trap = true; if (m) { who = m; g = 'deft'; how = '함정 해제'; e.disarmed = true; } else extra.trapAdv = 0; }
-        else if (e.kind === 'dark' && !lit(st)) { if (st.items.torch) extra.torch = true; else { extra.dark = true; n.darkIn = true; } }
-        if (who) { say(st, `${who.n} · ${how}`, 'info'); gl(st, { who: who.n, gate: LOCK_N[lt] && e.kind === 'locked' ? LOCK_N[lt] : e.kind === 'trap' ? '함정' : '', how, ok: true }); X.onKey(st, who, g, how); } };
-      return [{ id: 'pass', label: '간다', who: null, check: null, p: 1, pre, run: () => { pre(); return traverse(st, e, extra); } }];
+    if (RUN.X?.keyed) { // 문의 장애물 (2026-11-27): 잠긴 문 · 봉인 · 무너진 길은 넘는 재주가 있어야 들어간다 (없으면 다음 방 고르기에서 막힌다 — 여기까지 안 온다) · 함정 · 어둠은 결과를 안고 들어간다. 하나만 돌려준다
+      const X = RUN.X, lt = e.lock || 'lock', extra = {}, HOW = { pick: '자물쇠를 땀', brk: lt === 'rubble' ? '치움' : '부숨', unseal: '봉인을 풂' };
+      const pre = () => { if (e.passed) return true; let who = null, g = null, how = null, ob = null, loud = false;
+        if (e.kind === 'locked' && !e.opened) { g = X.way(st, lt); if (!g) return false; who = X.holder(st, g); how = HOW[g]; ob = lt; e.opened = true;
+          if (g === 'brk' && n.hostile) { n.alert = true; loud = true; } // 부수면 시끄럽다: 안쪽이 알아챈다
+          if (lt !== 'rubble' && !n.hostile) n.bonus = true; }
+        else if (e.kind === 'trap' && !e.disarmed) { const m = X.holder(st, 'disarm'); e.seen.trap = true; if (m) { who = m; g = 'disarm'; how = '함정 해제'; ob = 'trap'; e.disarmed = true; } else extra.trapAdv = 0; }
+        else if (e.kind === 'dark') { const m = X.holder(st, 'light'); if (m) { who = m; g = 'light'; how = '밝힘'; ob = 'dark'; } else if (!lit(st)) { if (st.items.torch) extra.torch = true; else { extra.dark = true; n.darkIn = true; } } }
+        e.passed = true;
+        if (who) { say(st, `${who.n} · ${how}${loud ? ' · 적이 알아챔' : ''}`, loud ? 'bad' : 'info'); gl(st, { who: who.n, gate: LOCK_N[lt] && e.kind === 'locked' ? LOCK_N[lt] : e.kind === 'trap' ? '함정' : '', how, ok: true }); X.onKnack(st, who, g, how, ob); }
+        return true; };
+      return [{ id: 'pass', label: '간다', who: null, check: null, p: 1, pre, run: () => (pre() ? traverse(st, e, extra) : null) }];
     }
     if (e.kind === 'locked' && !e.opened) {
       e.tried = e.tried || {};
@@ -174,13 +174,12 @@ RUN.HINT2 = { event: '뭔가 있다', camp: '쉴 만한 곳', shop: '불빛 · �
       acts.push(go('어둠 속으로 간다', null, { dark: true }));
       return acts;
     }
-    if (e.kind === 'trap' && e.seen.trap && RUN.X?.keyed && !e.disarmed) { const s = RUN.X.keyHolder(st, 'sense'); if (s) return [{ id: 'disarm', label: '감각', who: s.n, check: null, p: 1, run: () => { e.disarmed = true; say(st, `${s.n} · 감각 · 함정 해제`, 'good'); gl(st, { who: s.n, gate: '함정', how: '감각', ok: true }); RUN.X.onKey(st, s, 'sense'); return traverse(st, e); } }]; return [go('함정을 밟고 지나간다', '체력', { trapAdv: 0 })]; } // 열쇠: 감각이면 해제, 아니면 밟고 지나간다
     if (e.kind === 'trap' && e.seen.trap && RUN.X && !e.disarmed) { // 원정: 찾은 함정은 해제(로그 — 도둑 도구 = 민첩 + 숙련 · 전문화, DC 15)하거나, 알고 지나간다(작동하지만 내성에 이점). 해제에 5 이상 모자라면 작동한다 (SRD)
       const dm = alive(st).find(m => CAN(st, m, 'disarm')), out = [];
       if (dm) { const c = mkCheck(st, '도둑 도구', e.dc || 15, { m: dm, bonus: SK(dm, '도둑 도구') }); out.push({ id: 'disarm', label: '함정을 해제한다', who: dm.n, check: c, p: pOf(c), run: () => { const r = roll(st, c, dm.n, '함정 해제'); if (r.ok) { e.disarmed = true; return traverse(st, e); } return traverse(st, e, { trapAdv: r.tot <= c.dc - 5 ? 0 : 1 }); } }); }
       out.push(go('함정을 피해 지나간다', null, { trapAdv: 1 })); return out; }
     if (e.kind === 'trap' && e.seen.trap) return [go('함정을 피해 지나간다', null)];
-    if (e.kind === 'dark') return [go(RUN.X ? (RUN.X.lightBy(st) ? '빛 소마법을 켜고 간다' : '암시야로 간다') : has(st, 'wizard') ? '빛 소마법을 켜고 간다' : '암시야로 간다', null)];
+    if (e.kind === 'dark') return [go(has(st, 'wizard') ? '빛 소마법을 켜고 간다' : '암시야로 간다', null)];
     return [go('이 길로 간다', null)];
   };
 
@@ -191,11 +190,10 @@ RUN.HINT2 = { event: '뭔가 있다', camp: '쉴 만한 곳', shop: '불빛 · �
   function traverse(st, e, opt = {}) {
     e.walked = true; st.turn++; if (RUN.X) RUN.X.tick(st, RUN.X.ROOM_R); // 방을 하나 옮기면 6라운드 (쿨타임)
     if (RUN.X?.keyed && RUN.X.spend) RUN.X.spend(st, 1); // 원정: 방을 옮길 때마다 야영 물자 1 (없으면 굶주림)
-    if (!opt.torch && e.kind === 'dark' && RUN.X?.keyed && lit(st)) { const lb = RUN.X.lightBy(st); if (lb) { gl(st, { who: lb.n, gate: '어두운 길', how: '빛', ok: true }); RUN.X.onKey(st, lb, 'spell', '밝힘'); } }
     if (opt.torch) { st.items.torch--; say(st, '횃불을 켠다.'); gl(st, { gate: '어두운 길', how: '횃불', val: '횃불 −1', ok: true }); }
     st.dark = !!opt.dark;
     st.at = e.b; st.here = {}; st.path.push(e.b);
-    { const nb = node(st, e.b); st.roomDark = null; if (nb.dark && !nb.lit) { if (lit(st)) { nb.lit = true; if (RUN.X) { const lb = RUN.X.lightBy(st); say(st, '어두운 방 · 빛'); gl(st, { who: lb?.n || '', gate: '어두운 방', how: lb ? '빛' : '암시야', ok: true }); } } else if (st.items.torch > 0) { st.items.torch--; nb.lit = true; say(st, `어두운 방 · 횃불 ${st.items.torch + 1} → ${st.items.torch}`); gl(st, { gate: '어두운 방', how: '횃불', val: '횃불 −1', ok: true }); } else { st.roomDark = e.b; say(st, '어두운 방 · 횃불 0 · 어둠', 'bad'); gl(st, { gate: '어두운 방', how: '횃불 0', ok: false }); } } } // 어두운 방: 빛 · 횃불 1 · 없으면 어둠 (조사 못 함 · 엔진의 어둠으로 싸운다)
+    { const nb = node(st, e.b); st.roomDark = null; if (nb.dark && !nb.lit) { if (lit(st)) { nb.lit = true; if (RUN.X) { const lb = RUN.X.holder(st, 'light'); say(st, `어두운 방 · ${lb ? '빛' : '암시야'}`); gl(st, { who: lb?.n || '', gate: '어두운 방', how: lb ? '빛' : '암시야', ok: true }); if (lb) RUN.X.onKnack(st, lb, 'light', '밝힘', 'dark'); } } else if (st.items.torch > 0) { st.items.torch--; nb.lit = true; say(st, `어두운 방 · 횃불 ${st.items.torch + 1} → ${st.items.torch}`); gl(st, { gate: '어두운 방', how: '횃불', val: '횃불 −1', ok: true }); } else { st.roomDark = e.b; say(st, '어두운 방 · 횃불 0 · 어둠', 'bad'); gl(st, { gate: '어두운 방', how: '횃불 0', ok: false }); } } } // 어두운 방: 빛 · 횃불 1 · 없으면 어둠 (조사 못 함 · 엔진의 어둠으로 싸운다)
     if (e.kind === 'trap' && !e.disarmed && (!e.seen.trap || opt.trapAdv != null)) {
       say(st, e.seen.trap ? '함정이 작동한다.' : '딸깍 — 함정이다! 칼날이 튀어나온다.', 'bad'); e.seen.trap = true;
       const line = st.log[st.log.length - 1]; line.trap = []; /* 구조 있는 기록: [이름, 피해] */ line.g = { gate: '함정', how: opt.trapAdv != null ? '알고 지나감' : '밟음', ok: false, dmg: line.trap };

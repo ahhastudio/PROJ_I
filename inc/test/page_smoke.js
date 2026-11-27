@@ -40,7 +40,7 @@ const PAGES = {
   'index.html?scene=reward': d => [...game(d, 6), !/id="reward"/.test(d) && '보상 창이 없다'].filter(Boolean), // 보상 시험: 레벨업 · 3택1 · 기록 창 // 문 앞 준비 시험: 파티 셋 + 문 너머(안 보이는) 적 셋
   'index.html?art=dcss&party=dragoon': d => game(d, 1),
   'index.html?phone=1&party=dragoon': d => game(d, 1),
-  // 원정 모드: 길드(선술집 장면 · 아래 탭) · 뒤에 빈 방 (전투는 실시간이라 여기서는 안 돈다 — 가상 시간이 느리다)
+  // 원정 모드: 길드(선술집 장면 · 아래 탭) · 뒤에 빈 방
   'dive.html': d => [/data-err="/.test(d) && `JS 오류: ${(d.match(/data-err="([^"]*)"/) || [])[1]}`, /data-load-err="/.test(d) && `불러오기 오류: ${(d.match(/data-load-err="([^"]*)"/) || [])[1]}`, !/id="dv-guild"/.test(d) && '길드 창이 없다', !/class="in-scene"[^>]*><canvas/.test(d) && '길드 장면(선술집)이 없다', !/data-in="/.test(d) && '장면에 영웅이 없다', !/class="dv-gtabs"/.test(d) && '길드 아래 탭이 없다', !/data-floor="ready"/.test(d) && '방을 다 굽지 못했다'].filter(Boolean),
   'run.html': d => [
     count(d, /class="cand"/g) !== 5 && `후보 카드 ${count(d, /class="cand"/g)}장 (5장이어야)`,

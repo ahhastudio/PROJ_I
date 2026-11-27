@@ -85,17 +85,6 @@ G.MonAct = (() => {
     return out;
   }
   const SPN = {}; const spName = (id, d) => { if (!SPN._) { SPN._ = 1; for (const k in G.D.MSKILLS) { const q = G.D.MSKILLS[k]; if (q.en && q.n && !/[A-Za-z]/.test(q.n)) SPN[q.en] = SPN[q.en] || q.n; } } return SPN[G.SRD_SP[id]?.en] || d; }; // 주문 이름 (우리말)
-  // 범위가 덮는 칸 (예고 그림 — AREA.hits를 칸마다 놓은 빈 몸으로)
-  function areaCells(rt, e, A, pt, x0) { const R = A.ft / 5 + 2, m = rt.map, fake = []; if (!m) return [];
-    for (let y = Math.floor(Math.min(e.y, pt.y) - R); y <= Math.ceil(Math.max(e.y, pt.y) + R); y++) for (let x = Math.floor(Math.min(e.x, pt.x) - R); x <= Math.ceil(Math.max(e.x, pt.x) + R); x++) if (G.Grid.pass(m, x, y)) fake.push({ x, y, hp: 1 });
-    return H().AREA.hits({ ...x0, rt: { map: m, mons: fake, party: [], sums: [] } }, e, A, pt).map(o => [o.x, o.y]); }
-  function teleOf(rt, e, b, go) {
-    const k = M.TELE || 0; if (!k || !G.Turn.rt || !rt.turn?.lane || !(b.sig || G.Sig?.is(e, b))) return false; // 시그니처 기술만 (js/rules/signature.js)
-    const T = k * G.Turn.rt.round, q = b.q, A = q?.A || null, pt = A && q.t ? { x: q.t.x, y: q.t.y } : null, name = b.spell ? spName(b.spell.id, b.a.name) : ko(b.a.name);
-    if (A && !pt) return false;
-    (rt.tele = rt.tele || []).push({ e, name, t: T, T, A, pt, cells: A ? areaCells(rt, e, A, pt, q.x) : null, tg: A ? null : b.t || q?.list?.[0] || null, b, go });
-    if (!b.sig?.free) rt.turn.clk += T; say(rt, e, name); return true; // free: 치면서 준비한다 (미라의 응시)
-  }
   function castSpell(rt, e, b) {
     const u = use(e), o = b.spell, a = b.a, f = G.S.w.fantasy; if (o.n) u.day[o.key] = (u.day[o.key] || 0) + 1;
     { const one = a.kind === 'atk' ? b.t : !a.area && b.q?.list?.length === 1 ? b.q.list[0] : null; if (one && G.ItemX?.absorb(rt, one, o.lv)) return; } // 흡수의 막대 (SRD): 나만 노리는 주문
@@ -230,7 +219,7 @@ G.MonAct = (() => {
   const replaceOf = s => { const m = (s.acts || []).find(a => a.kind === 'multi'), r = m && /can replace (one|two) attacks? with a use of (.+?)\.$/.exec(m.text.trim()); return r ? { n: r[1] === 'two' ? 2 : 1, txt: r[2] } : null; };
   const inReplace = (rp, o) => !!rp && (o.spell ? rp.txt.includes(G.SRD_SP[o.spell.id]?.en || '#') : rp.txt.includes(o.a.name));
   const M = {
-    ko, spells, use, plan, doSave, teleOf, flush() { while (LATER.length) LATER.shift()(); },
+    ko, spells, use, plan, doSave, flush() { while (LATER.length) LATER.shift()(); },
     // 몬스터 차례 시작 (G.Foe.turn): 충전 굴림 · 전설 행동 되찾기
     startTurn(f, rt, e) {
       const s = e.stat; if (!s) return; const u = use(e);
@@ -245,16 +234,14 @@ G.MonAct = (() => {
       const s = e.stat; if (!s || DN().out(e) || s.id === 'mage') return false; // 메이지는 손으로 짠 주문 (G.Foe.spell)
       if (e.possess) { const t = e.possess; if (t.dead || t.dying || t.hp <= 0 || !rt.party.includes(t)) { e.possess = null; e.ethereal = false; t.possBy = null; t.possImm = true; if (t.cond) delete t.cond.incapacitated; e.x = t.x; e.y = t.y; FO().shove(rt, e, { x: t.x + 1, y: t.y }, -1); say(rt, e, '빙의가 끝났다', '#c9a6ff'); return false; }
         e.x = t.x; e.y = t.y; const v = near(rt, e, 1.6).find(o => o !== t) || near(rt, e, FO().move(t) + 1.6).find(o => o !== t); if (v) { step(rt, t, v, FO().move(t)); e.x = t.x; e.y = t.y; attackOne(f, rt, e, v, (s.melee || [])[0]?.name); } return true; } // 빙의한 몸으로 싸운다
-      const live = !!G.Sig?.live(rt), S1 = live ? G.Sig.of(e) : null, own = S1?.own ? S1.act : null; if (G.Sig?.turn(f, rt, e)) return true; // 시그니처 기술 (실시간)
-      const tele = a => e.shackled && /teleport|ethereal|misty step|plane shift|stride|vanish/i.test(a.name + ' ' + a.text); // 차원 족쇄 (SRD)
-      for (const a of s.acts || []) if (SP[a.name] && a.name !== own && !tele(a) && ok(e, a) && SP[a.name](f, rt, e, a)) { spend(e, a); return true; }
+            const tele = a => e.shackled && /teleport|ethereal|misty step|plane shift|stride|vanish/i.test(a.name + ' ' + a.text); // 차원 족쇄 (SRD)
+      for (const a of s.acts || []) if (SP[a.name] && !tele(a) && ok(e, a) && SP[a.name](f, rt, e, a)) { spend(e, a); return true; }
       for (const a of s.acts || []) if (a.kind === 'other' && !SP[a.name] && /\bcasts? /.test(a.text) && ok(e, a) && !e.noSpell && !G.Util?.silenced(rt, e) && castNamed(f, rt, e, a)) { spend(e, a); return true; } // 「casts X」
       let best = null;
       const inMulti = ((s.acts || []).find(a => a.kind === 'multi' && !/replace/.test(a.text))?.text.match(/\buses (?:either )?(.+?)(?: if available)?\.$/)?.[1] || '').split(/ or |, | and /).map(x => x.trim()); // 연속 공격에 든 행동은 after()가 공격 뒤에
       const opts = [];
-      for (const a of (s.acts || []).filter(a => a.kind === 'save' && !SP[a.name] && a.name !== own && ok(e, a) && !inMulti.includes(a.name))) { const q = plan(rt, e, a); if (!q) continue; const v = (avg(a.dmg) * (a.half ? 0.75 : 0.6) + condV(a.cond)) * q.score; opts.push({ v, a, q }); }
+      for (const a of (s.acts || []).filter(a => a.kind === 'save' && !SP[a.name] && ok(e, a) && !inMulti.includes(a.name))) { const q = plan(rt, e, a); if (!q) continue; const v = (avg(a.dmg) * (a.half ? 0.75 : 0.6) + condV(a.cond)) * q.score; opts.push({ v, a, q }); }
       if (!e.noSpell && !G.Util.silenced(rt, e)) opts.push(...spellOpts(rt, e)); // 침묵 (SRD): 말로 하는 주문을 못 쓴다
-      if (live && G.Sig.full(rt)) for (let i = opts.length; i--;) if (G.Sig.is(e, opts[i])) opts.splice(i, 1); // 예고는 한 번에 둘까지
       for (const o of opts) if (!best || o.v > best.v) best = o;
       if (!best) return false;
       const melee = (FO().attacks(e, null) || []).reduce((v, a) => v + (a ? a.n * (a.d + 1) / 2 + a.b + (a.ex ? a.ex.n * (a.ex.d + 1) / 2 : 0) : 0), 0) * 0.6, reachable = enemies(rt).some(o => Math.hypot(o.x - e.x, o.y - e.y) <= FO().reach(e) + FO().move(e));
@@ -264,21 +251,8 @@ G.MonAct = (() => {
       if (rp && inReplace(rp, best) && best.v >= melee * rp.n / nAtk) { if (best.spell) castSpell(rt, e, best); else { spend(e, best.a); doSave(rt, e, best.a, best.q); } e._skipAtk = rp.n; return false; } // 공격 하나(둘)를 바꾼다: 나머지 공격은 그대로
       if (best.v < melee * (reachable ? 1 : 0.2) && !(limited && best.q?.n >= 2)) return false; // 연속 공격이 낫다
       const go = () => { if (best.spell) castSpell(rt, e, best); else { spend(e, best.a); doSave(rt, e, best.a, best.q); } };
-      if (!teleOf(rt, e, best, go)) go();
+      go();
       return true;
-    },
-    // 예고 동작 (실시간만, 2026-11-25 사용자: 「예고동작정도는 넣을만 하겠다」): 몬스터마다 정한 시그니처 기술(G.Sig)만 M.TELE 라운드 동안 준비한 뒤 나간다
-    //   범위는 준비를 시작할 때 칸으로 굳는다 (그때의 겨눈 자리) — 그사이 빠져나간 사람은 맞지 않는다 · 한 사람을 노린 것은 그 사람에게 (쓰러지면 없던 일)
-    //   준비 중 그 몬스터가 쓰러지거나 행동 불능(기절 · 마비 · 정지 …)이 되면 취소. 그사이 그 몬스터의 다음 차례는 미룬다
-    teleTick(f, rt, dt) {
-      const L = rt.tele; if (!L || !L.length) return;
-      for (const q of L.slice()) { const e = q.e; if (rt.tele !== L) return; // 앞의 것으로 전투가 끝났다
-        if (e.hp <= 0 || e.dead || !rt.mons.includes(e) || DN().out(e) || e.stun > 0 || e.stop > 0) { L.splice(L.indexOf(q), 1); if (e.hp > 0) G.Sig.cut(rt, q); continue; } // 취소 — 기절하면 처음부터 다시 충전
-        if ((q.t -= dt) > 0) continue; L.splice(L.indexOf(q), 1);
-        if (q.tg && (q.tg.dead || q.tg.hp <= 0 || (q.tg.kind === 'mon' ? !rt.mons.includes(q.tg) : !rt.party.includes(q.tg) && !(rt.sums || []).includes(q.tg)))) continue; // 노린 사람이 없다
-        if (q.cells && q.b.q) { const at = new Set(q.cells.map(c => c.join())); q.b.q = { ...q.b.q, t: q.pt, cells: q.cells, list: enemies(rt).concat(rt.mons.filter(o => o !== e && o.hp > 0)).filter(o => at.has([Math.round(o.x), Math.round(o.y)].join())) }; } // 그려 둔 칸에 지금 선 몸만 (몬스터가 밀려나도 칸은 그대로)
-        const t0 = rt.turn, Ln = rt.lanes?.get(e); if (Ln) rt.turn = Ln; try { q.go(); } finally { if (rt.turn === Ln) rt.turn = t0; }
-      }
     },
     // 보너스 행동 (차례 시작에, 행동과 따로): 내성 · 공격형 보너스 행동 · 위험하면 순간 이동
     bonus(f, rt, st, e) {
@@ -316,7 +290,7 @@ G.MonAct = (() => {
       const s = e.stat, m = (s.acts || []).find(a => a.kind === 'multi'); if (!m || DN().out(e) || /replace/.test(m.text)) return;
       const w = /\buses (?:either )?(.+?)(?: if available)?\.$/.exec(m.text.trim()); if (!w) return;
       for (const n of w[1].split(/ or |, | and /).map(x => x.replace(/^\([A-Z]\) /, '').trim())) {
-        const a = s.acts.find(q => q.name === n && q.kind === 'save'); if (!a || !ok(e, a) || (G.Sig?.live(rt) && G.Sig.of(e)?.own && G.Sig.of(e).act === n)) continue;
+        const a = s.acts.find(q => q.name === n && q.kind === 'save'); if (!a || !ok(e, a)) continue;
         const q = plan(rt, e, a); if (!q) continue; spend(e, a); doSave(rt, e, a, q); return;
       }
     },

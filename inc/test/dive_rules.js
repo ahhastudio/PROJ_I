@@ -3,8 +3,8 @@
 const vm = require('vm'), L = require('./_load.js');
 const ctx = { console, Math, JSON, Date, btoa, atob }; vm.createContext(ctx); L.load(ctx); L.load(ctx, ['run/core', 'run/data', 'run/rooms', 'run/combat', 'run/gen', 'run/rules']);
 const G = ctx.G, D = G.Dive, RUN = ctx.RUN; G.quiet = true; G.Reward.on = true;
-// 아래 검사 대부분은 파이터 · 클레릭 둘이 열린 저장을 가정한다 (2026-11-23 전의 새 저장). 새 저장(파이터 하나)은 fresh1로 따로 본다
-const fresh1 = D.fresh; D.fresh = () => Object.assign(fresh1(), { cls0: 2 });
+// 아래 검사 대부분은 파이터 · 클레릭 둘이 나가는 저장을 가정한다 (직업 둘이 열렸고 1층을 깼다). 새 저장(무작위 앞줄 + 뒷줄 둘)은 fresh1로 따로 본다
+const fresh1 = D.fresh; D.fresh = () => Object.assign(fresh1(), { cls0: 2, deep: 1, party: ['dragoon'], order: null });
 let ok = 0, bad = 0; const t = (name, v, extra = '') => { if (v) ok++; else { bad++; console.log('  실패:', name, extra); } };
 
 // 차례로 몰려오는 적
@@ -16,26 +16,30 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
 { const s = D.fresh(); s.gold = D.total(); let n = 0;
   for (let k = 0; k < 200; k++) { const can = D.TREE.filter(x => D.cost(s, x.id) != null); if (!can.length) break; if (D.buy(s, can[0].id)) n++; }
   t('트리를 다 살 수 있다 (합계 금화로 딱)', D.complete(s) && s.gold === 0, `산 것 ${n} · 남은 금화 ${s.gold}`);
-  t('다 산 줄은 더 못 산다', D.cost(s, 'seat') == null && !D.buy(s, 'seat'));
-  t('다 열면 4명 · 직업 12 · 엔진 배속 8 · 계단 회복 없음', D.seats(s) === 4 && D.classes(s).length === 12 && D.camp(s) === 0 && D.speeds(s).join() === '2,4,8');
+  t('다 산 줄은 더 못 산다', D.cost(s, 'cls') == null && !D.buy(s, 'cls'));
+  t('다 열면 직업 12 · 엔진 배속 8 · 계단 회복 없음 · 「파티 자리」 줄은 없다 (자리는 깬 층으로)', !D.TREE.some(x => x.id === 'seat') && D.classes(s).length === 12 && D.camp(s) === 0 && D.speeds(s).join() === '2,4,8');
   t('다 열면 물자: 횃불 3 · 야영 물자 18 (공짜 몫 따로) (물약 · 도둑 도구 · 열림 두루마리는 없앴다)', JSON.stringify(D.kit(s)) === JSON.stringify({ torch: 3, camp: 6 + 4 * 3 }) && !D.TREE.some(x => x.id === 'tools' || x.id === 'knock' || x.id === 'pot')); }
-{ const s = fresh1(); t('새 저장: 파이터 혼자 · 열린 직업 하나 · 빈 명단 · 레벨 줄 없음 · 짐은 횃불 1 · 위험 귀환 끔', s.risk === false && s.bag.torch === 1 && !s.bag.potion && s.gold === 0 && D.team(s).join() === 'dragoon' && D.classes(s).join() === 'dragoon' && D.seats(s) === 2 && !Object.keys(s.roster).length && !D.TREE.some(x => x.id === 'lv'));
+{ const s = fresh1(), FR = ['dragoon', 'barbarian', 'paladin', 'monk']; t('새 저장: 무작위 앞줄 + 뒷줄 둘 · 열린 직업 둘 · 자리 둘 · 빈 명단 · 레벨 줄 없음 · 짐은 횃불 1 · 위험 귀환 끔', s.risk === false && s.bag.torch === 1 && !s.bag.potion && s.gold === 0 && D.team(s).length === 2 && FR.includes(D.team(s)[0]) && !FR.includes(D.team(s)[1]) && D.classes(s).join() === D.team(s).join() && s.order.length === 12 && new Set(s.order).size === 12 && D.seats(s) === 2 && !Object.keys(s.roster).length && !D.TREE.some(x => x.id === 'lv'));
   t('금화가 모자라면 못 산다', !D.buy(s, 'cls') && D.step(s, 'cls') === 0);
   const g = D.finish(s, 0, 37); t('전멸해도 판에서 번 금화는 들어온다', g === 37 && s.gold === 37 && s.runs === 1);
   const g2 = D.finish(s, 2, 10); t('깬 층 보너스 = 1층 + 2층', g2 === 10 + D.bonus(1) + D.bonus(2) && s.deep === 2);
   t('깊을수록 보너스가 많다', [...Array(D.LAST).keys()].every(i => i === 0 || D.bonus(i + 1) > D.bonus(i)));
-  s.up.cls = 2; s.up.seat = 0; D.toggle(s, 'mage');
-  t('파티는 자리 수까지 (넘치면 마지막을 바꾼다)', D.team(s).join() === 'dragoon,mage', D.team(s).join());
-  D.toggle(s, 'archer'); t('안 열린 직업은 못 고른다', !D.team(s).includes('archer'));
+  t('파티 자리 = 깬 층 + 1, 둘부터 다섯까지 · 옛 저장의 자리 해금(up.seat)은 무시', [0, 1, 2, 3, 4, 5, 9].map(d => D.seats({ ...s, deep: d, up: { seat: 2 } })).join() === '2,2,3,4,5,5,5');
+  Object.assign(s, { party: ['dragoon'], order: null }); // 아래는 직업이 CLS 차례로 열리는 저장으로 본다
+  s.up.cls = 2; s.deep = 1; D.toggle(s, 'mage'); D.toggle(s, 'cleric');
+  t('파티는 자리 수까지 (넘치면 마지막을 바꾼다)', D.team(s).join() === 'dragoon,cleric', D.team(s).join());
+  { const shut = D.CLS.find(c => !D.classes(s).includes(c)); D.toggle(s, shut); t('안 열린 직업은 못 고른다', !D.team(s).includes(shut)); }
   const back = D.load(D.dump(s)); t('저장을 쓰고 읽으면 같다', JSON.stringify(back) === JSON.stringify(s));
   t('깨진 저장 · 옛 저장(v1 · v2)은 새 저장으로', D.load('{망가짐').gold === 0 && D.load(null).runs === 0 && D.load('{"v":1,"gold":999}').gold === 0 && D.load('{"v":2,"gold":999,"dex":5}').gold === 0); }
 // 출발 층
-{ const s = D.fresh(); t('처음엔 1층에서만', D.starts(s).join() === '1' && D.startFloor(s) === 1);
-  D.finish(s, 4, 0, 1, 1); t('4층까지 깨면 1 · 3 · 5층이 열리고 자동은 5층', D.starts(s).join() === '1,3,5' && D.startFloor(s) === 5);
-  D.finish(s, 5, 0, 1, 5); t('5층에서 나가 그 구역을 못 깨면 다음엔 한 구역 위(3층)', D.startFloor(s) === 3);
-  D.finish(s, 4, 0, 1, 3); t('3층에서 나가 구역을 깨면 다시 가장 깊은 곳', D.startFloor(s) === 5);
-  s.start = 3; t('고른 출발 층이 있으면 그것', D.startFloor(s) === 3); s.start = 9; t('안 열린 층을 골랐으면 자동', D.startFloor(s) === 5);
-  const g = D.finish(s, 6, 0, 0, 5); t('깬 층 보너스는 출발 층부터', g === D.bonus(5) + D.bonus(6)); }
+// 출발 층 (2026-11-27 한 판 = 한 층): 1층 ~ (깬 층 + 1)층 아무 데서나, 기본은 아직 못 깬 가장 얕은 층
+{ const s = fresh1(); t('처음엔 1층에서만 · 자리 둘', D.starts(s).join() === '1' && D.startFloor(s) === 1 && D.seats(s) === 2);
+  const g1 = D.finish(s, 1, 0, 1, 1); t('1층을 깨면 보너스 · 2층이 열리고 기본은 2층 · 자리는 그대로 둘 (2층을 깨야 셋)', g1 === D.bonus(1) && D.starts(s).join() === '1,2' && D.startFloor(s) === 2 && D.seats(s) === 2);
+  const g0 = D.finish(s, 0, 0, 1, 2); t('2층에서 못 깨고 끝나면(깬 층 0) 보너스 없음 · 최고 층 · 기본 출발 층은 그대로', g0 === 0 && s.deep === 1 && D.startFloor(s) === 2);
+  D.finish(s, 2, 0, 1, 2); D.finish(s, 3, 0, 1, 3); D.finish(s, 4, 0, 1, 4); t('4층까지 깨면 1~5층이 열리고 기본은 5층 · 자리 다섯', D.starts(s).join() === '1,2,3,4,5' && D.startFloor(s) === 5 && D.seats(s) === 5);
+  s.start = 3; t('고른 출발 층이 있으면 그것 (이미 깬 층도)', D.startFloor(s) === 3); const g3 = D.finish(s, 3, 0, 1, 3); t('깬 층을 다시 깨도 그 층 보너스 · 최고 층은 그대로', g3 === D.bonus(3) && s.deep === 4);
+  s.start = 9; t('안 열린 층을 골랐으면 기본', D.startFloor(s) === 5);
+  s.start = 0; s.deep = 9; const w0 = s.wins; t('9층까지 깼으면 기본은 10층', D.startFloor(s) === 10 && D.starts(s).length === 10); D.finish(s, 10, 0, 1, 10); t('10층을 깨면 완주 · 기본은 그대로 10층 · 자리 다섯', s.wins === w0 + 1 && s.deep === 10 && D.startFloor(s) === 10 && D.starts(s).length === 10 && D.seats(s) === 5); }
 // 구역: hook()이 5~10층을 더하고, 적 이름은 엔진에 있다 · 생성기가 그 층을 만든다
 { const z0 = RUN.ZONES.length; D.hook(); t('hook: 구역 셋이 더해진다 (1~10층)', RUN.ZONES.length === z0 + 3 && [...Array(10).keys()].every(i => RUN.zone(i + 1).floors[0] <= i + 1 && RUN.zone(i + 1).floors[1] >= i + 1));
   D.hook(); t('hook은 두 번 불러도 한 번', RUN.ZONES.length === z0 + 3);
@@ -46,7 +50,7 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
   for (const fl of [5, 7, 9, 10]) { const m = RUN.gen.make(fl * 31, fl); t(`${fl}층 생성 · 우두머리 무리`, !!m && m.nodes.some(n => n.type === 'boss' && n.g?.units?.length), fl); } }
 // 자동 정책
 { const P = D.POL, SP0 = RUN.SPECS; RUN.SPECS = undefined; const st = RUN.newRun(7, ['fighter', 'cleric'], 3); RUN.SPECS = SP0; /* 설계서 없는 층의 자동 규칙 (1 · 2층은 곁방 규칙 — 아래) */
-  const N = st.map.nodes, ex = (type, extra = {}) => { const n = N.find(q => q.type === type); return { to: n.id, e: { kind: 'open', ...extra } }; };
+  const N = st.map.nodes, ex = (type, extra = {}) => { const n = N.find(q => q.type === type); return { to: n.id, e: { kind: 'open', ...extra } }; }; st.items.camp = 30; // 물자가 넉넉할 때의 차례 (모자랄 때는 아래 「물자」 검사)
   t('갈림길: 보물 > 사건 > 전투 > 정예', P.fork(st, [ex('elite'), ex('fight'), ex('event'), ex('treasure', {})]) === 3);
   t('갈림길: 잠긴 보물 방은 열 수단이 없으면 뒤로', P.fork(st, [ex('treasure', { kind: 'locked' }), ex('fight')]) === 1);
   st.party[0].hero = { cls: 'rogue', lv: 1 }; t('갈림길: 자물쇠를 딸 영웅(로그)이 있으면 보물 방', P.fork(st, [ex('fight'), ex('treasure', { kind: 'locked' })]) === 1); delete st.party[0].hero;
@@ -55,7 +59,6 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
   t('사건: 금화를 내지 않는 것 중 확률이 가장 높은 것', sc('event', [{ n: 'a', p: 0.4 }, { n: 'b', sub: '금화 30', p: 1 }, { n: 'c', p: 0.8 }, { n: 'd', off: () => true, p: 1 }]) === 2);
   t('전투: 기습할 수 있으면 기습', sc('fight', [{ n: '싸운다' }, { n: '기습한다' }]) === 1);
   t('상인: 떠난다', sc('shop', [{ n: '물약 사기' }, { n: '떠난다' }]) === 1);
-  t('구역 끝 야영지: 쉬고 → 내려간다', sc('rest', [{ n: '긴 휴식' }, { n: '물약 사기' }, { n: '내려간다' }]) === 0 && sc('rest', [{ n: '긴 휴식', off: () => true }, { n: '물약 사기' }, { n: '내려간다' }]) === 2);
   t('누가 할까: 보정이 가장 높은 사람', P.who([{ bonus: 1 }, { bonus: 5 }, { bonus: 3 }]) === 1);
   t('잠긴 문: 따기 · 부수기가 안 되면 열림 (스킬) · 없으면 두고 간다', P.paid(st, [{ id: 'x' }, { id: 'knock' }]) === 1 && P.paid(st, [{ id: 'x' }]) === -1); }
 // 원정 세계 · 탐사 기록 맞추기 · 처치 금화
@@ -71,19 +74,18 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
   t('도감: 데리고 나간 빌드 · 만난 · 잡은 몬스터가 적힌다', Object.keys(s.dex.h).length === 2 && s.dex.m['오우거']?.met === 1 && s.dex.m['오우거']?.kill === 1, JSON.stringify(s.dex));
   t('처치 금화가 판 금화에 (오우거 450 ÷ 20)', st.gold - g0 === D.killGold(mo) && D.killGold(mo) === 23, st.gold - g0);
   G.Guild.onKill(f, r, mo); D.gain(m, G.Guild.needOf(m) * D.pace(3)); t('경험치가 차면 4레벨 · 고르기는 저절로', m.lv === 4 && !G.Reward.pending(m), m.lv);
-  st.party[0].hp = 1; s.up.camp = 2; D.descend(st, s, G.Party.members(f)); t('계단을 내려가도 회복 없음 (야영뿐)', st.party[0].hp === 1);
   // 영웅이 남는다: 판 끝에 명단에 되적고, 다음 판에 같은 사람 · 같은 장비로
   const L = G.Guild.leader(f); let mg = null; for (let i = 0; i < 50 && !mg; i++) { const d = G.Gear.roll(5, 'boss', Math.random, f, r.party); if (d && d.kind !== 'base') mg = G.Gear.take(f, d, 5).t; } mg.on = L.uid; mg.tag = '시험 물건'; const nm = L.name, bd = L.build, wpn = JSON.stringify(G.SRD.eq(L));
   const avg = D.bank(s, f); t('판 끝: 명단에 레벨 · 경험치 · 마법 물건이 적힌다', s.roster.dragoon.m.lv === 4 && s.roster.dragoon.tr.length === 1 && avg > 0, avg);
   const W2 = D.world(s, map), L2 = G.Guild.leader(W2.f);
   t('다음 판: 같은 이름 · 빌드 · 레벨 · 기본 장비 · 마법 물건', L2.name === nm && L2.build === bd && L2.lv === 4 && JSON.stringify(G.SRD.eq(L2)) === wpn && G.Trinket.all(W2.f).some(t => t.tag === '시험 물건' && t.on === L2.uid));
-  s.roster.rogue = { m: D.member(f, 'rogue', 3), tr: [] }; s.party = ['dragoon', 'cleric', 'mage']; s.up.seat = 1; s.up.cls = 2; const W3 = D.world(s, map), st3 = RUN.newRun(4, ['fighter', 'cleric', 'wizard'], 1); D.outfit(st3, W3.r, s); t('새로 들인 영웅은 (최고 − 2)레벨, 최소 1', s.roster.mage.m.lv === Math.max(1, Math.max(...['dragoon', 'cleric', 'rogue'].map(c => s.roster[c].m.lv)) - 2), s.roster.mage.m.lv);
+  s.roster.rogue = { m: D.member(f, 'rogue', 3), tr: [] }; s.party = ['dragoon', 'cleric', 'mage']; s.deep = 2; s.up.cls = 2; const W3 = D.world(s, map), st3 = RUN.newRun(4, ['fighter', 'cleric', 'wizard'], 1); D.outfit(st3, W3.r, s); t('새로 들인 영웅은 (최고 − 2)레벨, 최소 1', s.roster.mage.m.lv === Math.max(1, Math.max(...['dragoon', 'cleric', 'rogue'].map(c => s.roster[c].m.lv)) - 2), s.roster.mage.m.lv);
   t('따라잡기 배율: 하나 낮을 때마다 +50%, 상한 +200%', D.catchK(5, 5) === 1 && D.catchK(4, 6) === 2 && D.catchK(1, 12) === 3);
   { const x0 = s.roster.rogue.m.xp || 0, mage = W3.r.party.find(p => p.merc.cls === 'mage').merc, mx = mage.xp || 0, fx = G.Guild.leader(W3.f).xp; const o = G.Fantasy.spawnMon(W3.r, 1, { n: '고블린 전사', ...G.D.F.mon['고블린 전사'] }, 5, 5, false, { major: true }); G.Guild.onKill(W3.f, W3.r, o);
     const Lv = G.Guild.leader(W3.f).lv, top = Math.max(...W3.r.party.map(p => p.merc.lv)); t('낮은 영웅은 더 빨리 (따라잡기 배율 ÷ 그 레벨의 PACE)', Math.abs((mage.xp - mx) - D.catchK(mage.lv, top) / D.catchK(Lv, top) * D.pace(Lv) / D.pace(mage.lv) * (G.Guild.leader(W3.f).xp - fx)) < 0.01, [mage.xp - mx, G.Guild.leader(W3.f).xp - fx]); D.bank(s, W3.f); t('쉬는 영웅도 받는다 (나간 영웅 평균의 25% × 따라잡기)', (s.roster.rogue.m.xp || 0) > x0 || s.roster.rogue.m.lv > 3); } }
 
 // 자리를 비운 동안의 정산 · 도감
-{ const s = D.fresh(); t('새 저장: 실시간 · 스킬 손으로 · 자동 재출발 끔 · 경로 완주 귀환 · 빈 도감', s.rt === true && s.rtAuto === false && s.autoOn === false && s.endMode === 'back' && s.risk === false && !Object.keys(s.dex.m).length);
+{ const s = D.fresh(); t('새 저장: 자동 재출발 끔 · 경로 완주 귀환 · 빈 도감', s.autoOn === false && s.endMode === 'back' && s.risk === false && !Object.keys(s.dex.m).length);
   t('한 판도 안 끝낸 저장은 정산 0', D.settle(s, 1e9).gold === 0 && s.seen === 1e9);
   D.finish(s, 1, 80, 4); s.last = null; D.finish(s, 2, 120, 6); t('분당 금화 = 최근 판 금화 ÷ 분', Math.abs(D.rate(s) - (80 + D.bonus(1) + 120 + D.bonusTo(2)) / 10) < 1e-9, D.rate(s));
   const g0 = s.gold, r = D.settle(s, s.seen + 3 * 3600e3); t('3시간 비우면 분당 금화 × 180분 × 비율', r.gold === Math.round(D.rate(s) * 180 * D.AWAY_K) && s.gold === g0 + r.gold && r.ms === 3 * 3600e3);
@@ -127,6 +129,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   // 다음 방 자동 (2026-11-26): 안 가 본 방이 먼저 · 다 가 봤으면 안 가 본 방 쪽으로 가는 가장 짧은 길의 첫 방
   { const st3 = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3); D.recall(st3, s); st3.items = { camp: 9 }; const M3 = st3.map, N3 = M3.nodes; N3.forEach(n => { n.visited = false; n.hostile = false; }); N3[0].visited = true; st3.at = 0;
     const optsAt = id => M3.edges.filter(e => (e.a === id || e.b === id) && e.kind !== 'hidden').map(e => ({ e, ed: e, to: e.a === id ? e.b : e.a }));
+    st3.map.edges.forEach(e => { if (e.kind === 'locked') e.opened = true; }); // 문은 열어 두고 (못 넘는 문을 안 고르는 것은 아래에서)
     const o0 = optsAt(0); o0.slice(1).forEach(x => { N3[x.to].visited = true; }); const j0 = D.POL.fork(st3, o0);
     N3.forEach(n => { n.visited = true; }); const far = N3.find(n => n.type === 'boss'); far.visited = false; const j1 = D.POL.fork(st3, o0);
     const dist = from => { const d = new Map([[from, 0]]), q = [from]; while (q.length) { const a = q.shift(); for (const x of optsAt(a)) if (!d.has(x.to)) { d.set(x.to, d.get(a) + 1); q.push(x.to); } } return d; };
@@ -173,7 +176,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
     t('보상: 보물 방 = 물건 1 · 등급은 그 층 희귀도 표(보물은 한 구역 깊게)', JSON.stringify(D.reward(tr, 1)) === JSON.stringify({ items: G.Gear.N_DROP.treasure, r: [1, 2, 3], gem: true }), JSON.stringify(D.reward(tr, 1)));
     t('보상: 정예 = 드롭 수 · 포로 구출 = 동료 +1 · 야영 = 회복 100%', D.reward(el, 1).items === G.Gear.N_DROP.elite && D.reward(cp, 1).ally === 1 && D.reward(N1.find(n => n.type === 'camp'), 1).heal === 100);
     t('1층 갈래: 입구 곁 두 방 = 관문 없이 거대 쥐 1 · 한쪽엔 상자', ch && !ch.side && lt && m1.edges.find(e => e.b === lt.id).kind === 'open' && m1.edges.find(e => e.b === ch.id).kind === 'open' && D.reward(ch, 1).items === 1 && !D.reward(lt, 1).items);
-    t('방 수: 1층 12개 · 2층 15개 (2026-11-26 층을 길게)', N1.length === 12 && RUN.gen.make(4242, 2).nodes.length === 15);
+    t('방 수: 1층 11개 · 2층 12개 (2026-11-27 층을 10방쯤으로)', N1.length === 11 && RUN.gen.make(4242, 2).nodes.length === 12, [N1.length, RUN.gen.make(4242, 2).nodes.length]);
     }
   // 지도 경로 선: 모든 길에서 점들이 그 길의 복도 칸 + 양 끝 방 칸 안에만 (방 안은 칸 사이 걷기 — 벽을 가로지르지 않는다) · 문은 방 칸에 닿는다
   { const bad = []; for (const fl of [1, 2, 3, 5, 9]) for (let k = 0; k < 6; k++) { const m = RUN.gen.make(300 + k * 211, fl), Ly = m._lay;
@@ -195,8 +198,8 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   t('부활: 3레벨 미만은 0', (() => { const s5 = D.fresh(); G.newState(); s5.roster.dragoon = { m: D.member(G.S.w.fantasy, 'dragoon', 2), tr: [] }; return D.reviveCost(s5, 'dragoon') === 0 && (s5.roster.dragoon.m.lv = 3, D.reviveCost(s5, 'dragoon') === 75); })());
   // 옛 저장: 1 · 2층 기억 · 경로만 비운다
   const o = D.load(JSON.stringify({ v: 3, gold: 5, maps: { 1: { n: '4', e: '' }, 2: { n: '4', e: '' }, 3: { n: '44', e: '' } }, plan: { 1: [0, 1], 3: [0, 2] } }));
-  t('옛 저장(지도 판 2 전): 모든 층의 지도 기억 · 경로를 비우고(작은 방으로 지도가 바뀌었다) 나머지는 그대로', !o.maps[1] && !o.maps[2] && !o.maps[3] && !o.plan[1] && !o.plan[3] && o.gold === 5 && o.fv === 4 && D.load(D.dump(o)).fv === 4);
-  { const o2 = D.load(JSON.stringify({ v: 3, fv: 3, maps: { 3: { n: '44', e: '' } } })); t('지도 판 3 저장은 그대로', o2.maps[3].n === '44'); }
+  t('옛 저장(지도 판 2 전): 모든 층의 지도 기억 · 경로를 비우고(작은 방으로 지도가 바뀌었다) 나머지는 그대로', !o.maps[1] && !o.maps[2] && !o.maps[3] && !o.plan[1] && !o.plan[3] && o.gold === 5 && o.fv === D.FV && D.load(D.dump(o)).fv === D.FV);
+  { const o2 = D.load(JSON.stringify({ v: 3, fv: 4, maps: { 3: { n: '44', e: '' } } })), o3 = D.load(JSON.stringify({ v: 3, fv: D.FV, maps: { 3: { n: '44', e: '' } } })); t('지도 판 4 저장도 비운다 (2026-11-27 방 크기 · 층 구성이 바뀌었다) · 지금 판은 그대로', D.FV === 5 && !o2.maps[3] && o2.fv === 5 && o3.maps[3].n === '44'); }
 }
 
 // 죽음의 값 · 파티 짐 (2026-11-23)
@@ -225,33 +228,42 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   // 경로 끝 · 가득 차면 복귀 · 사망 시 멈춤: 설정은 저장된다
   const s3 = D.fresh(); s3.endMode = 'back'; s3.fullBack = true; s3.deadStop = false; s3.bag = { torch: 1, potion: 0, knockScroll: 0, tools: 0 }; s3.dead = { mage: true };
   const o = D.load(D.dump(s3)); t('설정 · 짐 구성 · 사망자가 저장된다', o.endMode === 'back' && o.fullBack && !o.deadStop && o.bag.torch === 1 && o.dead.mage);
-  const old = D.load(JSON.stringify({ v: 3, gold: 7, up: { pot: 2, camp: 2 } })); t('옛 저장: 사망자 없음 · 짐 = 해금 최대의 절반 · 새 기본 설정 한 번 · 옛 계단 야영 단계 = 야영 물자 최대', !Object.keys(old.dead).length && old.bag === null && D.supMax(old).camp === 14 && D.bagPlan(old).camp === 7 && old.endMode === 'back' && old.rt === true && old.deadStop === true);
+  const old = D.load(JSON.stringify({ v: 3, gold: 7, up: { pot: 2, camp: 2 } })); t('옛 저장: 사망자 없음 · 짐 = 해금 최대의 절반 · 새 기본 설정 한 번 · 옛 계단 야영 단계 = 야영 물자 최대', !Object.keys(old.dead).length && old.bag === null && D.supMax(old).camp === 14 && D.bagPlan(old).camp === 7 && old.endMode === 'back' && old.autoOn === false && old.deadStop === true);
   // 소생술: 원정에서는 금화 없이 (엔진은 300 요구) — 슬롯이 있는 소생 영웅이 있으면
   t('소생술 훅: 원정 중에는 금화 조건을 채워 준다', typeof G.Skill.revivify === 'function' && /curS/.test(String(G.Skill.revivify)));
 }
 
 // 탐험 스킬 · 열쇠 (2026-11-23)
 { const X = D.XRUN, F = (G.newState(), G.S.w.fantasy), H = (c, lv) => D.member(F, c, lv), M = h => ({ hero: h, n: h.name, uid: h.uid, cls: G.Party.RUN_CLS[h.cls], dead: false, hp: 10, max: 10 }), st = { xcd: {}, party: [], rng: Math.random, log: [] };
-  t('방 상태 수단 (2026-11-26): 직업마다 한 갈래 · 레벨과 상관없다 (로그 손재주, 위저드 · 클레릭 · 드루이드 주문, 파이터 힘)', X.can(st, M(H('rogue', 1)), 'pick') && X.can(st, M(H('rogue', 1)), 'disarm') && X.can(st, M(H('archmage', 1)), 'knock') && X.can(st, M(H('dragoon', 1)), 'brute') && X.can(st, M(H('cleric', 1)), 'light') && !X.can(st, M(H('dragoon', 5)), 'pick') && D.keysOf('dragoon').join() === 'str' && D.keysOf('scout').join() === 'spell' && D.keysOf('archer').join() === 'deft');
+  const XS = (h, ...g) => { h.xsp = g; return h; }; // 탐험 주문을 정해 둔 영웅
+  const ST = (h, str, wis) => { G.Dnd.ab(h); h.ab.str = str; h.ab.wis = wis ?? 8; return h; }; // 능력치를 정해 둔 영웅 (배경 · 레벨이 더하는 몫이 있어 문턱에서 멀리 — 8 또는 16 이상)
+  t('탐험 재주 (2026-11-27): 부수기 = 근력 16 · 자물쇠 따기 · 함정 해제 = 로그 · 봉인 해제 · 빛 = 가진 탐험 주문 · 눈썰미 = 지혜 14', D.knacksOf(ST(H('dragoon', 1), 16)).join() === 'brk' && D.knacksOf(ST(H('dragoon', 1), 8, 18)).join() === 'eye' && D.knacksOf(ST(H('rogue', 1), 8)).join() === 'pick,disarm' && D.knacksOf(XS(ST(H('archmage', 1), 8), 'unseal')).join() === 'unseal' && D.knacksOf(XS(ST(H('cleric', 1), 8), 'light')).join() === 'light' && D.knacksOf({ cls: 'rogue', lv: 1 }).join() === 'pick,disarm' && D.knacksOf({ cls: 'dragoon', lv: 1 }).length === 0);
+  t('탐험 주문: 주문 계열 영웅은 들어올 때 하나를 갖는다 (봉인 해제 · 빛 중) · 그 밖의 직업은 없다', ['bard', 'cleric', 'scout', 'mage', 'archmage', 'warlock'].every(c => { const x = H(c, 1).xsp; return x.length === 1 && ['unseal', 'light'].includes(x[0]); }) && ['dragoon', 'rogue', 'paladin', 'archer', 'monk', 'barbarian'].every(c => H(c, 1).xsp.length === 0) && [...Array(40)].some(() => D.rollXsp('mage')[0] === 'light') && [...Array(40)].some(() => D.rollXsp('mage')[0] === 'unseal'));
+  t('탐사 규칙의 행동은 재주를 본다 (직업이 아니라 그 영웅)', X.can(st, M(ST(H('rogue', 1), 8)), 'pick') && X.can(st, M(ST(H('rogue', 1), 8)), 'disarm') && X.can(st, M(XS(H('archmage', 3), 'unseal')), 'knock') && !X.can(st, M(XS(H('archmage', 3), 'light')), 'knock') && X.can(st, M(ST(H('dragoon', 1), 16)), 'brute') && !X.can(st, M(ST(H('dragoon', 5), 8)), 'brute') && !X.can(st, M(ST(H('dragoon', 5), 18)), 'pick'));
   const r1 = H('rogue', 1), r9 = H('rogue', 9);
   t('판정은 영웅의 능력치 + 숙련 (레벨이 오르면 값이 오른다) · 도둑 도구는 로그만 전문화', X.skill(M({ ...r1, lv: 9 }), '도둑 도구') > X.skill(M(r1), '도둑 도구') && /* 은신은 무작위 빌드에 숙련이 없을 수 있다 */ X.skill(M(r1), '도둑 도구') === G.Dnd.mod(G.Dnd.ab(r1).dex) + 2 * G.Dnd.prof(1) && X.skill(M(H('dragoon', 3)), '도둑 도구') < 0, [X.skill(M(r1), '은신'), X.skill(M({ ...r1, lv: 9 }), '은신')]);
-  const w = M(H('archmage', 3)); X.use(st, w, 'knock'); const c0 = X.can(st, w, 'knock'); X.tick(st, X.ROOM_R); const c1 = X.can(st, w, 'knock'); X.tick(st, X.ROOM_R);
+  const w = M(XS(H('archmage', 3), 'unseal')); X.use(st, w, 'knock'); const c0 = X.can(st, w, 'knock'); X.tick(st, X.ROOM_R); const c1 = X.can(st, w, 'knock'); X.tick(st, X.ROOM_R);
   t('열쇠에는 쿨타임이 없다', c0 && c1 && X.can(st, w, 'knock'));
-  // 방 상태: 막지 않는다 — 넘는 사람이 있으면 넘고(보상 더), 없으면 결과를 안고 들어간다
-  const pass = (kind, lock, party, o = {}) => { const node = { hostile: false, type: 'treasure', notes: [], ...o }, S = { map: { nodes: [{}, node] }, party: party.map(M), items: { camp: 5, ...(o.items || {}) }, xcd: {}, rng: Math.random, log: [], at: 0, turn: 0, flags: {} }, e = { a: 0, b: 1, kind, lock, seen: {}, tried: {} }; const L = RUN.moveActs(S, e); L[0].pre(); return { n: L.length, e, node, S }; };
-  { const a = pass('locked', 'lock', [H('rogue', 3)]), b = pass('locked', 'lock', [H('dragoon', 3)]), c = pass('locked', 'lock', [H('cleric', 3)]), d = pass('locked', 'seal', [H('rogue', 3)]), f = pass('locked', 'seal', [H('archmage', 3)]), g = pass('locked', 'rubble', [H('rogue', 3)]), h = pass('locked', 'rubble', [H('dragoon', 3)]);
-    t('잠김: 손재주 · 힘이면 열고 보상이 더 · 없으면 들어가되 보상 없음 / 봉인: 주문만 / 무너짐: 힘이 없으면 물자 1 더', a.n === 1 && a.e.opened && a.node.bonus && !a.node.shut && b.node.bonus && c.e.opened && c.node.shut && !c.node.bonus && d.node.shut && f.node.bonus && g.S.items.camp === 4 && h.S.items.camp === 5, [a.node, c.node, g.S.items]); }
-  { const a = pass('trap', null, [H('rogue', 3)]), b = pass('trap', null, [H('dragoon', 3)]); t('함정: 손재주면 해제 · 없으면 밟는다 (늘 보인다)', a.e.disarmed && !b.e.disarmed && b.e.seen.trap); }
-  { const S = { party: [M(Object.assign(H('dragoon', 3), { sp: 'human' }))], items: { torch: 0 } }, p0 = D.passInfo(S, { kind: 'locked', lock: 'seal' }, { hostile: false }), p1 = D.passInfo({ ...S, party: [M(H('archmage', 3))] }, { kind: 'locked', lock: 'seal' }, {}), p2 = D.passInfo({ ...S, items: { torch: 2 } }, { kind: 'dark' }, {}), p3 = D.passInfo(S, { kind: 'open' }, { sleepy: true });
-    t('다음 방 고르기의 한 줄: 상태 · 넘는 사람 | 횃불 | 없을 때 결과', p0.st === '봉인' && !p0.ok && p0.out === '보상 없음' && p1.ok && p1.who === '위저드' && p2.who === '횃불 2' && p3.st === '잠듦' && p3.ok && D.passInfo(S, { kind: 'open' }, {}) === null, [p0, p1, p2, p3]); }
-  t('빛: 클레릭 · 위저드 등 빛 소마법이 있으면 어두운 길을 그냥 지난다', X.lit({ party: [M(H('cleric', 1))] }) && !X.lit({ party: [M(Object.assign(H('rogue', 1), { sp: 'human' }))] }) && X.lit({ party: [M(Object.assign(H('rogue', 1), { sp: 'dwarf' }))] })); // 전원 암시야 = 영웅의 실제 종족
+  // 문의 장애물: 잠긴 문 · 봉인 · 무너진 길은 넘는 재주가 있어야 들어간다 · 함정 · 어둠은 결과를 안고 들어간다
+  const pass = (kind, lock, party, o = {}) => { const node = { hostile: false, type: 'treasure', notes: [], ...o }, S = { map: { nodes: [{}, node] }, party: party.map(M), items: { camp: 5, ...(o.items || {}) }, xcd: {}, rng: Math.random, log: [], at: 0, turn: 0, flags: {} }, e = { a: 0, b: 1, kind, lock, seen: {}, tried: {} }; const L = RUN.moveActs(S, e), ok = L[0].pre(); return { n: L.length, e, node, S, ok }; };
+  { const a = pass('locked', 'lock', [ST(H('rogue', 3), 8)]), b = pass('locked', 'lock', [ST(H('dragoon', 3), 16)], { hostile: true, type: 'fight' }), c = pass('locked', 'lock', [ST(H('cleric', 3), 10)]), d = pass('locked', 'seal', [ST(H('rogue', 3), 8)]), f = pass('locked', 'seal', [XS(H('archmage', 3), 'unseal')]), g = pass('locked', 'rubble', [ST(H('rogue', 3), 8)]), h = pass('locked', 'rubble', [ST(H('dragoon', 3), 16)]);
+    t('잠긴 문: 따면 조용 · 부수면 안쪽이 알아챈다 · 없으면 못 들어간다 / 봉인: 봉인 해제만 / 무너진 길: 부수기만 (물자는 더 안 든다)', a.n === 1 && a.ok && a.e.opened && a.node.bonus && !a.node.alert && b.ok && b.e.opened && b.node.alert && !c.ok && !c.e.opened && !d.ok && f.ok && f.node.bonus && !g.ok && !g.e.opened && g.S.items.camp === 5 && h.ok && h.e.opened, [a.node, b.node, c.e, g.S.items]); }
+  { const a = pass('trap', null, [H('rogue', 3)]), b = pass('trap', null, [H('dragoon', 3)]); t('함정: 함정 해제가 있으면 해제 · 없으면 밟는다 (막지 않는다 · 늘 보인다)', a.e.disarmed && !b.e.disarmed && b.e.seen.trap); }
+  { const S = { party: [M(ST(Object.assign(H('dragoon', 3), { sp: 'human' }), 10))], items: { torch: 0 } }, p0 = D.passInfo(S, { kind: 'locked', lock: 'seal' }, { hostile: false }), p1 = D.passInfo({ ...S, party: [M(XS(H('archmage', 3), 'unseal'))] }, { kind: 'locked', lock: 'seal' }, {}), p6 = D.passInfo({ ...S, party: [M(XS(H('archmage', 3), 'light'))] }, { kind: 'dark' }, {}), p7 = D.passInfo({ ...S, party: [M(XS(H('archmage', 3), 'light'))] }, { kind: 'locked', lock: 'seal' }, {}), p2 = D.passInfo({ ...S, items: { torch: 2 } }, { kind: 'dark' }, {}), p3 = D.passInfo(S, { kind: 'open' }, { sleepy: true }), p4 = D.passInfo({ ...S, party: [M(ST(H('dragoon', 3), 16))] }, { kind: 'locked', lock: 'lock' }, {}), p5 = D.passInfo(S, { kind: 'dark' }, {});
+    t('문 표지의 장애물: 못 넘는 문은 닫힘 · 넘는 재주와 사람 · 횃불 · 부수기는 시끄럽다 · 어둠은 못 막으면 기습', p0.st === '봉인' && !p0.ok && p0.shut && p1.ok && p1.sk === 'unseal' && p1.who.hero.cls === 'archmage' && p2.ok && p2.tag === '횃불 2' && p3.st === '잠듦' && p3.ok && p4.sk === 'brk' && p4.loud && !p5.ok && !p5.shut && p5.tag === '기습' && p6.ok && p6.sk === 'light' && p7.shut && D.passInfo(S, { kind: 'open' }, {}) === null, [p0, p2, p3, p5]); }
+  t('어둠: 빛 주문을 가진 영웅이 있거나 전원 암시야면 밝다 (봉인 해제만 가진 주문사는 못 밝힌다)', X.lit({ party: [M(XS(Object.assign(H('cleric', 1), { sp: 'human' }), 'light'))] }) && !X.lit({ party: [M(XS(Object.assign(H('cleric', 1), { sp: 'human' }), 'unseal'))] }) && !X.lit({ party: [M(Object.assign(H('rogue', 1), { sp: 'human' }))] }) && X.lit({ party: [M(Object.assign(H('rogue', 1), { sp: 'dwarf' }))] })); // 전원 암시야 = 영웅의 실제 종족
+  { const s = D.fresh(); D.learn(s, 'bars', 'brk'); D.learn(s, 'lock', 'brk'); D.learn(s, 'lock', 'pick'); t('겪으면 기억: 넘어 본 재주가 저장에 남는다 (창살은 잠긴 문과 같이)', D.known(s, 'lock').join() === 'brk,pick' && D.known(s, 'bars').join() === 'brk,pick' && D.known(s, 'seal').length === 0, s.knew); }
+  { const mk = party => ({ at: 0, party: party.map(M), items: {}, map: { nodes: [{ id: 0, visited: true }, { id: 1 }, { id: 2 }], edges: [{ a: 0, b: 1, kind: 'locked', lock: 'seal', seen: {} }, { a: 0, b: 2, kind: 'open', seen: {} }] } });
+    t('못 넘는 문 너머는 갈 수 있는 방에 없다 (넘는 재주가 있으면 있다)', D.routes(mk([ST(H('rogue', 3), 8)])).map(r => r.to).join() === '2' && D.routes(mk([XS(H('archmage', 3), 'unseal')])).map(r => r.to).sort().join() === '1,2'); }
+  { const E = [{ id: 0, a: 0, b: 1, kind: 'locked', lock: 'seal', seen: {} }, { id: 1, a: 0, b: 2, kind: 'open', seen: {} }, { id: 2, a: 2, b: 3, kind: 'open', seen: {} }], st = { at: 0, floor: 1, party: [M(ST(H('rogue', 3), 8))], items: { camp: 9 }, log: [], map: { nodes: [{ id: 0, type: 'start', visited: true }, { id: 1, type: 'treasure' }, { id: 2, type: 'fight', hostile: true }, { id: 3, type: 'boss', hostile: true }], edges: E } };
+    const opts = [{ to: 1, e: E[0], ed: E[0] }, { to: 2, e: E[1], ed: E[1] }]; t('다음 방 자동: 못 넘는 문은 고르지 않는다', D.POL.fork(st, opts) === 1 && D.POL.fork({ ...st, party: [M(XS(H('archmage', 3), 'unseal'))] }, opts) === 0); }
   // 조사 전에는 모른다: 기억이 없으면 관문 표시가 없다
   const s0 = D.fresh(), V0 = D.view(s0, 1); t('조사 전에는 관문이 지도 데이터에 없다 (잠김 · 함정 · 어두움 · 숨은 통로 모두 미확인)', V0.map.edges.every(e => !e.seen.lock && !e.seen.trap && !e.seen.dark && !e.seen.hidden));
   // 지도의 필요한 직업: 지금 파티에 따라 값이 바뀐다
-  const s3 = D.fresh(); s3.roster.dragoon = { m: H('dragoon', 3), tr: [] }; s3.roster.rogue = { m: H('rogue', 3), tr: [] }; s3.party = ['dragoon']; s3.up.cls = 4;
+  const s3 = D.fresh(); s3.roster.dragoon = { m: ST(H('dragoon', 3), 16), tr: [] }; s3.roster.rogue = { m: ST(H('rogue', 3), 8), tr: [] }; s3.party = ['dragoon']; s3.up.cls = 4;
   const V3 = D.view(s3, 1), lk = V3.map.edges.find(e => e.kind === 'locked' && (e.lock || 'lock') === 'lock' && !V3.map.nodes[e.b].hostile); lk.seen.lock = true;
-  const g1 = D.gateTxt(s3, V3, lk); s3.party = ['dragoon', 'rogue']; const g2 = D.gateTxt(s3, D.view(s3, 1), Object.assign(D.view(s3, 1).map.edges[lk.id], { seen: { lock: true } })); s3.party = ['rogue']; s3.party = []; const g3 = D.gateTxt({ ...s3, party: ['cleric'], roster: { cleric: { m: H('cleric', 3), tr: [] } }, up: { cls: 4 } }, V3, lk);
-  t('지도의 방 상태: 넘는 사람(파티에서 먼저 찾은 수단) · 없으면 결과', g1 === '잠김 · 파이터' && g2 === '잠김 · 로그' && /잠김 · /.test(g3), [g1, g2, g3]);
+  const g1 = D.gateTxt(s3, V3, lk); s3.party = ['dragoon', 'rogue']; const g2 = D.gateTxt(s3, D.view(s3, 1), Object.assign(D.view(s3, 1).map.edges[lk.id], { seen: { lock: true } })); s3.party = ['rogue']; s3.party = []; const g3 = D.gateTxt({ ...s3, party: ['cleric'], roster: { cleric: { m: ST(H('cleric', 3), 10), tr: [] } }, up: { cls: 4 } }, V3, lk);
+  t('지도의 문: 넘는 사람(조용한 재주 먼저) · 없으면 닫힘', g1 === '잠긴 문 · 파이터' && g2 === '잠긴 문 · 로그' && g3 === '잠긴 문 · 닫힘', [g1, g2, g3]);
   // 기존 게임은 원형 표 그대로
   const X0 = RUN.X; RUN.X = undefined; const st5 = RUN.newRun(3, ['rogue'], 3), ck = RUN.checkers(st5, { skill: '은신' })[0]; RUN.X = X0;
   t('기존 게임(RUN.X 없음)은 원형 표 그대로', ck.bonus === RUN.CLS.rogue.sk.은신);
@@ -286,6 +298,9 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   Rs.pay(m0, k0, res0); const st = { xcd: {}, party: [] }; D.XRUN.tick(st, D.XRUN.ROOM_R); t('방을 옮기면 6라운드 (탐험 스킬과 한 시계)', Rs.clock - m0.cdK[G.Res.sh(k0, res0)[0]] === 6);
   Rs.pay(m0, k0, res0); Rs.longRest([m0]); t('야영(긴 휴식) = 전부 돌아온다', Rs.can(m0, k0, res0));
   t('쿨타임 값: 1레벨 주문 2 · 5레벨 주문 6 · 집중점 2 · 짧은 휴식 6 · 긴 휴식 8 · 소생술 30', D.cdOf('x', { slot: 1 }) === 2 && D.cdOf('x', { slot: 5 }) === 6 && D.cdOf('x', { focus: 1 }) === 2 && D.cdOf('x', { short: 1 }) === 6 && D.cdOf('x', { long: 1 }) === 8 && D.cdOf('sr_revive', { slot: 3 }) === 30);
+  { const Sk = G.Skill, m = all[0][0], a = { merc: m }, on0 = Rs.cdOn, c0 = Rs.clock; Rs.cdOn = true; m.cdK = {}; // 스킬 틀 하나 (2026-11-27): 무기 기술도 같은 표 · 같은 시계
+    const v0 = D.cdOf('sr_topple', null) === 3 && Rs.cdOf('sr_cleave') === 2 && Sk.cdLeft({}, a, 'sr_topple') === 0; Sk.cdStart({}, a, 'sr_topple'); const v1 = Sk.cdLeft({}, a, 'sr_topple') === 3 && Rs.cdLeftOf(m, 'sr_topple') === 3 && m.cdK.sr_topple === Rs.clock; Rs.clock += 2; const v2 = Sk.cdLeft({}, a, 'sr_topple') === 1; Rs.clock += 1; const v3 = Sk.cdLeft({}, a, 'sr_topple') === 0;
+    t('무기 기술의 쿨타임도 원정 시계로 돈다 (표 하나 · 기록 하나)', v0 && v1 && v2 && v3 && !a.cdU, [v0, v1, v2, v3]); Rs.cdOn = on0; Rs.clock = c0; m.cdK = {}; }
   Rs.cdOn = false; const m1 = ms[0]; Rs.long(m1); const r1 = Rs.of(m1); r1.sl = [9, 9, 9, 9, 9, 9, 9, 9, 9]; const kk = all.find(([m, k, r]) => m === m1 && r.slot === 1);
   t('스위치가 꺼지면 예전과 같다 (주문 칸이 없으면 못 쓴다)', kk && !Rs.can(m1, kk[1], kk[2]) && Rs.usesOf(m1, kk[2], kk[1]) > 1);
 }
@@ -403,15 +418,6 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   t('도둑 도구가 있는 로그 → 자물쇠를 딴다', a3.some(n => /^\[로그\] 자물쇠를 딴다/.test(n)), a3);
   t('사건 수는 그대로 다섯', RUN.EVENTS.length === 5, RUN.EVENTS.length);
 }
-// 직접 조종 시험판 (흐름식): 조종 영웅은 표적 고정 · 스킬은 예약한 것만 · 끄면 그대로
-{ const F = (G.newState(), G.S.w.fantasy), m = D.member(F, 'cleric', 5), a = { merc: m, kind: 'hero' }, b = { merc: D.member(F, 'dragoon', 5), kind: 'hero' }, o1 = { hp: 5 }, o2 = { hp: 5 }, H = D.HAND;
-  const gt = () => G.Tactics.guardTarget({ party: [], mons: [] }, a, [o1, o2]);
-  H.on = false; H.uid = m.uid; H.lock = o2; t('끄면 표적을 덮어쓰지 않는다', gt() !== o2 || !D.handIs(a));
-  H.on = true; t('켜면 조종 영웅의 표적 = 누른 적', gt() === o2 && D.handLock(b, [o1, o2]) === null);
-  const P0 = G.SkillAI.plan(F, { party: [], mons: [] }, a, [o1]); t('예약이 없으면 스킬 없이 기본 공격 계획', P0.action === 'basic' && !P0.bonus);
-  D.handSet('sr_bless'); const P1 = G.SkillAI.plan(F, { party: [], mons: [] }, a, [o1]); t('예약하면 그 스킬을 다음 차례 계획에', P1.action === 'sr_bless' && H.res.at === G.Turn.no());
-  H.on = false; H.uid = null; H.lock = null; H.res = null;
-}
 // 기습당함: 탐사 규칙이 굴린 값을 방에 남긴다 (원정의 실제 전투가 보고 적 선공 — crawl.js enterFight)
 { const s = D.fresh(), mk = () => { const st = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3); st.rng = () => 0; return st; };
   const go = (st, info) => { const e = st.map.edges.find(q => q.a === 0 && st.map.nodes[q.b].hostile && st.map.nodes[q.b].type !== 'boss'); const n = st.map.nodes[e.b]; n.info = info; n.alert = false; e.kind = 'open'; RUN.moveActs(st, e)[0].run(); return n; };
@@ -433,71 +439,19 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 { const F = (G.newState(), G.S.w.fantasy), L = D.soloBuilds('paladin'), b2 = L[L.length - 1];
   const m = D.member(F, 'paladin', 3, Math.random, b2.id), s = D.fresh(); s.party = ['dragoon']; const { f } = D.world(s, { w: 10, h: 10, c: new Array(100).fill('.') });
   t('영입: 고른 빌드로 들어온다 · 기본 빌드는 목록의 첫째 · 다중 직업 빌드는 후보에 없다', m.build === b2.id && s.roster.dragoon.m.build === D.soloBuilds('dragoon')[0].id && L.length > 1 && L.every(b => !b.mc), [m.build, s.roster.dragoon.m.build]); }
-// 실시간 전투 시험판 (G.Turn.rt — 유닛마다 시계): 시계가 차면 행동 · 기습은 한 라운드 늦게 · 표적 덮어쓰기 · 스킬 자동 끔이면 안 씀
+// 전투 방 하나를 세워 보는 시험 (고블린 전사 셋): 배속 · 스킬 예외 뒤처리
 { const RM = { id: 'A', x: 2, y: 2, w: 16, h: 10, cx: 10, cy: 7, tags: ['hall'] }, W = 20, Hh = 14, c = new Array(W * Hh).fill('#'); for (let y = 2; y < 12; y++) for (let x = 2; x < 18; x++) c[y * W + x] = '.';
-  const rig = (first, auto) => { const map = { w: W, h: Hh, c, kindAt: new Uint8Array(W * Hh), poi: {}, passChars: '.>,', ver: 1, dist: {}, rooms: [RM], start: RM, end: RM, fixed: true };
+  const rig = first => { const map = { w: W, h: Hh, c, kindAt: new Uint8Array(W * Hh), poi: {}, passChars: '.>,', ver: 1, dist: {}, rooms: [RM], start: RM, end: RM, fixed: true };
     G.newState(); const f0 = G.S.w.fantasy, s = D.fresh(); for (const k of ['dragoon', 'cleric']) s.roster[k] = { m: D.member(f0, k, 5), tr: [] }; s.party = ['dragoon', 'cleric']; s.up = { seat: 0, cls: 1 };
     const st = RUN.newRun(3, ['fighter', 'cleric'], 1), { f, r } = D.world(s, map); D.outfit(st, r, s); r.party.forEach((p, i) => { p.x = 4 + i; p.y = 7; });
     const ms = [0, 1, 2].map(i => G.Fantasy.spawnMon(r, 1, { n: '고블린 전사', ...G.D.F.mon['고블린 전사'] }, 14, 5 + i * 2, false, { aggro: true, spotted: true, major: true })); G.Fantasy.refreshEnts(r);
-    const H = D.HAND; H.on = true; H.multi = true; H.auto = auto; H.cmd = {}; H.uid = null; r.nextFirst = first; return { f, r, ms }; };
-  const RTs = 2.4, sm0 = G.Turn.smooth; G.Turn.rt = { round: RTs }; G.Turn.smooth = true;
-  { const { r } = rig(null, true), seen = new Map(); let tm = 0; for (let k = 0; k < 60; k++) { G.tick(0.05); tm += 0.05; for (const [e, L] of r.lanes || []) if (L.ph !== 'idle' && !seen.has(e)) seen.set(e, tm); }
-    t('실시간: 한 라운드(2.4초) 안에 모든 유닛이 자기 시계로 차례를 시작한다 (동시에 움직인다)', seen.size >= 4, seen.size); }
-  { const { r } = rig('foes', true), firstOf = new Map(); let tm = 0; for (let k = 0; k < 90; k++) { G.tick(0.05); tm += 0.05; for (const [e, L] of r.lanes || []) if (L.ph !== 'idle' && !firstOf.has(e)) firstOf.set(e, [tm, !!e.merc]); }
-    const hero = Math.min(...[...firstOf.values()].filter(x => x[1]).map(x => x[0])), mon = Math.min(...[...firstOf.values()].filter(x => !x[1]).map(x => x[0]));
-    t('실시간: 기습당하면 우리 시계가 한 라운드 늦게 시작', hero - mon >= RTs * 0.9, [hero, mon]); }
-  { const { r, ms } = rig(null, true), p = r.party[0]; D.HAND.cmd[p.merc.uid] = { lock: ms[2], res: null }; t('실시간: 끌어다 놓은 적이 그 영웅의 표적 (다른 영웅은 그대로)', G.Tactics.guardTarget(r, p, ms) === ms[2] && G.Tactics.guardTarget(r, r.party[1], ms) !== ms[2]); }
-  { const paid = [], p0 = G.Res.pay; for (let n = 0; n < 4; n++) { const { r } = rig(null, false); G.Res.pay = function (m, k) { if (m && r.party.some(q => q.merc === m)) paid.push(k); return p0.apply(this, arguments); }; for (let k = 0; k < 120; k++) G.tick(0.05); G.Res.pay = p0; }
-    t('실시간: 아무도 안 고르면 영웅 모두 AI가 스킬을 쓴다', paid.length > 0, paid); }
-  { let mine = 0, ai = 0; const p0 = G.Res.pay; for (let n = 0; n < 8; n++) { const { r } = rig(null, false), me = r.party[n % 2].merc; D.handPick(me.uid); G.Res.pay = function (m, k) { if (m === me) mine++; else if (r.party.some(q => q.merc === m)) ai++; return p0.apply(this, arguments); }; for (let k = 0; k < 120; k++) G.tick(0.05); G.Res.pay = p0; }
-    t('실시간: 고른 영웅은 누른 것만 · 나머지는 AI', mine === 0 && ai > 0, [mine, ai]); }
-  { const { r, ms } = rig(null, false), [p, q] = r.party; D.handPick(p.merc.uid); D.HAND.cmd[p.merc.uid] = { lock: ms[2], res: null, go: { x: 3, y: 10 } }; D.handPick(q.merc.uid); t('실시간: 다른 영웅을 고르면 앞 영웅의 명령은 걷힌다', !D.HAND.cmd[p.merc.uid] && D.HAND.uid === q.merc.uid); }
-  { const { f, r, ms } = rig(null, true), mo = ms[0], h0 = mo.hp; r.turn = r.turn || { cur: null }; G.Fantasy.hurt(f, r, mo, 10, 'hit', { merc: r.party[0].merc }); const dRt = h0 - mo.hp; G.Turn.rt = null; const h1 = mo.hp; G.Fantasy.hurt(f, r, mo, 10, 'hit', { merc: r.party[0].merc }); const dTb = h1 - mo.hp; G.Turn.rt = { round: RTs };
-    t('실시간에서만 피해 배율 RT_DMG (양쪽 같게) · 턴제는 그대로', dTb > 0 && Math.abs(dRt - Math.floor(dTb * D.TUNE.RT_DMG)) <= 1, [dRt, dTb]); }
-  { const { f, r, ms } = rig(null, true), p = r.party[0], mo = ms[0], z = []; r.turn = r.turn || { cur: null }; mo.hp = mo.max = 500; p.hp = p.max = 500;
-    for (const d of [1, 2, 3]) { const h = mo.hp; G.Fantasy.hurt(f, r, mo, d, 'hit', { merc: p.merc }); z.push(h - mo.hp); } for (const d of [1, 3]) { const h = p.hp; G.Fantasy.hurtMember(f, r, p, d, null); z.push(h - p.hp); }
-    t('실시간: 맞았으면 피해가 1 이상 (배율 0.3의 소수를 버려 0이 되던 것)', z.every(v => v >= 1), z);
-    const h0 = mo.hp; for (let k = 0; k < 20; k++) G.Fantasy.hurt(f, r, mo, 9, 'hit', { merc: p.merc }); t('실시간: 피해 배율은 반올림 (9 × 0.3 = 2.7 → 3)', h0 - mo.hp === 20 * Math.round(9 * D.TUNE.RT_DMG), h0 - mo.hp); }
+    r.nextFirst = first; return { f, r, ms }; };
+  const sm0 = G.Turn.smooth; G.Turn.smooth = true;
   { const s = D.fresh(); s.up = Object.fromEntries(D.TREE.map(q => [q.id, q.cost.length])); s.roster.dragoon = { m: D.member(G.S.w.fantasy, 'dragoon', 3), tr: [] }; const mk = () => ({ w: W, h: Hh, c, kindAt: new Uint8Array(W * Hh), poi: {}, passChars: '.>,', ver: 1, dist: {}, rooms: [RM], start: RM, end: RM, fixed: true });
-    s.rt = true; const a = D.world(s, mk()).f.turnX; s.spdX = 4; const b = D.world(s, mk()).f.turnX; s.rt = false; const cc = D.world(s, mk()).f.turnX; t('실시간은 ×1에서 시작 · 고른 배속은 기억 · 턴제는 가장 빠른 것', a === D.speeds(s)[0] && b === 4 && cc === 8, [a, b, cc]); G.Turn.rt = { round: RTs }; G.Turn.smooth = true; }
-  // 실시간 명령 (2026-11-25): 누른 스킬은 시계를 기다리지 않는다 · 쿨타임이면 안 나간다 · 표적을 바꾸면 걸음이 바뀐다 · 바닥 명령
-  { const { r } = rig(null, false), p = r.party[1]; for (let k = 0; k < 6; k++) G.tick(0.05); const L = r.lanes.get(p); L.clk = 2; L.ph = 'idle'; D.HAND.cmd[p.merc.uid] = { lock: null, res: { k: 'sr_bless' }, seq: 1 }; D.HAND.fired = null; G.tick(0.05);
-    t('실시간: 누른 스킬은 그 틱에 나간다 (시계와 따로) · 행동 스킬은 시계를 처음으로', D.HAND.fired?.k === 'sr_bless' && Math.abs(L.clk - RTs) < 0.11, [D.HAND.fired, L.clk]); }
-  { const { r } = rig(null, false), p = r.party[1]; for (let k = 0; k < 6; k++) G.tick(0.05); (p.merc.cdK = p.merc.cdK || {}).sr_bless = G.Res.clock; D.HAND.cmd[p.merc.uid] = { lock: null, res: { k: 'sr_bless' }, seq: 1 }; D.HAND.fired = null; for (let k = 0; k < 10; k++) G.tick(0.05);
-    t('실시간: 쿨타임 중이면 누른 스킬이 나가지 않는다', G.Res.cdOn && D.handCd(r, p, 'sr_bless') > 0 && !D.HAND.fired && D.HAND.cmd[p.merc.uid].res?.k === 'sr_bless', [G.Res.cdOn, D.handCd(r, p, 'sr_bless'), D.HAND.fired]); }
-  { const { r, ms } = rig(null, false), p = r.party[0]; for (let k = 0; k < 4; k++) G.tick(0.05); const L = r.lanes.get(p); L.ph = 'pre'; L.tg = ms[0]; L.clk = 2; p._dx = p.x - 3; p._dy = p.y; const c0 = D.HAND.cmd[p.merc.uid] = { lock: ms[2], res: null, seq: 1 }; G.tick(0.05);
-    t('실시간: 걷는 중에 표적을 바꾸면 걸음을 끊고 새 표적으로', L.tg === ms[2] && c0.lock === ms[2], [L.tg && L.tg.n, L.ph]); }
-  { const { r } = rig(null, false), p = r.party[0]; D.HAND.cmd[p.merc.uid] = { lock: null, res: null, go: { x: 3, y: 10 }, seq: 1 }; for (let k = 0; k < 40; k++) G.tick(0.05); const at1 = [p.x, p.y]; for (let k = 0; k < 60; k++) G.tick(0.05);
-    t('실시간: 바닥 명령 — 그 칸으로 가서 서 있는다', at1.join() === '3,10' && p.x === 3 && p.y === 10, [at1, p.x, p.y]); }
-  // 예고 동작: 숨결은 준비 동안 칸이 굳고 · 빠져나가면 안 맞고 · 기절하면 취소 · 턴제는 그대로
-  const drig = () => { const o = rig(null, true), r = o.r; for (const m of r.mons) m.hp = 0; r.mons = []; const d = G.Fantasy.spawnMon(r, 7, { n: '붉은 새끼 용', ...G.D.F.mon['붉은 새끼 용'] }, 7, 7, false, { aggro: true, spotted: true, major: true }); r.party.forEach((p, i) => { p.x = 5; p.y = 6 + i; p.hp = p.max = 500; }); G.Fantasy.refreshEnts(r); return { ...o, d }; };
-  const waitTele = r => { for (let k = 0; k < 200 && !(r.tele && r.tele.length); k++) G.tick(0.05); return r.tele && r.tele[0]; };
-  { const { r, d } = drig(), q = waitTele(r);
-    t('예고: 붉은 새끼 용의 숨결은 바로 나가지 않고 칸을 정해 준비한다 (실시간)', !!q && q.cells && q.cells.length > 0 && q.T === D.TUNE.TELE * RTs, q && [q.name, q.cells.length, q.T]);
-    if (q) { const out = r.party.find(p => q.cells.some(([x, y]) => x === p.x && y === p.y)); let far = null; for (let y = 2; y < 12 && !far; y++) for (let x = 2; x < 18 && !far; x++) if (!q.cells.some(c => c[0] === x && c[1] === y) && Math.hypot(x - d.x, y - d.y) > 4 && !r.party.some(p => p.x === x && p.y === y)) far = [x, y];
-      if (out && far) { out.x = far[0]; out.y = far[1]; } q.t = 0.01; G.tick(0.05); t('예고: 굳은 범위에서 빠져나간 영웅은 숨결을 맞지 않는다', !!out && !!far && !q.b.q.list.includes(out), [out && out.n, far]); } }
-  { const { r, d } = drig(), q = waitTele(r); let fired = false; if (q) { q.go = () => { fired = true; }; d.stun = 5; } for (let k = 0; k < 80; k++) G.tick(0.05);
-    t('예고: 준비 중에 기절하면 취소된다', !!q && !fired && !(r.tele || []).includes(q), [!!q, fired]); }
-  { const { r, d } = drig(), q = waitTele(r), at = q && new Set(q.cells.map(c => c.join())), p = r.party[0]; let o1 = null; if (q) { const c = q.cells.find(([x, y]) => !r.party.slice(1).some(o => o.x === x && o.y === y) && !(x === d.x && y === d.y)); p.x = c[0]; p.y = c[1]; d.x += 2; d.y += 3; q.t = 0.01; G.tick(0.05); o1 = q.b.q.list; }
-    t('예고: 준비 중에 몬스터가 밀려나도 그려 둔 칸에 선 몸만 맞는다', !!o1 && o1.includes(p) && o1.every(o => at.has([o.x, o.y].join())), o1 && o1.map(o => [o.n, o.x, o.y])); }
-  for (const c of ['stunned', 'paralyzed', 'unconscious', 'incapacitated']) { const { r, ms } = rig(null, false), p = r.party[1]; for (let k = 0; k < 6; k++) G.tick(0.05); const L = r.lanes.get(p); G.Dnd.give(r, p, c, 100, ms[0]); L.clk = 2; L.ph = 'idle'; const cm = D.HAND.cmd[p.merc.uid] = { lock: null, res: { k: 'sr_bless' }, seq: 1 }; D.HAND.fired = null; const at = [p.x, p.y].join(); G.tick(0.05); const f1 = !!D.HAND.fired; delete p.cond[c]; G.tick(0.05);
-    t(`실시간: ${c} 동안 누른 스킬이 안 나가고 풀리면 나간다`, !f1 && cm.res === null && D.HAND.fired?.k === 'sr_bless', [f1, D.HAND.fired, cm.res]); }
-  { const { f, r } = rig(null, false), p = r.party[1], S = G.Skill.SK.sr_cure, w0 = S.when, r0 = S.run; for (let k = 0; k < 6; k++) G.tick(0.05); S.when = () => true; S.run = () => { throw new Error('대상 없음'); }; p.plan = null; p.slotUsed = false; p.merc.cdK = {}; let threw = false; const a0 = G.Guild.active; G.Guild.active = () => ['sr_cure']; try { G.Skill.tick(f, r, p, 0, [], S.bonus ? 1 : undefined); } catch (x) { threw = true; } finally { S.when = w0; S.run = r0; G.Guild.active = a0; }
+    const a = D.world(s, mk()).f.turnX; s.spdX = 4; const b = D.world(s, mk()).f.turnX; t('배속: 처음엔 연 것 중 가장 빠른 것 · 고른 배속은 기억', a === 8 && b === 4, [a, b]); }
+  { const { f, r } = rig(null), p = r.party[1], S = G.Skill.SK.sr_cure, w0 = S.when, r0 = S.run; for (let k = 0; k < 6; k++) G.tick(0.05); S.when = () => true; S.run = () => { throw new Error('대상 없음'); }; p.plan = null; p.slotUsed = false; p.merc.cdK = {}; let threw = false; const a0 = G.Guild.active; G.Guild.active = () => ['sr_cure']; try { G.Skill.tick(f, r, p, 0, [], S.bonus ? 1 : undefined); } catch (x) { threw = true; } finally { S.when = w0; S.run = r0; G.Guild.active = a0; }
     t('스킬이 중간에 터져도 피해 종류가 남지 않는다', threw && !G.Foe.dtype && !G.Skill.dtOver && !G.Skill.maxDice, [threw, G.Foe.dtype]); }
-  // 시그니처 기술 (G.Sig): 모두 엔진에 있는 몬스터 · 예고 뒤 나간다 · 평타 몬스터는 예고 없음 · 기절하면 처음부터 다시 충전
-  const srig = (nm, gap = 2) => { const o = rig(null, true), r = o.r; for (const m of r.mons) m.hp = 0; r.mons = []; const d = G.Fantasy.spawnMon(r, 7, { n: nm, ...G.D.F.mon[nm] }, 9, 7, false, { aggro: true, spotted: true, major: true }); d.hp = d.max = 5000; r.party.forEach((p, i) => { p.x = 9 - gap; p.y = 7 + i; p.hp = p.max = 5000; }); G.Fantasy.refreshEnts(r); return { ...o, d }; };
-  const waitSig = (r, n = 900) => { for (let k = 0; k < n && !(r.tele && r.tele.length); k++) G.tick(0.05); return r.tele && r.tele[0]; };
-  { const all = RUN.ZONES.flatMap(z => [...Object.keys(z.cost), ...(z.gate?.u || []).map(u => u[0]), ...(z.boss?.u || []).map(u => u[0])]).filter((n, i, L) => L.indexOf(n) === i).map(n => G.Encounter.monName(n)).filter(n => G.D.F.STAT[n]), id = n => G.D.F.STAT[n][0], bad0 = Object.keys(G.Sig.T).filter(k => !all.some(n => id(n) === k));
-    t('시그니처 표의 몬스터는 모두 원정에 나온다', !bad0.length, bad0);
-    const no = [], errs = [];
-    for (const n of all) { const q0 = G.Sig.T[id(n)]; if (!q0 || !(q0.kind || q0.own)) continue; let ok1 = false; for (let i = 0; i < 4 && !ok1; i++) { const { r, d } = srig(n, q0.kind === 'charge' || q0.kind === 'dive' ? 4 : 2); if (q0.kind === 'dive') d.flee = false; const q = waitSig(r); if (!q) continue; ok1 = true; try { q.t = 0.01; G.tick(0.05); } catch (x) { errs.push(n + ' ' + x.message); } if ((r.tele || []).includes(q)) errs.push(n + ' 안 나감'); } if (!ok1) no.push(n); }
-    t('시그니처: 표의 기술이 모두 예고를 거쳐 나간다', !no.length && !errs.length, [no, errs]); }
-  { const { r } = srig('해골'); t('시그니처가 없는 몬스터(해골)는 예고가 없다', !waitSig(r, 600)); }
-  { const { r, d } = srig('오우거'), q = waitSig(r); if (q) d.stun = 1; G.tick(0.05); t('시그니처: 기절하면 처음부터 다시 충전', !!q && !r.tele.length && d._sig >= r.turn.round + G.Sig.CD, [d._sig, r.turn && r.turn.round]); }
-  { const { r, d } = drig(), q = waitTele(r); d.stun = 1; G.tick(0.05); t('숨결: 준비 중에 기절하면 충전을 잃는다', !!q && d._use.rech[q.b.a.name] === false, d._use && d._use.rech); }
-  { G.Turn.rt = null; const { r } = drig(); let n = 0; for (let k = 0; k < 400; k++) { G.tick(0.05); if (r.tele && r.tele.length) n++; } G.Turn.rt = { round: RTs };
-    t('예고: 턴제에서는 예고 없이 그대로', n === 0 && !r.lanes, n); }
-  G.Turn.rt = null; G.Turn.smooth = sm0; Object.assign(D.HAND, { on: false, multi: false, auto: false, cmd: {}, uid: null });
+  G.Turn.smooth = sm0;
 }
 // 원정 결과 집계 (2026-11-23, 보고서)
 { const s = D.fresh(); s.party = ['dragoon', 'cleric']; s.up = { seat: 0, cls: 1 }; const map = { w: 10, h: 10, c: new Array(100).fill('.') };
@@ -510,9 +464,57 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   r.turn = { cur: pc, round: 1 }; D.statTick(st, r); pc.hp += 4; D.statTick(st, r); t('회복 = 그 차례 영웅의 몫 · 전투 수', Math.round(st.stat.h.cleric.heal) === 4 && st.stat.fights === 1, st.stat);
   pc.max += 5; pc.hp += 5; D.statTick(st, r); t('레벨업으로 늘어난 체력은 회복이 아니다', Math.round(st.stat.h.cleric.heal) === 4); r.turn = null;
   G.Fantasy.hurt(f, r, mo, 9999, 'hit', { merc: pf.merc }); t('처치 수 · 처치한 적 수', st.stat.h.dragoon.kills === 1 && st.stat.foes === 1, st.stat);
-  const st2 = RUN.newRun(4, ['fighter', 'cleric'], 2); D.descend(st2, s, G.Party.members(f)); t('계단을 내려가도 집계가 이어진다', st2.stat === st.stat);
   t('끝난 이유: 전멸 · 용 처치 · 귀환(경로 끝 · 짐 · 위험 · 직접)', D.endWhy({ done: 'lose' }, 'plan') === 'lose' && D.endWhy({ done: 'win' }) === 'win' && D.endWhy({}, 'plan') === 'plan' && D.endWhy({}, 'quit') === 'quit' && D.endWhy({}) === 'back');
 }
+
+// ── 2026-11-27: 층 생성 (긴 방 · 10방쯤) · 한 판 = 한 층의 물자 · 지나온 방 건너뛰기 · 전투 전 배치 ──
+// 층 생성: 1~10층 모두 방 10~12 · 입구 → 우두머리 5걸음 · 문 · 복도가 정수 칸 (짝수 변 방의 가운데 문이 x.5 칸에 놓여 문 잇기가 끝나지 않던 것)
+{ const badG = [];
+  for (let fl = 1; fl <= 10; fl++) for (let k = 0; k < 6; k++) { const m = RUN.gen.make(D.floorSeed({ mapSeed: 500 + k * 131 }, fl), fl), N = m.nodes, boss = N.find(q => q.type === 'boss'), d = D.reach({ map: m }, 0).d;
+    if (N.length < 10 || N.length > 12) badG.push(`${fl}층 ${k} 방 ${N.length}`);
+    if (d.get(boss.id) !== 5) badG.push(`${fl}층 ${k} 직행 ${d.get(boss.id)}`);
+    for (const e of m.edges) { const c = m._lay.cor[e.id]; if (![...c.cells, c.doorA, c.doorB].flat().every(Number.isInteger)) badG.push(`${fl}층 ${k} 길${e.id} 소수 칸`); }
+    for (const id in m._lay.room) { const r = m._lay.room[id]; if (N[id].type !== 'boss' && N[id].type !== 'start' && (Math.min(r.w, r.h) !== 5 || Math.max(r.w, r.h) < 6 || Math.max(r.w, r.h) > 7)) badG.push(`${fl}층 ${k} 방${id} ${r.w}×${r.h}`); } }
+  t('층 생성 (1~10층 · 씨앗 6개씩): 방 10~12 · 입구 → 우두머리 5걸음 · 방은 폭 5 × 깊이 6~7칸 · 문 · 복도는 정수 칸', !badG.length, badG.slice(0, 6).join(' / ')); }
+// 길 찾기 · 지나온 방 건너뛰기 (G.Dive.routes): 가 본 방만 거쳐 닿는 방 · 드는 물자 = 옮기는 방 수
+{ const s = D.fresh(), st = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3), N = st.map.nodes, E = st.map.edges, nb = id => E.filter(e => (e.a === id || e.b === id) && e.kind !== 'hidden').map(e => (e.a === id ? e.b : e.a));
+  N.forEach(q => { q.visited = false; }); N[0].visited = true; st.at = 0; E.forEach(e => { if (e.kind === 'locked') e.opened = true; }); // 문은 모두 열어 두고 (못 넘는 문은 위의 재주 시험이 본다)
+  const r0 = D.routes(st); t('길: 입구에서는 이웃 방만 (물자 1씩)', r0.length === nb(0).length && r0.every(r => r.cost === 1 && r.path.length === 1 && nb(0).includes(r.to)), JSON.stringify(r0));
+  // 큰길을 두 방 걷고(0 → a → b) 막다른 곁방 x에 들어간 뒤: x에서 가 본 방을 거쳐 갈 수 있는 방
+  const side = N.filter(q => q.side && nb(q.id).length === 1), x = side.find(q => !nb(q.id).includes(0)) || side[0], a = nb(x.id)[0], hid = E.find(e => e.kind === 'hidden');
+  const back = D.reach(st, 0).prev; for (let k = a; k != null; k = back.get(k)) N[k].visited = true; x.visited = true; st.at = x.id;
+  const rs = D.routes(st), seen = new Set(N.filter(q => q.visited).map(q => q.id)), adj = (p, q) => nb(p).includes(q);
+  t('길: 경로는 지금 방에서 이어지고 사이의 방은 모두 가 본 방 · 물자 = 방 수', rs.length > 1 && rs.every(r => r.cost === r.path.length && r.path[r.path.length - 1] === r.to && adj(x.id, r.path[0]) && r.path.every((id, i) => (i === r.path.length - 1 || seen.has(id)) && (!i || adj(r.path[i - 1], id)))), JSON.stringify(rs));
+  const far = rs.filter(r => !seen.has(r.to)); t('길: 막다른 방에서 가 본 방 너머의 안 가 본 방을 바로 (물자 2 이상) · 안 가 본 방 너머는 못 고른다', far.length > 0 && far.every(r => r.cost >= 2 && seen.has(r.path[r.path.length - 2])) && rs.every(r => seen.has(r.to) || nb(r.to).some(id => seen.has(id))) && N.filter(q => !seen.has(q.id) && !nb(q.id).some(id => seen.has(id))).every(q => !rs.some(r => r.to === q.id)), JSON.stringify(far));
+  t('길: 가 본 방도 고를 수 있다 (거기서 멈춘다) · 가까운 순', rs.some(r => r.to === 0 && r.cost === D.reach(st, x.id, id => seen.has(id)).d.get(0)) && rs.every((r, i) => !i || r.cost >= rs[i - 1].cost));
+  if (hid) { const o = hid.a === 0 || N[hid.a].visited ? hid.b : hid.a; N[hid.a].visited = N[hid.b].visited = false; N[o === hid.a ? hid.b : hid.a].visited = true; st.at = o === hid.a ? hid.b : hid.a; const q0 = D.routes(st).some(r => r.to === o && r.cost === 1); hid.seen.hidden = true; t('길: 못 찾은 숨은 통로는 길이 아니다 · 찾으면 길', !q0 && D.routes(st).some(r => r.to === o && r.cost === 1)); }
+  t('우두머리 방까지 걸음', D.toBoss({ map: RUN.newRun(D.floorSeed(s, 5), ['fighter'], 5).map, at: 0 }) === 5); }
+// 물자와 자동 선택: 곧장 가면 남고 다 돌면 모자란다 · 모자라면 굶으러 가지 않고 우두머리 쪽으로
+{ const s = D.fresh(), walk = (fl, camp, seed = 0) => { const st = RUN.newRun(D.floorSeed({ mapSeed: 900 + seed }, fl), ['fighter', 'cleric'], fl), N = st.map.nodes, E = st.map.edges; D.recall(st, s); st.items = { camp, torch: 0 }; N.forEach(q => { q.hostile = false; }); let moves = 0, starve = 0;
+    for (let k = 0; k < 60 && N[st.at].type !== 'boss'; k++) { const opts = E.filter(e => (e.a === st.at || e.b === st.at) && (e.kind !== 'hidden' || e.seen?.hidden)).map(e => ({ e, ed: e, to: e.a === st.at ? e.b : e.a })), j = D.POL.fork(st, opts);
+      st.at = opts[j].to; N[st.at].visited = true; moves++; if (st.items.camp > 0) st.items.camp--; else starve++; }
+    return { moves, starve, seen: N.filter(q => q.visited).length, all: N.length, boss: N[st.at].type === 'boss', tour: tour(st.map) }; };
+  // 입구에서 모든 방을 들르고 우두머리 방에서 끝나는 가장 짧은 걸음 (우두머리 방에 들어서면 판이 끝난다)
+  const tour = M => { const n = M.nodes.length, boss = M.nodes.find(q => q.type === 'boss').id, adj = M.nodes.map(() => []), full = (1 << n) - 1, dist = new Map([[1, 0]]), q = [[0, 1]]; for (const e of M.edges) { adj[e.a].push(e.b); adj[e.b].push(e.a); }
+    for (let h = 0; h < q.length; h++) { const [a, m] = q[h], d = dist.get(a * 65536 + m); if (a === boss) { if (m === full) return d; continue; } for (const b of adj[a]) { const m2 = m | (1 << b), k = b * 65536 + m2; if (!dist.has(k)) { dist.set(k, d + 1); q.push([b, m2]); } } } return -1; };
+  const L = []; for (let fl = 1; fl <= 10; fl++) for (const sd of [0, 77]) L.push([fl, walk(fl, D.CAMP_FREE, sd), walk(fl, 5, sd), walk(fl, 2, sd)]);
+  t('물자: 공짜 몫 9 — 곧장 가면(5걸음) 야영 한 번 몫이 남고, 다 돌려면(13걸음 이상) 모자란다 (1~10층)', D.CAMP_FREE === 9 && D.CAMP_FREE - 5 >= D.REST && L.every(([, a]) => a.tour > D.CAMP_FREE + 3), JSON.stringify(L.map(q => [q[0], q[1].tour])));
+  t('자동 선택: 공짜 몫으로 굶지 않고 우두머리 방에 닿는다 (1~10층)', L.every(([, a]) => a.boss && !a.starve && a.moves <= D.CAMP_FREE), JSON.stringify(L.map(q => [q[0], q[1].moves, q[1].starve, q[1].seen])));
+  t('자동 선택: 물자가 딱 5면 곧장 5걸음 · 굶지 않는다', L.every(([, , b]) => b.boss && b.moves === 5 && !b.starve), JSON.stringify(L.map(q => [q[0], q[2].moves, q[2].starve])));
+  t('자동 선택: 물자가 모자라도(2) 곁방으로 새지 않고 곧장 — 굶는 걸음은 3뿐', L.every(([, , , c]) => c.boss && c.moves === 5 && c.starve === 3), JSON.stringify(L.map(q => [q[0], q[3].moves, q[3].starve])));
+  const st = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3); st.items = { camp: 4 }; st.party.forEach(m => { m.hp = 1; }); st.map.nodes[0].hostile = false;
+  t('야영: 쉬고 나면 우두머리 방까지 갈 물자가 안 남을 때는 쉬지 않는다', D.canCamp(st) && !D.wantCamp(s, st) && (st.items.camp = 8, D.wantCamp(s, st))); }
+// 전투 전 배치: 어느 방 · 어느 문으로 들어서도 구역에 다섯이 선다 (근접 앞줄 · 나머지 뒷줄) · 옮긴 자리는 기억
+{ const s = D.fresh(); s.deep = 4; s.up.cls = 11; s.party = ['dragoon', 'cleric', 'mage', 'paladin', 'rogue']; const badD = []; let Z1 = null, P1 = null;
+  for (const fl of [1, 3, 5, 9]) { const m = RUN.gen.make(D.floorSeed(s, fl), fl), { iso, roomAt } = G.Floor.fromRun(m), { r } = D.world(s, iso), ps = r.party;
+    if (ps.length !== 5) badD.push(`${fl}층 파티 ${ps.length}`);
+    for (const e of m.edges) { const c = m._lay.cor[e.id]; for (const [id, out] of [[e.b, c.cells[c.cells.length - 1]], [e.a, c.cells[0]]]) { const Z = D.depZone(iso, roomAt, id, G.Floor.tile(out)), F = D.depForm({}, ps, Z), ts = [...F.values()], dep = t0 => t0[0] * Z.ax[0] + t0[1] * Z.ax[1];
+        if (F.size !== 5 || new Set(ts.map(String)).size !== 5 || !ts.every(t0 => roomAt[t0[1] * iso.w + t0[0]] === id && iso.c[t0[1] * iso.w + t0[0]] === '.' && dep(t0) - Z.d0 < D.DEP.D)) badD.push(`${fl}층 방${id} 자리 ${F.size}`);
+        const fr = ps.filter(p => G.Dnd.melee(p)), bk = ps.filter(p => !G.Dnd.melee(p)); if (fr.length && bk.length && Math.min(...fr.map(p => dep(F.get(p)))) < Math.max(...bk.map(p => dep(F.get(p))))) badD.push(`${fl}층 방${id} 줄`);
+        if (fl === 3 && !Z1) { Z1 = Z; P1 = ps; } } } }
+  t('배치: 1 · 3 · 5 · 9층의 모든 방 · 모든 문에서 다섯이 배치 구역(입구 쪽 4타일)의 서로 다른 칸에 · 근접은 앞줄', !badD.length, badD.slice(0, 6).join(' / '));
+  const F0 = D.depForm(s, P1, Z1), me = P1.find(p => G.Dnd.melee(p)), ca = P1.find(p => !G.Dnd.melee(p)), a0 = F0.get(me), b0 = F0.get(ca); F0.set(me, b0); F0.set(ca, a0); D.depSave(s, Z1, F0);
+  const F1 = D.depForm(D.load(D.dump(s)), P1, Z1); t('배치: 옮긴 자리(줄 · 줄 안 차례)는 저장에 남아 다음 전투의 기본 진형', s.form[me.merc.cls][0] === 'b' && s.form[ca.merc.cls][0] === 'f' && String(F1.get(me)) === String(b0) && String(F1.get(ca)) === String(a0), JSON.stringify(s.form)); }
 
 console.log(`dive_rules: 통과 ${ok} · 실패 ${bad}`);
 process.exit(bad ? 1 : 0);

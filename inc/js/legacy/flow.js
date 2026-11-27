@@ -158,7 +158,7 @@ G.Flow = (() => {
   function startFight(rt, foe) {
     const lead = leadOf(rt);
     rt.flow.plans = [];
-    if (rt.nextFirst !== 'foes' && lead && foe && !G.Turn.rt) { G.Tactics.snap(rt); rt.flow.plans = G.Tactics.deploy(rt, lead, foe); } // 실시간(G.Turn.rt): 대형을 갖추지 않고 걸어 들어온 그대로 싸움이 붙는다
+    if (rt.nextFirst !== 'foes' && lead && foe) { G.Tactics.snap(rt); rt.flow.plans = G.Tactics.deploy(rt, lead, foe); }
     if (rt.flow.plans.length) go(rt, 'deploy', DEPLOY_T); else go(rt, 'fight');
   }
   function deploy(rt, dt) {
@@ -176,7 +176,7 @@ G.Flow = (() => {
     rt.nextFirst = null;
     // 대열을 새로 시작한다: 싸우던 자리에서 그대로 걸어 나가 한 줄이 된다
     const lead = leadOf(rt); if (lead) rt.trail = [{ x: lead.x, y: lead.y }];
-    go(rt, 'after', G.Turn.rt ? 0 : AFTER_T); // 실시간: 싸움이 끝나면 쉬지 않고 그대로
+    go(rt, 'after', AFTER_T);
   }
   // 멀리 떨어진 사람은 일행 곁으로 걸어온다. 다 모이면 true
   function regroup(rt, speed, dt) {

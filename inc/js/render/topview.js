@@ -24,13 +24,13 @@ const TOP = (() => {
   const stage = $('stage'), cv = document.createElement('canvas'); cv.id = 'ct'; cv.style.cssText = 'position:absolute;left:0;top:0;image-rendering:pixelated;'; canvas.after(cv);
   const x = cv.getContext('2d'); canvas.style.visibility = 'hidden'; const hd0 = () => { const h = $('hd'); if (h) h.style.display = 'none'; };
   const TS = 16, CY = 0.4; let Z = 3, cx = 0, cy = 0, cw = 0, ch = 0, ready = false;
-  const zkOf = () => { try { return JSON.parse(localStorage.getItem('inc.dive') || '{}').zk || 1; } catch (e) { return 1; } };
-  let zk = 1, zkT = 0;
+  let zf = 0, zT = 0;
   function size() {
     const w = stage.clientWidth, h = stage.clientHeight, d = devicePixelRatio || 1;
     if (cv.width !== Math.round(w * d) || cv.height !== Math.round(h * d)) { cv.width = Math.round(w * d); cv.height = Math.round(h * d); cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
-    cw = cv.width; ch = cv.height; const n = performance.now(); if (n - zkT > 300) { zkT = n; zk = zkOf(); }
-    Z = Math.max(1, Math.round(ch / (TS * 11) * zk)); // 화면 높이에 칸 11개쯤 (확대 · 축소는 원정의 배율 zk)
+    cw = cv.width; ch = cv.height; const n = performance.now(), dt = Math.min(0.1, (n - (zT || n)) / 1000); zT = n;
+    const want = Math.max(1, ch / (TS * 11) * (DIVEUI.zk || 1)); zf = zf ? zf + (want - zf) * Math.min(1, dt * 12) : want; // 화면 높이에 칸 11개쯤 × 원정의 배율 zk (휠 · 두 손가락) — 바로 읽고 부드럽게
+    Z = Math.max(TS, Math.round(TS * zf)) / TS; // 칸 한 장이 정수 화소가 되게 (칸 사이 틈 없이)
   }
   const sx = tx => Math.round((tx - cx) * TS * Z + cw / 2), sy = ty => Math.round((ty - cy) * TS * Z + ch * CY);
   const dpr = () => cv.width / (stage.clientWidth || 1);
@@ -124,8 +124,8 @@ const TOP = (() => {
   }
   function draw(r, dt) {
     size(); hd0(); const t = performance.now() / 1000; if (typeof settle === 'function') settle(r, dt); // 표시 위치(_dx · _dy)를 걸음에 맞춰 옮긴다 (쿼터뷰 그리기가 하던 일)
-    const pl = r.party.filter(p => !p.dead), pc = pl.length ? [pl.reduce((a, e) => a + (e._dx ?? e.x), 0) / pl.length, pl.reduce((a, e) => a + (e._dy ?? e.y), 0) / pl.length] : [cx, cy], seenM = r.mons.filter(m => m.hp > 0 && m.spotted && m.aggro && Math.hypot(m.x - pc[0], m.y - pc[1]) < 7), pts = pl.concat(seenM), dc = r.turn && pts.length ? [pts.reduce((a, e) => a + (e._dx ?? e.x), 0) / pts.length, pts.reduce((a, e) => a + (e._dy ?? e.y), 0) / pts.length] : null, hf = DIVEUI.follow ? DIVEUI.follow(r) : null, live = r.party.filter(p => !p.dead);
-    const aim = hf || dc || (live.length ? [live.reduce((a, p) => a + (p._dx ?? p.x), 0) / live.length, live.reduce((a, p) => a + (p._dy ?? p.y), 0) / live.length] : [cx, cy]);
+    const pl = r.party.filter(p => !p.dead), pc = pl.length ? [pl.reduce((a, e) => a + (e._dx ?? e.x), 0) / pl.length, pl.reduce((a, e) => a + (e._dy ?? e.y), 0) / pl.length] : [cx, cy], seenM = r.mons.filter(m => m.hp > 0 && m.spotted && m.aggro && Math.hypot(m.x - pc[0], m.y - pc[1]) < 7), pts = pl.concat(seenM), dc = r.turn && pts.length ? [pts.reduce((a, e) => a + (e._dx ?? e.x), 0) / pts.length, pts.reduce((a, e) => a + (e._dy ?? e.y), 0) / pts.length] : null, live = r.party.filter(p => !p.dead);
+    const aim = dc || (live.length ? [live.reduce((a, p) => a + (p._dx ?? p.x), 0) / live.length, live.reduce((a, p) => a + (p._dy ?? p.y), 0) / live.length] : [cx, cy]);
     const k = ready ? 1 - Math.exp(-dt * 5) : 1; cx += (aim[0] - cx) * k; cy += (aim[1] - cy) * k; ready = true;
     x.imageSmoothingEnabled = false; x.filter = 'none'; x.fillStyle = '#100c12'; x.fillRect(0, 0, cw, ch);
     drawMap(r);

@@ -129,9 +129,9 @@ const DIVEMAP = (() => {
       { const numd = new Set([plan[0]]); let num = 0; for (const id of plan.slice(1)) { if (numd.has(id)) continue; numd.add(id); num++; const r = L.room[id], px = (r.x - x0) * c + 2, py = (r.y - y0) * c + r.h * c - 14; x.fillStyle = PAL.paper; x.fillRect(px - 1, py - 1, 13, 13); x.fillStyle = PAL.rust; x.fillRect(px, py, 11, 11); x.font = '700 10px Galmuri11, sans-serif'; x.textAlign = 'center'; x.fillStyle = PAL.paper; x.fillText(String(num), px + 6, py + 10); } }
       if (tip || qtip) { const q0 = tip || qtip; bitmap(x, QUILL, Math.round(q0[0]) - 1, Math.round(q0[1]) - 23, 2, { 1: PAL.ink, 2: PAL.paper }); }
     }
-    // 고를 수 있는 방 (다음 방 고르기): 금색 테두리 · 번호 (목록과 같은 번호)
+    // 고를 수 있는 방 (다음 방 고르기): 금색 테두리 · 드는 야영 물자 (천막 −N)
     for (const [id, num] of st.pick || []) { const r = L.room[id], rx = (r.x - x0) * c, ry = (r.y - y0) * c, rw = r.w * c, rh = r.h * c; x.fillStyle = PAL.gold; x.fillRect(rx - 3, ry - 3, rw + 6, 3); x.fillRect(rx - 3, ry + rh, rw + 6, 3); x.fillRect(rx - 3, ry, 3, rh); x.fillRect(rx + rw, ry, 3, rh);
-      x.fillStyle = PAL.ink; x.fillRect(rx - 3, ry - 3, 17, 17); x.fillStyle = PAL.gold; x.fillRect(rx - 2, ry - 2, 15, 15); text(x, String(num), rx + 5, ry + 10, PAL.ink, { size: 12, bold: true, plate: false }); }
+      const tw = 16 + String(num).length * 7 + 9, bx = rx + rw - tw + 2, by = ry + rh - 12; x.fillStyle = PAL.ink; x.fillRect(bx - 1, by - 1, tw + 2, 17); x.fillStyle = PAL.gold; x.fillRect(bx, by, tw, 15); bitmap(x, TENT, bx + 2, by + 4, 1, { 1: PAL.ink, 3: PAL.ink }); text(x, `−${num}`, bx + 14, by + 12, PAL.ink, { align: 'left', size: 12, bold: true, plate: false }); } // 방 오른쪽 아래 모서리 (이름 · 물건 표시와 안 겹치게)
     // 지금 위치 (원정 중)
     if (st.here != null) { const r = L.room[st.here], hx = (r.x - x0 + r.w / 2) * c, hy = (r.y - y0 + r.h / 2) * c; x.fillStyle = PAL.ink; x.fillRect(hx - 4, hy - 4, 9, 9); x.fillStyle = '#d9493a'; x.fillRect(hx - 3, hy - 3, 7, 7); }
     if (st.flash > 0) for (const id of st.fresh || []) { const r = L.room[id]; x.globalAlpha = st.flash * 0.55; x.fillStyle = '#fff6c8'; x.fillRect((r.x - x0) * c, (r.y - y0) * c, r.w * c, r.h * c); x.globalAlpha = 1; } // 새로 밝힌 방: 잠깐 밝게
@@ -171,7 +171,7 @@ const DIVEMAP = (() => {
       if (now >= T + 120) return fin(); requestAnimationFrame(step); };
     step();
   }
-  // 지도 칸에 붙이기: wrap(넘겨 볼 칸) · V · opts { plan, trail, fail, camp, S, gateInfo, here, mini, title } → { redraw, nope, cell(ev) → 방 id | null, gate(ev) → 관문 | null }
+  // 지도 칸에 붙이기: wrap(넘겨 볼 칸) · V · opts { plan, trail, fail, camp, S, gateInfo, here, mini, title, pick, fit } → { redraw, nope, cell(ev) → 방 id | null, gate(ev) → 관문 | null }
   function mount(wrap, V, opts) {
     let cv = wrap.querySelector('canvas.dvpix'); if (!cv) { wrap.innerHTML = ''; cv = document.createElement('canvas'); cv.className = 'dvpix'; wrap.append(cv); }
     const L = V.map._lay, cs = [], add = (a, b) => cs.push([a, b]);
@@ -180,15 +180,16 @@ const DIVEMAP = (() => {
     const bx0 = Math.min(...cs.map(q => q[0])) - 2, by0 = Math.min(...cs.map(q => q[1])) - 2, bw = Math.max(...cs.map(q => q[0])) - bx0 + 3, bh = Math.max(...cs.map(q => q[1])) - by0 + 3;
     const VW = Math.max(120, wrap.clientWidth), VH = Math.max(100, wrap.clientHeight);
     // 칸 크기: 미니맵은 작게 · 지도는 폭(가로로 긴 층이면 높이)에 맞추되 10~14px — 넘치면 끌어서 본다
-    const tall = bh / bw > VH / VW, small = typeof RUN !== 'undefined' && RUN.SMALL, c = opts.mini ? 5 : Math.max(small ? 16 : 10, Math.min(small ? 20 : 14, Math.floor(tall ? VW / bw : VH / bh))); // 작은 방(5칸)은 칸을 크게 (16~20px) — 방 글씨가 붙지 않게, 넘치면 끌어서 본다
+    const fitB = opts.fit?.length ? opts.fit.map(id => L.room[id]).reduce((b, r) => [Math.min(b[0], r.x), Math.min(b[1], r.y), Math.max(b[2], r.x + r.w), Math.max(b[3], r.y + r.h)], [1e9, 1e9, -1e9, -1e9]) : null; // fit: 한눈에 들어와야 할 방들 (다음 방 고르기 — 지금 방과 고를 수 있는 방): 칸을 9px까지 줄여 담고 그 가운데를 본다
+    const tall = bh / bw > VH / VW, small = typeof RUN !== 'undefined' && RUN.SMALL, c = opts.mini ? 5 : fitB ? Math.max(9, Math.min(opts.cell || 16, Math.floor(Math.min(VW / (fitB[2] - fitB[0] + 2), VH / (fitB[3] - fitB[1] + 2))))) : opts.cell || Math.max(small ? 16 : 10, Math.min(small ? 20 : 14, Math.floor(tall ? VW / bw : VH / bh))); // 작은 방(5칸)은 칸을 크게 (16~20px) — 방 글씨가 붙지 않게, 넘치면 끌어서 본다
     const W = Math.max(VW, bw * c), H = Math.max(VH, bh * c), x0 = bx0 - Math.floor((W / c - bw) / 2), y0 = by0 - Math.floor((H / c - bh) / 2), o = { c, x0, y0, W, H, fl: V.floor, mini: !!opts.mini };
     cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px';
-    const st = { base: base(V, o), plan: opts.plan, trail: opts.trail, fail: opts.fail, camp: opts.camp || [], S: opts.S, gateInfo: opts.gateInfo, here: opts.here, pick: opts.pick || null }; // pick: [[방, 번호]] 고를 수 있는 방
+    const st = { base: base(V, o), plan: opts.plan, trail: opts.trail, fail: opts.fail, camp: opts.camp || [], S: opts.S, gateInfo: opts.gateInfo, here: opts.here, pick: opts.pick || null }; // pick: [[방, 드는 물자]] 고를 수 있는 방
     if (opts.anim) animate(cv, V, o, st, opts.anim); else draw(cv, V, o, st);
     if (opts.fresh?.length && !opts.anim) { st.fresh = opts.fresh; const t0 = performance.now(); const step = () => { if (!cv.isConnected) return; const k = (performance.now() - t0) / 900; st.flash = k < 1 ? Math.abs(Math.sin(k * Math.PI * 2)) * (1 - k) : 0; draw(cv, V, o, st); if (k < 1) requestAnimationFrame(step); }; step(); }
     // 처음 열면 입구 쪽 (경로가 있으면 경로의 시작) — 그 뒤로는 끌 때만 움직인다
     const focus = id => { const r = L.room[id] || L.room[0], fx = (r.x - x0 + r.w / 2) * c, fy = (r.y - y0 + r.h / 2) * c; wrap.scrollLeft = Math.max(0, fx - VW / 2); wrap.scrollTop = Math.max(0, fy - VH * (opts.mini ? 0.5 : 0.65)); };
-    if (opts.keep) { wrap.scrollLeft = opts.keep[0]; wrap.scrollTop = opts.keep[1]; } else focus(opts.here ?? (opts.plan?.[0] ?? 0));
+    if (opts.keep) { wrap.scrollLeft = opts.keep[0]; wrap.scrollTop = opts.keep[1]; } else if (fitB) { wrap.scrollLeft = Math.max(0, ((fitB[0] + fitB[2]) / 2 - x0) * c - VW / 2); wrap.scrollTop = Math.max(0, ((fitB[1] + fitB[3]) / 2 - y0) * c - VH / 2); } else focus(opts.here ?? (opts.plan?.[0] ?? 0));
     // 끌어서 넘기기 (마우스 · 손가락) — 조금이라도 끌었으면 누르기로 치지 않는다
     let drag = null; cv.onpointerdown = ev => { if (st.anim) { st.skipAt = performance.now(); st.anim.skip(); ev.stopPropagation(); return; } /* 그리는 중에 누르면 건너뛴다 */ drag = { x: ev.clientX, y: ev.clientY, sl: wrap.scrollLeft, st: wrap.scrollTop, moved: false }; };
     cv.onpointermove = ev => { if (!drag || !(ev.buttons & 1) && ev.pointerType === 'mouse') return; const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true; if (drag.moved) { wrap.scrollLeft = drag.sl - dx; wrap.scrollTop = drag.st - dy; } };
