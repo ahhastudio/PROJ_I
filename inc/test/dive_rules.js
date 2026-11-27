@@ -39,14 +39,14 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
   D.finish(s, 2, 0, 1, 2); D.finish(s, 3, 0, 1, 3); D.finish(s, 4, 0, 1, 4); t('4층까지 깨면 1~5층이 열리고 기본은 5층 · 자리 다섯', D.starts(s).join() === '1,2,3,4,5' && D.startFloor(s) === 5 && D.seats(s) === 5);
   s.start = 3; t('고른 출발 층이 있으면 그것 (이미 깬 층도)', D.startFloor(s) === 3); const g3 = D.finish(s, 3, 0, 1, 3); t('깬 층을 다시 깨도 그 층 보너스 · 최고 층은 그대로', g3 === D.bonus(3) && s.deep === 4);
   s.start = 9; t('안 열린 층을 골랐으면 기본', D.startFloor(s) === 5);
-  s.start = 0; s.deep = 9; const w0 = s.wins; t('9층까지 깼으면 기본은 10층', D.startFloor(s) === 10 && D.starts(s).length === 10); D.finish(s, 10, 0, 1, 10); t('10층을 깨면 완주 · 기본은 그대로 10층 · 자리 다섯', s.wins === w0 + 1 && s.deep === 10 && D.startFloor(s) === 10 && D.starts(s).length === 10 && D.seats(s) === 5); }
+  s.start = 0; s.deep = 9; const w0 = s.wins; t('9층까지 깼으면 기본은 10층', D.startFloor(s) === 10 && D.starts(s).length === 10); s.deep = 19; D.finish(s, 20, 0, 1, 20); t('20층을 깨면 완주 · 기본은 그대로 20층 · 자리 다섯', s.wins === w0 + 1 && s.deep === 20 && D.startFloor(s) === 20 && D.starts(s).length === 20 && D.seats(s) === 5); }
 // 구역: hook()이 5~10층을 더하고, 적 이름은 엔진에 있다 · 생성기가 그 층을 만든다
 { const z0 = RUN.ZONES.length; D.hook(); t('hook: 구역 셋이 더해진다 (1~10층)', RUN.ZONES.length === z0 + 3 && [...Array(10).keys()].every(i => RUN.zone(i + 1).floors[0] <= i + 1 && RUN.zone(i + 1).floors[1] >= i + 1));
   D.hook(); t('hook은 두 번 불러도 한 번', RUN.ZONES.length === z0 + 3);
   const names = D.ZONES.flatMap(z => [...Object.keys(z.cost), ...z.gate.u.map(u => u[0]), ...z.boss.u.map(u => u[0])]), miss = names.filter(n => !G.D.F.mon[n]);
   t('더한 구역의 적은 모두 엔진에 있다', !miss.length, miss.join(', '));
   t('값표에 없는 무리 이름이 없다', D.ZONES.every(z => [...z.packs, ...z.elites].every(p => p.u.every(n => z.cost[n] != null))));
-  t('10층 우두머리는 붉은 성룡', RUN.zone(10).boss.u[0][0] === '붉은 성룡');
+  t('20층 (2026-11-27): 구역 다섯 × 네 층 · 넷째 층마다 구역 우두머리 · 마지막은 붉은 고룡', [1, 5, 9, 13, 17].map(f => RUN.zone(f).id).join() === 'goblin,crypt,temple,hold,lair' && RUN.ZONES.every(z => z.floors[1] - z.floors[0] === 3 && z.budget.length === 4) && RUN.zone(20).boss.u[0][0] === '붉은 고룡' && RUN.zone(17).gate.u[0][0] === '붉은 성룡' && RUN.ZONES.every(z => [...Object.keys(z.cost), ...z.boss.u.map(u => u[0])].every(n => G.D.F.mon[G.Encounter.monName(n)] && z.cost[n] > 0.4)), RUN.ZONES.map(z => z.id + z.floors).join(' '));
   for (const fl of [5, 7, 9, 10]) { const m = RUN.gen.make(fl * 31, fl); t(`${fl}층 생성 · 우두머리 무리`, !!m && m.nodes.some(n => n.type === 'boss' && n.g?.units?.length), fl); } }
 // 자동 정책
 { const P = D.POL, SP0 = RUN.SPECS; RUN.SPECS = undefined; const st = RUN.newRun(7, ['fighter', 'cleric'], 3); RUN.SPECS = SP0; /* 설계서 없는 층의 자동 규칙 (1 · 2층은 곁방 규칙 — 아래) */
@@ -471,12 +471,12 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 // ── 2026-11-27: 층 생성 (긴 방 · 10방쯤) · 한 판 = 한 층의 물자 · 지나온 방 건너뛰기 · 전투 전 배치 ──
 // 층 생성: 1~10층 모두 방 10~12 · 입구 → 우두머리 5걸음 · 문 · 복도가 정수 칸 (짝수 변 방의 가운데 문이 x.5 칸에 놓여 문 잇기가 끝나지 않던 것)
 { const badG = [];
-  for (let fl = 1; fl <= 10; fl++) for (let k = 0; k < 6; k++) { const m = RUN.gen.make(D.floorSeed({ mapSeed: 500 + k * 131 }, fl), fl), N = m.nodes, boss = N.find(q => q.type === 'boss'), d = D.reach({ map: m }, 0).d;
+  for (let fl = 1; fl <= 20; fl++) for (let k = 0; k < 6; k++) { const m = RUN.gen.make(D.floorSeed({ mapSeed: 500 + k * 131 }, fl), fl), N = m.nodes, boss = N.find(q => q.type === 'boss'), d = D.reach({ map: m }, 0).d;
     if (N.length < 10 || N.length > 12) badG.push(`${fl}층 ${k} 방 ${N.length}`);
     if (d.get(boss.id) !== 5) badG.push(`${fl}층 ${k} 직행 ${d.get(boss.id)}`);
     for (const e of m.edges) { const c = m._lay.cor[e.id]; if (![...c.cells, c.doorA, c.doorB].flat().every(Number.isInteger)) badG.push(`${fl}층 ${k} 길${e.id} 소수 칸`); }
     for (const id in m._lay.room) { const r = m._lay.room[id]; if (N[id].type !== 'boss' && N[id].type !== 'start' && (Math.min(r.w, r.h) !== 5 || Math.max(r.w, r.h) < 6 || Math.max(r.w, r.h) > 7)) badG.push(`${fl}층 ${k} 방${id} ${r.w}×${r.h}`); } }
-  t('층 생성 (1~10층 · 씨앗 6개씩): 방 10~12 · 입구 → 우두머리 5걸음 · 방은 폭 5 × 깊이 6~7칸 · 문 · 복도는 정수 칸', !badG.length, badG.slice(0, 6).join(' / ')); }
+  t('층 생성 (1~20층 · 씨앗 6개씩): 방 10~12 · 입구 → 우두머리 5걸음 · 방은 폭 5 × 깊이 6~7칸 · 문 · 복도는 정수 칸', !badG.length, badG.slice(0, 6).join(' / ')); }
 // 길 찾기 · 지나온 방 건너뛰기 (G.Dive.routes): 가 본 방만 거쳐 닿는 방 · 드는 물자 = 옮기는 방 수
 { const s = D.fresh(), st = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3), N = st.map.nodes, E = st.map.edges, nb = id => E.filter(e => (e.a === id || e.b === id) && e.kind !== 'hidden').map(e => (e.a === id ? e.b : e.a));
   N.forEach(q => { q.visited = false; }); N[0].visited = true; st.at = 0; E.forEach(e => { if (e.kind === 'locked') e.opened = true; }); // 문은 모두 열어 두고 (못 넘는 문은 위의 재주 시험이 본다)
@@ -498,9 +498,9 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   // 입구에서 모든 방을 들르고 우두머리 방에서 끝나는 가장 짧은 걸음 (우두머리 방에 들어서면 판이 끝난다)
   const tour = M => { const n = M.nodes.length, boss = M.nodes.find(q => q.type === 'boss').id, adj = M.nodes.map(() => []), full = (1 << n) - 1, dist = new Map([[1, 0]]), q = [[0, 1]]; for (const e of M.edges) { adj[e.a].push(e.b); adj[e.b].push(e.a); }
     for (let h = 0; h < q.length; h++) { const [a, m] = q[h], d = dist.get(a * 65536 + m); if (a === boss) { if (m === full) return d; continue; } for (const b of adj[a]) { const m2 = m | (1 << b), k = b * 65536 + m2; if (!dist.has(k)) { dist.set(k, d + 1); q.push([b, m2]); } } } return -1; };
-  const L = []; for (let fl = 1; fl <= 10; fl++) for (const sd of [0, 77]) L.push([fl, walk(fl, D.CAMP_FREE, sd), walk(fl, 5, sd), walk(fl, 2, sd)]);
-  t('물자: 공짜 몫 9 — 곧장 가면(5걸음) 야영 한 번 몫이 남고, 다 돌려면(13걸음 이상) 모자란다 (1~10층)', D.CAMP_FREE === 9 && D.CAMP_FREE - 5 >= D.REST && L.every(([, a]) => a.tour > D.CAMP_FREE + 3), JSON.stringify(L.map(q => [q[0], q[1].tour])));
-  t('자동 선택: 공짜 몫으로 굶지 않고 우두머리 방에 닿는다 (1~10층)', L.every(([, a]) => a.boss && !a.starve && a.moves <= D.CAMP_FREE), JSON.stringify(L.map(q => [q[0], q[1].moves, q[1].starve, q[1].seen])));
+  const L = []; for (let fl = 1; fl <= 20; fl++) for (const sd of [0, 77]) L.push([fl, walk(fl, D.CAMP_FREE, sd), walk(fl, 5, sd), walk(fl, 2, sd)]);
+  t('물자: 공짜 몫 9 — 곧장 가면(5걸음) 야영 한 번 몫이 남고, 다 돌려면(13걸음 이상) 모자란다 (1~20층)', D.CAMP_FREE === 9 && D.CAMP_FREE - 5 >= D.REST && L.every(([, a]) => a.tour > D.CAMP_FREE + 3), JSON.stringify(L.map(q => [q[0], q[1].tour])));
+  t('자동 선택: 공짜 몫으로 굶지 않고 우두머리 방에 닿는다 (1~20층)', L.every(([, a]) => a.boss && !a.starve && a.moves <= D.CAMP_FREE), JSON.stringify(L.map(q => [q[0], q[1].moves, q[1].starve, q[1].seen])));
   t('자동 선택: 물자가 딱 5면 곧장 5걸음 · 굶지 않는다', L.every(([, , b]) => b.boss && b.moves === 5 && !b.starve), JSON.stringify(L.map(q => [q[0], q[2].moves, q[2].starve])));
   t('자동 선택: 물자가 모자라도(2) 곁방으로 새지 않고 곧장 — 굶는 걸음은 3뿐', L.every(([, , , c]) => c.boss && c.moves === 5 && c.starve === 3), JSON.stringify(L.map(q => [q[0], q[3].moves, q[3].starve])));
   const st = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3); st.items = { camp: 4 }; st.party.forEach(m => { m.hp = 1; }); st.map.nodes[0].hostile = false;

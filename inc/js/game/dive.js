@@ -13,27 +13,44 @@ G.Dive = (() => {
   const look = { furn: { fight: ['bones', 'crate', 'debris', 'brokenpillar', 'statue'], elite: ['bones', 'brokenpillar', 'statue', 'debris', 'bones'], event: ['statue', 'urn', 'rug', 'altar'],
       camp: ['bedroll', 'bedroll', 'barrel', 'crate'], shop: ['table', 'crate', 'barrel', 'rug'], treasure: ['urn', 'urn', 'crate'], boss: ['brokenpillar', 'statue', 'bones', 'debris', 'brokenpillar'], start: ['crate', 'debris', 'statue'] },
     rooms: { near: 0.35, event: 0.3, elite: 0.2 }, paths: { trap: 3, dark: 2, locked: 2 }, events: null };
+  // 구역 다섯 × 네 층 (2026-11-27 사용자: 「그럼 20층으로 하자」 · 층 ≈ 레벨 · 구역 = 성급 구간 · 넷째 층에 구역 우두머리): 고블린 굴 1~4 · 지하 묘지 5~8 · 숭배자의 신전 9~12 · 거인의 요새 13~16 · 용의 둥지 17~20
+  //   몬스터 값(cost)은 SRD 경험치 ÷ 50으로 자동 (zoneFix) · 층마다 예산 = SRD 난이도 표(1인당 쉬움 · 보통 · 어려움) × 3 ÷ 50 × 0.8 — 그 위로 TUNE.WAVE가 무리를 늘린다
   const ZONES = [
-    { id: 'crypt', n: '지하 묘지', floors: [5, 6], seats: [3, 3], lv: [5, 6], budget: [[24, 36, 48, 60], [30, 44, 58, 72]],
-      cost: { 해골: 1, 좀비: 1, 구울: 4, 가스트: 9, '오우거 좀비': 9, 미라: 14, 와이트: 14 },
-      packs: [{ n: '해골 무리', u: ['해골'] }, { n: '걷는 시체', u: ['좀비', '해골'] }, { n: '굶주린 것', u: ['구울'] }, { n: '묘지기', u: ['구울', '해골'] }],
-      elites: [{ n: '걷는 시체', u: ['오우거 좀비', '좀비'] }, { n: '굶주린 것', u: ['가스트', '구울'] }],
-      gate: { n: '묘지의 문지기', u: [['미라', 1], ['해골', 2]] }, boss: { n: '묘지의 주인', u: [['와이트', 1], ['가스트', 1], ['구울', 2]] },
+    { id: 'crypt', n: '지하 묘지', floors: [5, 8],
+      packs: [{ n: '해골 무리', u: ['해골'] }, { n: '걷는 시체', u: ['좀비', '해골'] }, { n: '굶주린 것', u: ['구울'] }, { n: '묘지기', u: ['구울', '해골'] }, { n: '떠도는 혼', u: ['스펙터', '좀비'] }],
+      elites: [{ n: '걷는 시체', u: ['오우거 좀비', '좀비'] }, { n: '굶주린 것', u: ['가스트', '구울'] }, { n: '뼈의 수호자', u: ['미노타우로스 해골', '해골'] }, { n: '무덤의 주인', u: ['와이트', '좀비'] }],
+      gate: { n: '묘지의 문지기', u: [['와이트', 1], ['구울', 2]] }, boss: { n: '묘지의 주인', u: [['뱀파이어 스폰', 1], ['가스트', 1], ['구울', 2]] },
       shape: { rooms: [['rect', 0.4], ['hall', 0.3], ['cross', 0.2], ['round', 0.1]], big: [['hall', 0.6], ['cross', 0.4]], pair: 0.6, frames: ['tall', 'wide', 'square'] }, ...look },
-    { id: 'temple', n: '숭배자의 신전', floors: [7, 8], seats: [3, 3], lv: [7, 8], budget: [[40, 60, 80, 100], [50, 72, 95, 120]],
-      cost: { 광신도: 0.5, '코볼트 전사': 0.5, '수련 사제': 1, 사제: 9, 광신자: 9, '붉은 새끼 용': 22 },
-      packs: [{ n: '광신도 무리', u: ['광신도', '수련 사제'] }, { n: '코볼트 무리', u: ['코볼트 전사'] }, { n: '신전 수호', u: ['광신자', '광신도'] }, { n: '사제단', u: ['사제', '광신도'] }],
-      elites: [{ n: '용을 섬기는 자', u: ['붉은 새끼 용', '코볼트 전사'] }, { n: '사제단', u: ['광신자', '사제'] }],
-      gate: { n: '신전 문지기', u: [['붉은 새끼 용', 1], ['광신자', 2]] }, boss: { n: '대사제와 새끼 용', u: [['붉은 새끼 용', 2], ['사제', 1]] },
+    { id: 'temple', n: '숭배자의 신전', floors: [9, 12],
+      packs: [{ n: '신전 수호', u: ['광신자', '광신도'] }, { n: '사제단', u: ['사제', '광신자'] }, { n: '지옥의 사냥개', u: ['지옥견'] }, { n: '얼굴 없는 자', u: ['도플갱어', '광신자'] }, { n: '수염 데빌', u: ['수염 데빌', '광신도'] }],
+      elites: [{ n: '가시 악마', u: ['바브드 데빌', '수염 데빌'] }, { n: '마법사단', u: ['메이지', '광신자'] }],
+      gate: { n: '신전 문지기', u: [['바브드 데빌', 1], ['광신자', 2]] }, boss: { n: '사슬의 대사제', u: [['사슬 데빌', 1], ['메이지', 1], ['광신자', 2]] },
       shape: { rooms: [['hall', 0.4], ['cross', 0.3], ['rect', 0.3]], big: [['hall', 0.7], ['cross', 0.3]], pair: 0.8, frames: ['tall', 'wide', 'square'] }, ...look },
-    { id: 'lair', n: '용의 둥지', floors: [9, 10], seats: [3, 3], lv: [9, 10], budget: [[60, 90, 120, 150], [70, 100, 130, 160]],
-      cost: { '코볼트 전사': 0.5, 광신자: 9, '붉은 새끼 용': 22, 트롤: 36, '어린 붉은 용': 118, '붉은 성룡': 360 },
-      packs: [{ n: '새끼 용', u: ['붉은 새끼 용', '코볼트 전사'] }, { n: '둥지의 하인', u: ['광신자', '코볼트 전사'] }, { n: '굴의 짐승', u: ['트롤'] }],
-      elites: [{ n: '어린 용', u: ['어린 붉은 용', '코볼트 전사'] }, { n: '굴의 짐승', u: ['트롤', '붉은 새끼 용'] }],
-      gate: { n: '둥지 입구', u: [['어린 붉은 용', 1], ['붉은 새끼 용', 1]] }, boss: { n: '붉은 성룡', u: [['붉은 성룡', 1]] },
+    { id: 'lair', n: '용의 둥지', floors: [17, 20],
+      packs: [{ n: '새끼 용', u: ['붉은 새끼 용', '코볼트 전사'] }, { n: '새끼 용 무리', u: ['흰 새끼 용', '검은 새끼 용'] }, { n: '와이번', u: ['와이번'] }, { n: '불도마뱀', u: ['살라맨더'] }, { n: '독의 새끼 용', u: ['초록 새끼 용', '코볼트 전사'] }],
+      elites: [{ n: '어린 용', u: ['어린 붉은 용', '붉은 새끼 용'] }, { n: '머리 많은 것', u: ['히드라'] }],
+      gate: { n: '둥지의 성룡', u: [['붉은 성룡', 1]] }, boss: { n: '붉은 고룡', u: [['붉은 고룡', 1]] },
       shape: { rooms: [['cave', 0.5], ['round', 0.3], ['hall', 0.2]], big: [['round', 0.7], ['hall', 0.3]], pair: 0.2, frames: ['blob', 'diag', 'square'], cave: true }, ...look },
   ];
-  const LAST = 10; // 마지막 층 (붉은 성룡)
+  // 이미 있는 줄을 바꾸는 것: 고블린 굴은 네 층으로 · 드워프 폐성채(옛 3~4층)는 거인의 요새(13~16층)로 — 모양 · 가구 · 색은 그대로
+  const ZPATCH = {
+    goblin: { floors: [1, 4], boss: { n: '홉고블린 대장', u: [['홉고블린 대장', 1], ['홉고블린', 2]] } },
+    hold: { n: '거인의 요새', floors: [13, 16],
+      packs: [{ n: '오우거 무리', u: ['오우거'] }, { n: '트롤', u: ['트롤', '오우거'] }, { n: '언덕 거인', u: ['언덕 거인', '오우거'] }, { n: '땅의 정령', u: ['대지 정령'] }, { n: '불의 정령', u: ['불의 정령', '오우거'] }],
+      elites: [{ n: '돌 거인', u: ['돌 거인', '오우거'] }, { n: '서리 거인', u: ['서리 거인', '트롤'] }],
+      gate: { n: '요새 문지기', u: [['돌 거인', 1], ['언덕 거인', 1]] }, boss: { n: '불 거인 족장', u: [['불 거인', 1], ['오우거', 2]] } },
+  };
+  function zoneFix() { if (typeof RUN === 'undefined' || !RUN.ZONES) return;
+    for (const z of ZONES) if (!RUN.ZONES.some(q => q.id === z.id)) RUN.ZONES.push(z);
+    for (const z of RUN.ZONES) Object.assign(z, ZPATCH[z.id] || {});
+    RUN.ZONES.sort((a, b) => a.floors[0] - b.floors[0]);
+    const xp = n => { const id = G.D.F.STAT?.[G.Encounter.monName(n)]?.[0], cr = G.SRD_MON?.[id]?.cr; return G.Region.XP[cr] || { 21: 33000, 22: 41000, 23: 50000, 24: 62000 }[cr] || 25; }, BUD = G.Region.BUDGET; // SRD 경험치 (표는 20까지 — 고룡은 24)
+    for (const z of RUN.ZONES) { const names = new Set([...(z.packs || []).flatMap(p => p.u), ...(z.elites || []).flatMap(p => p.u), ...z.gate.u.map(u => u[0]), ...z.boss.u.map(u => u[0])]);
+      z.cost = { ...(z.cost || {}) }; for (const n of names) if (z.cost[n] == null) z.cost[n] = xp(n) / 50;
+      const n = z.floors[1] - z.floors[0] + 1; z.lv = [z.floors[0], z.floors[1]];
+      z.budget = Array.from({ length: n }, (_, i) => { const [e, m, h] = BUD[Math.min(19, z.floors[0] + i - 1)], k = 3 / 50 * 0.8; return [e * k, m * k, h * k, h * k * 1.25].map(v => Math.round(v * 10) / 10); });
+      z.seats = Array.from({ length: n }, (_, i) => (z.id === 'goblin' ? [1, 2, 2, 3][i] : 3)); } }
+  const LAST = 20; // 마지막 층 (붉은 고룡)
   // 층 설계서 (2026-11-23, 1 · 2층 고블린 굴): 손으로 짠 방(js/explore/rooms.js)으로 「어느 방이 큰길 · 갈래 · 곁방의 어디에, 어떤 관문 뒤에」를 정한다.
   // 생성기(RUN.gen)는 키운 던전에서 이것을 만족하는 방 · 길을 고른다 (씨앗마다 모양은 다르고 구성은 같다). c = 템플릿 후보 (앞이 먼저 — 방 크기가 안 맞으면 뒤의 같은 종류로)
   const FIGHTS = ['g_stalag', 'g_collapse', 'g_post', 'g_colonnade', 'g_pool', 'g_barracks', 'g_wolfpen'], EVENTS_T = ['g_shrine', 'g_ossuary', 'g_mushroom'];
@@ -76,16 +93,13 @@ G.Dive = (() => {
   //   적은 구역 표(RUN.zone — 폐성채 = 병기 · 녹 괴물, 묘지 = 언데드, 신전 = 광신도 · 새끼 용, 둥지 = 붉은 용 · 트롤)가 고른다 — 상성은 거기서 산다
   { const F_ = { t: 'fight' }, EV = { t: 'event' }, CP = { t: 'camp' }, BS = { t: 'boss' }, ST = { t: 'start' }, EL = { t: 'elite' };
     const fork = (a, b) => ({ fork: [a, b] }), heavy = { t: 'fight', tier: 'heavy', chest: true }, light = { t: 'fight', tier: 'light' };
-    const DEEP = {
-      3: { main: [ST, F_, fork(heavy, EV), bare('darkcave'), CP, BS], sides: [bare('vault', { at: 'mid' }), bare('rubble', { at: 'front' }), bare('trapway', { at: 'back' })] },
-      4: { main: [ST, F_, fork(heavy, EV), F_, CP, BS], sides: [bare('bars', { at: 'front' }), bare('seal', { at: 'back' }), bare('darkroom', { at: 'mid' }), bare('sleepers', { at: 'mid' })] },
-      5: { main: [ST, fork(heavy, EV), F_, fork(light, EL), CP, BS], sides: [bare('hidden', { at: 'mid' }), bare('darkroom', { at: 'front' }), bare('wounded', { at: 'mid' }), bare('trapway', { at: 'back' })] },
-      6: { main: [ST, fork(heavy, EV), bare('darkcave'), fork(light, EL), CP, BS], sides: [bare('seal', { at: 'mid' }), bare('sleepers', { at: 'back' }), bare('vault', { at: 'front' }), bare('darkroom', { at: 'mid' })] },
-      7: { main: [ST, fork(heavy, EV), F_, fork(light, EL), CP, BS], sides: [bare('bars', { at: 'front' }), bare('trapway', { at: 'mid' }), bare('hidden', { at: 'back' }), bare('seal', { at: 'mid' })] },
-      8: { main: [ST, fork(heavy, EV), bare('darkcave'), fork(light, EL), CP, BS], sides: [bare('rubble', { at: 'front' }), bare('darkroom', { at: 'mid' }), bare('wounded', { at: 'mid' }), bare('sleepers', { at: 'back' })] },
-      9: { main: [ST, fork(heavy, EV), F_, fork(light, EL), CP, BS], sides: [bare('vault', { at: 'front' }), bare('seal', { at: 'back' }), bare('trapway', { at: 'mid' }), bare('darkroom', { at: 'mid' })] },
-      10: { main: [ST, fork(heavy, EV), bare('darkcave'), fork(light, EL), CP, BS], sides: [bare('sleepers', { at: 'mid' }), bare('rubble', { at: 'front' }), bare('bars', { at: 'mid' }), bare('seal', { at: 'back' })] },
-    };
+    // 구역마다 자주 나오는 방 상태 (곁방 부품): 고블린 굴 잠김 · 창살 / 지하 묘지 어둠 · 봉인 / 신전 봉인 · 함정 / 거인의 요새 무너진 길 / 용의 둥지 어둠 · 함정 · 숨은 길
+    const THEME = { 1: ['vault', 'bars', 'trapway', 'hidden'], 2: ['darkroom', 'seal', 'sleepers', 'hidden'], 3: ['seal', 'trapway', 'vault', 'wounded'], 4: ['rubble', 'vault', 'sleepers', 'bars'], 5: ['darkroom', 'trapway', 'hidden', 'seal'] }, AT = ['front', 'mid', 'mid', 'back'];
+    const DEEP = {};
+    for (let fl = 3; fl <= 20; fl++) { const zi = Math.ceil(fl / 4), fi = (fl - 1) % 4, dark = zi === 2 || zi === 5 ? bare('darkcave') : F_;
+      const main = fi === 3 ? [ST, fork(heavy, EV), F_, fork(light, EL), CP, BS] : fi === 1 ? [ST, fork(heavy, EV), F_, fork(light, EL), CP, BS] : [ST, F_, fork(heavy, EV), dark, CP, BS];
+      const sh = (fl * 7) % 4, sides = THEME[zi].map((_, k) => THEME[zi][(k + sh) % 4]).map((id, k) => bare(id, { at: AT[k] }));
+      DEEP[fl] = { main, sides }; }
     Object.assign(SPECS, DEEP);
     // 층을 10방쯤으로 (2026-11-27 — 한 방이 길어지고 방마다 배치 · 전투): 입구 → 우두머리 5걸음 + 갈래 · 곁방(막다른 방). 갈래가 둘인 층(5~10층)은 곁방 셋 (2026-11-26에 늘린 칸은 되돌렸다)
     for (const k in SPECS) { const S0 = SPECS[k], forks = S0.main.filter(q => q.fork).length; SPECS[k] = { ...S0, grow: 15, sides: forks > 1 ? S0.sides.slice(0, -1) : S0.sides }; } }
@@ -147,7 +161,7 @@ G.Dive = (() => {
   function team(s) { const open = classes(s).filter(c => !s.dead?.[c]), t = [...new Set(s.party)].filter(c => open.includes(c)).slice(0, seats(s)); return t.length ? t : open.slice(0, Math.min(2, seats(s))); }
   function toggle(s, cls) { if (s.dead?.[cls]) return; const t = team(s), i = t.indexOf(cls); if (i >= 0) { if (t.length > 1) t.splice(i, 1); } else if (classes(s).includes(cls)) { if (t.length >= seats(s)) t.pop(); t.push(cls); } s.party = t; }
   // 깬 층 보너스: 그 층의 우두머리를 잡으면 (깊을수록 많이 — 용은 완주 몫까지)
-  const bonus = fl => Math.round(20 * Math.pow(1.6, fl - 1)) + (fl === LAST ? 1500 : 0);
+  const bonus = fl => Math.round(20 * Math.pow(1.3, fl - 1)) + (fl === LAST ? 3000 : 0); // 20층이라 오름을 1.6 → 1.3으로 (금화 수치는 재화 이야기 때 다시)
   const bonusTo = (fl, from = 1) => { let g = 0; for (let i = from; i <= fl; i++) g += bonus(i); return g; }; // from = 출발 층 · fl = 깬 층 (한 판 = 한 층이라 깼으면 그 층 하나, 못 깼으면 0)
   // ── 출발 층 (2026-11-27 한 판 = 한 층): 1층부터 (깬 층 + 1)층까지 아무 층이나. 고르지 않으면 아직 못 깬 가장 얕은 층 (다 깼으면 마지막 층) ──
   const starts = s => Array.from({ length: Math.min(LAST, (s.deep || 0) + 1) }, (_, i) => i + 1);
@@ -345,7 +359,6 @@ G.Dive = (() => {
       const out = k0.apply(this, arguments); if (curS) for (const a of rt.party || []) if (a.merc) { if (G.Reward.pending(a.merc)) autoPick(a.merc); if (curS.cardOn === false) cardAuto(a.merc); } return out; }; // 레벨업 카드를 끄면 빌드대로 // 원정 중에만 저절로 고른다 (기존 게임은 레벨업 창)
     const sp0 = G.Fantasy.spawnMon; G.Fantasy.spawnMon = function () { const o = sp0.apply(this, arguments); if (curS && o?.n && loreIn(live.filter(Boolean))) affMark(curS, o.n); if (curS && o?.n) { const e = curS.dex.m[o.n] = curS.dex.m[o.n] || { met: 0, kill: 0 }; e.met++; } return o; }; // 도감: 그 방에 선 몬스터 = 만난 것
     if (typeof RUN !== 'undefined') { RUN.SPECS = SPECS; RUN.FIXDOORS = true; RUN.X = XRUN; RUN.SMALL = TUNE.SMALL_ROOMS; RUN.COMPACT = TUNE.SMALL_ROOMS; } // SMALL: 작은 방 (폰 화면 — 줌아웃 없이 전투 방이 들어오게) // 설계서 · 문 잇기 · 탐험 판정(영웅 수치)은 원정 페이지에서만 // 설계서 · 문 잇기는 원정 페이지에서만
-    if (typeof RUN !== 'undefined' && RUN.ZONES) for (const z of ZONES) if (!RUN.ZONES.some(q => q.id === z.id)) RUN.ZONES.push(z);
     // 원정 화면의 떠오르는 글자: 피해 숫자(치명타 포함) · 빗나감 · 회복 · 레벨 업 · 면역 · 저항 · 약점만 (버프 · 「방에 들어선다!」 · 「차례를 넘긴다」 · 금화 · 경계 표시 ! ?는 띄우지 않는다)
     // 겹침은 화면 쪽(render/fxlayer.js)이 화면 픽셀로 쌓아 푼다 (여기서 칸을 밀면 많이 맞을수록 숫자가 적에게서 멀어졌다)
     const fx0 = G.fx; G.fx = function (rt, o) {
@@ -358,7 +371,7 @@ G.Dive = (() => {
     if (G.Builds?.CARD) { G.Builds.CARD.on = true; const gr0 = G.Guild.grow; G.Guild.grow = function (m) { cardInit(m); const out = gr0.apply(this, arguments); if (G.Builds.CARD.on && G.Builds.byId(m.build) && !G.Builds.byId(m.build).line) { const q = (m.cardq = m.cardq || []); if (CARD.PICK.includes(m.lv) && (m.picks || []).length + q.filter(x => x.kind === 'pick').length < G.Builds.SLOT_N) q.push({ lv: m.lv, kind: 'pick' }); else if (CARD.PICK.includes(m.lv) || CARD.SWAP.includes(m.lv)) q.push({ lv: m.lv, kind: 'swap' }); } return out; }; } // 레벨업 카드
     G.Gear.pickR = pickR; G.Gear.noRand = true; // 원정의 희귀도 표 · 랜다트(지어낸 물건) 없이 SRD 물건만
     // 첫 층은 더 순하게: 한 무리 둘까지 (탐사 게임은 셋). 원정 페이지에서만 바뀐다
-    const g = typeof RUN !== 'undefined' && RUN.ZONES.find(q => q.id === 'goblin'); if (g) g.seats = [1, 2];
+    zoneFix(); // 20층 구역 표 (고블린 굴의 기준 인원 1 · 2 · 2 · 3도 거기서)
   }
   // 한 사람: 선술집 손님(js/game/tavern.js guest)처럼 1레벨로 만들고(직업 표준 능력치 · 빌드 6칸), 트리의 레벨까지 실제 레벨업 길(G.Guild.grow → G.Reward.levelUp)로 올린다.
   // 레벨업 고르기는 저절로 첫 추천을 (능력치 향상 · 전투 방식 · 빌드 칸 · 주문) — 바로 그 레벨로 만들면 능력치 향상이 빠져 같은 레벨보다 약했다

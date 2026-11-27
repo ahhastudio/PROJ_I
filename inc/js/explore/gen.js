@@ -206,7 +206,7 @@ RUN.gen = (() => {
   }
   function group(rng, type, tier, Z, fi, small, deep) {
     const mk = (fam, units) => mkGroup(Z, tier, fam, units);
-    if (type === 'boss') { const p = fi % 2 ? Z.boss : Z.gate; return mk(p.n, p.u.map(u => u.slice())); }
+    if (type === 'boss') { const p = fi === Z.floors[1] - Z.floors[0] ? Z.boss : Z.gate; return mk(p.n, p.u.map(u => u.slice())); } // 구역의 마지막 층은 구역 우두머리 · 그 앞 층들은 문지기 (두 층짜리 옛 구역은 예전과 같다)
     const bud = budgetOf(type, tier, Z, fi, deep);
     const pool = type === 'elite' ? Z.elites : Z.packs, two = [RUN.pick(rng, pool), RUN.pick(rng, pool)].sort((p, q) => Z.cost[q.u[0]] - Z.cost[p.u[0]]);
     const { n, u: [a, b] } = small ? two[0] : two[1];
