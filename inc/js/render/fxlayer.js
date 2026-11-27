@@ -71,12 +71,12 @@ function drawFx(r) {
       if (SPR && num) {
         const n0 = now(), val = Math.round(parseFloat(num[2].replace(/,/g, '')));
         if (!val) continue; // 0은 띄우지 않는다
-        const s0 = dispAt(o.x, o.y + 1, r), p = project(wx(s0[0]), wy(s0[1]), 2.7), c = rgb(...hexRgb(o.col || '#ffffff'));
+        const s0 = dispAt(o.x, o.y + 1, r), p = project(wx(s0[0]), wy(s0[1]), 2.7), c = rgb(...hexRgb(o.col || '#ffffff')), due = typeof HITDUE !== 'undefined' ? HITDUE.find(h => h.t > n0 && Math.abs(h.x - o.x) < .5 && Math.abs(h.y - o.y - 1) < .5) : null; // 미룬 타격이면 닿을 때 뜬다
         // 같은 대상 · 같은 색이 짧은 사이에 또 뜨면 숫자를 더한다. 가까이 다른 숫자가 있으면 위로 쌓는다
         const same = nums.find(u => u.c === c && u.sign === num[1] && Math.abs(u.x0 - p.sx) < 12 && Math.abs(u.y0 - p.sy) < 12 && n0 - u.t0 < 450);
         if (same) { same.v += val; same.s = num[1] + same.v; same.t0 = n0 - 60; same.bump = n0; continue; }
         let y = p.sy; for (let g = 0; g < 4 && nums.some(u => Math.abs(u.x - p.sx) < 26 && Math.abs(u.y - y) < 12); g++) y -= 12;
-        nums.push({ v: val, sign: num[1], s: num[1] + val, x: p.sx, y, x0: p.sx, y0: p.sy, c, t0: n0 });
+        nums.push({ v: val, sign: num[1], s: num[1] + val, x: p.sx, y, x0: p.sx, y0: p.sy, c, t0: due ? due.t : n0 });
         continue;
       }
       let [sx, sy] = toScreen(wx(o.x), wy(o.y + (o.ent ? 0 : 1)), 3.1); const el = document.createElement('div');

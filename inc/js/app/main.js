@@ -14,9 +14,9 @@ function frame(tt) {
   // 싸울 때는 싸우는 사람들 가운데를, 아니면 파티 가운데를 본다
   // 원정 모드: DIVEUI.camAt이 고른 자리(방에 있는 동안은 그 방 가운데 — 들어섬 · 배치 · 전투 · 문 고르기가 한 틀)로, 이동 속도 상한을 두고 따라간다
   const dc = typeof DIVEUI !== 'undefined' && DIVEUI.on ? DIVEUI.camAt(r) : null;
-  if (dc) { const c1 = camFor(dc[0], dc[1]), k = 1 - Math.exp(-dt * 3.2); let mx = (c1[0] - cam.x) * k, my = (c1[1] - cam.y) * k; const l = Math.hypot(mx, my), cap = (r.turn ? 160 : 600) * dt; /* 전투 중에는 천천히 · 방에 들어설 때는 배치 전에 방이 다 보이게 빨리 */ if (l > cap) { mx *= cap / l; my *= cap / l; } cam.x += mx; cam.y += my; }
+  if (dc) { const c1 = camFor(dc[0], dc[1]), k = 1 - Math.exp(-dt * 3.2); let mx = (c1[0] - cam.x) * k, my = (c1[1] - cam.y) * k; const l = Math.hypot(mx, my), cap = (r.turn ? 160 : 600) * dt; /* 전투 중에는 천천히 · 방에 들어설 때는 배치 전에 방이 다 보이게 빨리 */ if (l > cap) { mx *= cap / l; my *= cap / l; } const d0 = Math.hypot(c1[0] - cam.x, c1[1] - cam.y), mn = 70 * dt; if (l < mn) { if (d0 <= mn) { mx = c1[0] - cam.x; my = c1[1] - cam.y; } else { mx *= mn / (l || 1); my *= mn / (l || 1); } } cam.x += mx; cam.y += my; } // 끝자락은 일정한 속도로 붙인다 — 지수로 느려지면 한 픽셀씩 드문드문 끊겨 바닥이 떨려 보였다
   else { const list = (r.turn ? r.turn.order.map(x => x.e).filter(e => e.kind !== 'mon' ? !e.dead : r.mons.includes(e)) : r.party.filter(p => !p.dead)); let ax = 0, ay = 0, n0 = 0; for (const e of list) { ax += e.x; ay += e.y; n0++; } if (n0) { const c1 = camFor(ax / n0, ay / n0), k = 1 - Math.exp(-dt * 3.2); cam.x += (c1[0] - cam.x) * k; cam.y += (c1[1] - cam.y) * k; } }
-  syncFog(r); copyView(); if (VOXON) VOX.light(r, t); /* 복셀 층: 파티 둘레만 빛 */
+  syncFog(r); copyView(); if (window.DEP_DRAW) DEP_DRAW(); /* 배치 칸: 바닥과 같은 프레임에 */ if (VOXON) VOX.light(r, t); /* 복셀 층: 파티 둘레만 빛 */
   if (win.map === r.map) document.body.dataset.floor = 'ready';
   pix.set(bakedPix); zb.set(bakedZ);
   drawProps(r, t); if (VOXON) VOX.flush(t); /* 복셀 소품 */ drawTufts(t); HDBG.mark(0); // 선 그림 배경: 소품까지 그린 상태

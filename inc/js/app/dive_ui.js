@@ -738,10 +738,11 @@ const DIVEUI = (() => {
     const up = ev => { if (!drag) return; const d = drag; drag = null; ev.stopPropagation(); const to = ev.type === 'pointercancel' ? d.to : target(ev); if (!to) return;
       const was = slots.get(d.p), o = [...slots].find(([q, t]) => q !== d.p && !q.dead && t[0] === to[0] && t[1] === to[1])?.[0]; if (o) slots.set(o, was); slots.set(d.p, to.slice()); moved = true; }; // 다른 영웅이 선 칸이면 자리를 바꾼다
     const ons = [['pointerdown', down], ['pointermove', move], ['pointerup', up], ['pointercancel', up]]; for (const [k, f] of ons) document.addEventListener(k, f, true);
-    const end = () => { clearInterval(tm); for (const [k, f] of ons) document.removeEventListener(k, f, true); bar.remove(); sv.innerHTML = ''; if (moved) { D.depSave(S, Z, slots); put(S); } go(); };
+    window.DEP_DRAW = draw;
+    const end = () => { clearInterval(tm); window.DEP_DRAW = null; for (const [k, f] of ons) document.removeEventListener(k, f, true); bar.remove(); sv.innerHTML = ''; if (moved) { D.depSave(S, Z, slots); put(S); } go(); };
     bar.querySelector('.dp-go').onclick = ev => { ev.stopPropagation(); end(); };
     let last = performance.now();
-    tm = setInterval(() => { if (!bar.isConnected) return clearInterval(tm); const now = performance.now(); if (drag) t0 += now - last; last = now; draw(); // 끄는 동안은 시간이 멈춘다
+    tm = setInterval(() => { if (!bar.isConnected) return clearInterval(tm); const now = performance.now(); if (drag) t0 += now - last; last = now; // 끄는 동안은 시간이 멈춘다 (칸 그리기는 main.js가 프레임마다)
       const left = D.DEP.T - (now - t0) / 1000; bar.querySelector('.pk-bar').style.width = `${Math.max(0, left / D.DEP.T * 100)}%`; bar.querySelector('.dp-n em').textContent = Math.max(0, Math.ceil(left)); if (left <= 0) end(); }, 50);
     draw(); document.body.dataset.dep = (+(document.body.dataset.dep || 0) + 1); return true;
   }

@@ -182,7 +182,7 @@ const nums = [];
 function drawNums() {
   const n = now();
   for (let i = nums.length - 1; i >= 0; i--) {
-    const u = nums[i], q = (n - u.t0) / 850; if (q >= 1) { nums.splice(i, 1); continue; }
+    const u = nums[i], q = (n - u.t0) / 850; if (q >= 1) { nums.splice(i, 1); continue; } if (q < 0) continue; // 무기가 닿을 때까지 기다린다
     const pop = u.bump && n - u.bump < 120 ? 3 : 2, str = u.s, wid = str.length * 4 * pop, X = Math.round(u.x - wid / 2), Y = Math.round(u.y - 16 * Math.min(1, q * 2.2) - 6 * q);
     const glyph = ch => DIG[ch] || PIXF[ch];
     const put = (dx, dy, c) => [...str].forEach((ch, k) => { const d = glyph(ch); if (!d) return; for (let j = 0; j < 5; j++) for (let a = 0; a < 3; a++) if (d[j * 3 + a] === '1') for (let e = 0; e < pop; e++) for (let f2 = 0; f2 < pop; f2++) { const ix = X + k * 4 * pop + a * pop + e + dx, iy = Y + j * pop + f2 + dy; if (ix >= 0 && iy >= 0 && ix < W && iy < H) pix[iy * W + ix] = c; } });

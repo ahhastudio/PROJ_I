@@ -71,11 +71,13 @@ const dispAt = (x, y, r) => { for (const e of r.party.concat(r.mons)) if (e._dx 
 // 모으기는 치기 직전(차례의 'pre' — 그림이 도착한 뒤)에 미리 하고, 엔진이 치는 순간(피해 · 피격 이펙트)에는 휘두름부터 시작한다 — 예전에는 피해가 뜬 뒤에야 모으기를 시작해 이펙트가 동작보다 0.1초쯤 앞섰다.
 // 길이는 배속만큼 짧아진다 (걷기와 같은 박자, 너무 짧아 안 보이지 않게 바닥을 둔다)
 const LUNGE_MS = QPX.on ? 430 : 300, LUNGE_0 = .22;
+// 근접 공격의 세 토막 (ms): 모으기 · 휘두름 · 마무리. 배속만큼 짧아지되 바닥을 둔다 — 빠른 배속에서도 누가 누구를 치는지 보이게 (2026-11-27 — 예전에는 ×4 이상에서 동작 전체가 0.11초라 적이 치는 게 안 보였다)
+//   피해 숫자 · 맞는 효과 · 쓰러짐은 무기가 닿는 때(모으기 + 휘두름)로 미룬다 (boot.js J.hit · fxlayer.js drawFx)
+function lungeT() { const X = G.Turn.speed(G.S.w.fantasy) || 1; return [clamp(240 / X, 120, 240), clamp(90 / X, 60, 90), clamp(260 / X, 140, 260)]; }
 function lungeQ(e, n, st) {
-  const X = G.Turn.speed(G.S.w.fantasy) || 1, q = e._lu ? (n - e._lu) / (Math.max(110, LUNGE_MS / X) * (1 - LUNGE_0)) : 1;
-  if (q < 1) { e._wu = 0; return LUNGE_0 + q * (1 - LUNGE_0); }
-  if (st && st.cur === e && st.ph === 'pre' && st.tg && !isRanged(e) && Math.hypot((e._dx ?? e.x) - e.x, (e._dy ?? e.y) - e.y) < .12) { if (!e._wu) e._wu = n; return LUNGE_0 * .999 * Math.min(1, (n - e._wu) / Math.max(40, 90 / X)); }
-  e._wu = 0; return 1;
+  if (!e._lu) return 1; const [A, B, Cc] = lungeT(), t = n - e._lu;
+  if (isRanged(e)) { const q = t / ((A + B + Cc) * .6); return q < 1 ? LUNGE_0 + q * (1 - LUNGE_0) : 1; } // 원거리: 쏘는 순간 바로 (화살은 엔진이 바로 날린다)
+  return t < A ? LUNGE_0 * t / A : t < A + B ? LUNGE_0 + .2 * (t - A) / B : t < A + B + Cc ? .42 + .58 * (t - A - B) / Cc : 1;
 }
 // 한 사람 준비: 위치 · 그림자 (그림은 윤곽선 뒤에 찍는다)
 const lqFace = e => (e._lu && now() - e._lu < 400 && (e._lx || e._ly) ? [e._lx || 0, e._ly || 0] : null);
@@ -105,7 +107,7 @@ function prep(e, r, t, dt) {
   const hq = e._hit ? (n - e._hit) / 260 : 1;
   if (hq < 1) { const sx = ((e._kx || 0) - (e._ky || 0)) / R2, sy = ((e._kx || 0) + (e._ky || 0)) / R2 * SIN, kb = (1 - hq) * (1 - hq) * 6; ox += sx * kb + Math.sin(n / 18) * (1 - hq) * 1.4; oy += sy * kb; if (hq < .3) { if (n - (e._flT || 0) > 400) e._flT = n; flash = n - e._flT < 80; } } // 잇달아 맞을 때 몸이 내내 하얗지 않게 0.4초에 한 번만
   if (moving && !DCSS) oy -= Math.abs(Math.sin(t * 13 + e.x)) * 2;
-  const down = e.dying || e.dead || (e.kind === 'mon' && !!e.down); // down: 쓰러져 재생을 기다리는 몸 (트롤)
+  const down = (e.dying || e.dead || (e.kind === 'mon' && !!e.down)) && !(e._hitDue > n); // 무기가 닿기 전에는 아직 서 있다 // down: 쓰러져 재생을 기다리는 몸 (트롤)
   const key = e.t, hitKey = key + '_hit', runKey = key + '_run';
   e._ph = e._ph == null ? Math.random() * 4 : e._ph;
   const k2 = hq < .5 && G.ARTSET[hitKey] ? hitKey : moving && G.ARTSET[runKey] ? runKey : key, fr = Math.floor(t * (k2 === runKey ? 11 : 6) + e._ph);
@@ -189,13 +191,13 @@ function drawRec(R0, t) {
     }
   }
   if (e.max && (e.kind === 'mon' ? e.boss || e.hp < e.max || st : e.hp < e.max)) {
-    const w = e.boss ? 40 : 14, th = e.boss ? 2 : 0, f2 = clamp(e.hp / e.max, 0, 1), L = sx - w / 2 | 0, Y = (sy - (sp.hh ?? sp.foot) * sc - 5) | 0, ink = rgb(...C.ink); // 보스는 굵고 긴 막대
+    const w = e.boss ? 40 : 14, th = e.boss ? 2 : 0, f2 = clamp(e.hp / e.max, 0, 1), L = sx - w / 2 | 0, Y = (sy - (sp.hh ?? sp.foot) * sc * (R0.pose ? 1.12 : 1) - 5) | 0, ink = rgb(...C.ink); // 보스는 굵고 긴 막대
     for (let i = -1; i <= w; i++) for (let j = -1; j <= 1 + th; j++) { const k = (Y + j) * W + L + i; if (k >= 0 && k < pix.length && L + i >= 0 && L + i < W) pix[k] = ink; } // 화면 밖 x가 다음 줄로 넘어가 엉뚱한 곳에 찍히지 않게
     const c = rgb(...(e.kind === 'mon' ? C.red : f2 > .4 ? [110, 196, 110] : C.orange));
     for (let j = 0; j <= th; j++) for (let i = 0; i < Math.round(f2 * w); i++) { const k = (Y + j) * W + L + i; if (k >= 0 && k < pix.length && L + i >= 0 && L + i < W) pix[k] = c; }
   }
-  if (e._mark && now() < e._mark.until) drawBang(sx, sy - (sp.hh ?? sp.foot) * sc - 8, e._mark.c);
-  if (st && st.cur === e) drawArrowAt(sx, sy - (sp.hh ?? sp.foot) * sc - 8, t, e.kind === 'mon' ? C.red : [255, 214, 10]);
+  if (e._mark && now() < e._mark.until) drawBang(sx, sy - (sp.hh ?? sp.foot) * sc * (R0.pose ? 1.12 : 1) - 8, e._mark.c);
+  if (st && st.cur === e) drawArrowAt(sx, sy - (sp.hh ?? sp.foot) * sc * (R0.pose ? 1.12 : 1) - 8, t, e.kind === 'mon' ? C.red : [255, 214, 10]);
 }
 // 2.5D 시안 (?art=d25): 발끝 기준 가로 · 세로 배율과 기울기(위가 화면 오른쪽으로 가면 +). 가만히 서 있을 때는 움직이지 않는다
 function pose25(R0, fl) {

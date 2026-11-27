@@ -24,7 +24,15 @@ const JU = { tr: 0, kx: 0, ky: 0, stop: 0, stopCd: 0, off: q.has('noshake') || m
 };
 G.quiet = false; G.DICE_ALL = q.get('dice') === 'all'; G.ISO = true; G.CHECK_DC = +q.get('dc') || 0; // ?dc=10 : 판정을 어렵게 (실패 장면 보기)
 const J = G.J, now = () => performance.now();
-J.hit = (id, e, power = 0, from, dmg = 0, dtype = null) => { e._hit = now(); e._hitP = power;
+// 근접 타격은 무기가 닿는 때에 보인다: 같은 차례에 휘두름(J.lunge)이 시작됐으면 (모으기 + 휘두름)만큼 미룬다. 몬스터는 hit 다음에 lunge를 부르므로 한 박자 뒤(마이크로태스크)에 본다
+const HITDUE = []; // 미룬 타격 [{ x, y, t }] — 피해 숫자도 그때 띄운다 (fxlayer.js drawFx)
+J.hit = (id, e, ...rest) => { const from = rest[1]; e._hitDue = now() + 1;
+  queueMicrotask(() => { const lu = from && from._lu && now() - from._lu < 25 && Math.hypot(from.x - e.x, from.y - e.y) < 2 && !isRanged(from);
+    if (!lu) { e._hitDue = 0; return hitNow(id, e, ...rest); }
+    const [A, B2] = lungeT(), d = Math.max(0, A + B2 - (now() - from._lu)), t = now() + d; e._hitDue = t;
+    while (HITDUE.length && now() - HITDUE[0].t > 1000) HITDUE.shift(); HITDUE.push({ x: e.x, y: e.y, t });
+    setTimeout(() => hitNow(id, e, ...rest), d); }); };
+const hitNow = (id, e, power = 0, from, dmg = 0, dtype = null) => { e._hit = now(); e._hitP = power;
   if (win.map && inWin(e.x, e.y)) { // 화면 안 타격만
     const R = rt(), crowd = (R?.party?.length || 0) + (R?.mons?.filter(o => o.hp > 0 && o.aggro).length || 0), damp = crowd > 16 ? 16 / crowd : 1; // 큰 전투: 한 대 한 대는 작게
     const mon = e.kind === 'mon', kill = mon ? e.hp <= 0 : dmg >= e.hp, r = Math.min(1, dmg / (e.max || 1)), big = mon && (e.boss || e.major && e.s >= 2), me = !mon && (e.merc || e === rt()?.hero);
@@ -60,8 +68,9 @@ J.lunge = (id, a, tg) => {
   if (!win.map || a.kind !== 'mon' && tg.kind !== 'mon') return;
   const ranged = a.kind === 'mon' ? G.Foe.ranged(a) : a.def && a.def.range >= 2; if (ranged || l > 3.5) return;
   const flip = (tg.x - tg.y) < (a.x - a.y), ax = wx(a._dx == null ? a.x : a._dx), ay = wy(a._dy == null ? a.y : a._dy);
-  let q; if (a.kind === 'mon') { const beast = STYLE(a.n || '') === 'quad'; q = pfx(beast ? 'melee/claw-swipe' : 'melee/sword-slash', ax, ay, 0, { flip, k: 1.5, palette: FOE_SLASH }); }
-  else { const id2 = SWING[(a.merc || f.leader).cls] || 'melee/sword-slash'; q = pfx(id2, ax, ay, 0, { flip, k: id2 === 'melee/heavy-cleave' ? 2.2 : 1.4 }); }
+  const swing = () => { if (a.kind === 'mon') { const beast = STYLE(a.n || '') === 'quad'; return pfx(beast ? 'melee/claw-swipe' : 'melee/sword-slash', ax, ay, 0, { flip, k: 1.5, palette: FOE_SLASH }); }
+    const id2 = SWING[(a.merc || f.leader).cls] || 'melee/sword-slash'; return pfx(id2, ax, ay, 0, { flip, k: id2 === 'melee/heavy-cleave' ? 2.2 : 1.4 }); };
+  setTimeout(swing, lungeT()[0]); const q = true; // 휘두름 궤적은 모으기가 끝날 때
   if (q) { const n = now(); while (SWUNG.length && n - SWUNG[0].t > 600) SWUNG.shift(); SWUNG.push({ x: tg.x, y: tg.y, t: n }); } // 이 휘두름을 그렸다 — 같은 타격의 픽셀 호(엔진의 'slash')는 겹쳐 그리지 않는다 (fxlayer drawFx)
 };
 const SWUNG = [];
