@@ -216,7 +216,52 @@ G.Dive = (() => {
   const bagFull = st => bagUsed(st) >= (st.bagCap || 0);
   function stow(st, e) { st.loot = st.loot || []; const same = e.gem && st.loot.find(q => q.gem === e.gem); if (same) same.cnt = (same.cnt || 1) + (e.cnt || 1); else st.loot.push(e.gem ? { ...e, cnt: e.cnt || 1 } : e); const out = [];
     while (bagUsed(st) > (st.bagCap || 0) && st.loot.length) { const i = st.loot.reduce((b, q, j) => (q.gold < st.loot[b].gold ? j : b), 0), q = st.loot[i]; if (q.gem && q.cnt > 1) { q.cnt--; out.push({ ...q, cnt: 1 }); } else out.push(st.loot.splice(i, 1)[0]); } return out; } // 가득 차면 값이 낮은 것부터 (보석은 하나씩)
-  const lootGold = st => (st.loot || []).reduce((a, e) => a + (e.gold || 0) * (e.gem ? e.cnt || 1 : 1), 0);
+  const lootGold = st => (st.loot || []).filter(e => e.gem).reduce((a, e) => a + (e.gold || 0) * (e.cnt || 1), 0); // 돌아와 금화가 되는 것은 보석뿐 — 장비는 창고로 (2026-11-27)
+  // ── 인벤토리 · 창고 · 떨어진 장비 (2026-11-27 사용자: 「자동으로 끼우는걸 빼고 인벤토리를 제대로 · 창고도 추가 · 죽으면 해당 위치에 아이템 드롭되어서 다음 탐험때 습득」) ──
+  //   물건 하나(x) = { kind: 'base', e: { slot, k } } | { kind: 'magic', t: { k, rand, base, lv } } — 엔진 세계 밖에서 들고 다니는 꼴. 끼울 때만 세계에 만든다 (mat) · 세계의 안 낀 것은 다시 꺼낸다 (drain)
+  //   짐(st.loot): 원정 중 · 가득 차면 새 물건은 st.pend에서 기다린다 (화면이 무엇을 버릴지 묻는다) · 버린 것은 그 방 바닥에 (s.drops — 다음 판에 주울 수 있다)
+  //   창고(s.stash): 판이 끝나면 짐의 장비가 들어간다 (STASH_CAP칸 — 넘치면 반값에 판다) · 길드에서 끼우기 · 빼기 · 팔기
+  //   떨어진 장비(s.drops[층] = [{ room, items }]): 죽은 영웅이 낀 마법 물건 · 전멸하면 짐까지 그 방에. 그 방에 들어서면 짐으로 (arrive)
+  const STASH_CAP = 20;
+  // 원정 전리품에서 빼는 마법 물건 (2026-11-27 사용자: 충전식은 「오토배틀러에서 변수로 작용하고 관리도 어려울거같아서」 · 「탐험용 물건은 이제 빼자 — 영웅이 랜덤하게 해당 스킬들을 가지고 있게 했으니까」 · 「효과 없는 아이템은 그냥 제거」)
+  //   충전 · 횟수로 쓰는 것(주문 지팡이 · 완드 · 소환 · 한 번 쓰는 탄환 · 목걸이 구슬) · 탐험 판정용(은신 · 지각 · 수영 · 비행 · 어둠 눈) · 효과가 빈 것
+  const BAN_CH = new Set(['castN', 'ram', 'dazzle', 'bands', 'gemBeam', 'haunt', 'rule', 'flask', 'rebuke', 'pearl', 'wither', 'invisCloak', 'beads', 'summonIt', 'slay', 'flyIt']);
+  const BAN_EX = new Set(['skAdv', 'skB', 'swimSp', 'nightEyes', 'hideMe']);
+  const gearBan = A => !A.props?.length || !!A.cast || !!A.sum || A.props.some(p => BAN_CH.has(p[0]) || BAN_EX.has(p[0]));
+  const xDesc = x => (x.kind === 'base' ? { kind: 'base', e: { slot: x.e.slot, k: x.e.k } } : { kind: 'magic', t: { k: x.t.k || null, rand: x.t.rand || null, base: x.t.base || null, lv: x.t.lv || 1 } });
+  const xDrop = d => (d.kind === 'base' ? { kind: 'base', slot: d.e.slot, k: d.e.k } : d.t.k ? { kind: 'art', k: d.t.k } : { kind: 'rand', rand: d.t.rand });
+  function mat(f, d) { const x = G.Gear.take(f, xDrop(d), d.t?.lv || 1); if (d.kind === 'magic' && d.t.base) x.t.base = d.t.base; return x; }
+  function drain(f) { const out = G.Gear.bag(f).map(xDesc); f.gearBag = []; const A = G.Trinket.all(f); for (let i = A.length - 1; i >= 0; i--) if (A[i].on == null) A.splice(i, 1); return out; }
+  function entryOf(d) { const f = G.S.w.fantasy, x = mat(f, d), o = G.Gear.info(x); drain(f); return { n: o.n, r: o.r || 0, sl: G.Gear.slotOf(x), k: d.kind === 'magic' ? d.t.k : null, gold: Math.round(G.Gear.price(d.kind === 'base' ? xDrop(d) : x) / 2), x: d, bag: true }; }
+  const roomFor = (st, e) => (st.bagCap || 0) - bagUsed(st) >= slotsOf(e) || (e.gem && (st.loot || []).some(q => q.gem === e.gem));
+  function bagAdd(st, e) { if (!roomFor(st, e)) { (st.pend = st.pend || []).push(e); return false; } st.loot = st.loot || []; const same = e.gem && st.loot.find(q => q.gem === e.gem); if (same) same.cnt = (same.cnt || 1) + (e.cnt || 1); else st.loot.push(e.gem ? { ...e, cnt: e.cnt || 1 } : e); return true; }
+  const floorDrop = (s, fl, room, items) => { if (!s || !items.length) return; const L = (s.drops = s.drops || {})[fl] = s.drops[fl] || [], here = L.find(q => q.room === room); if (here) here.items.push(...items); else L.push({ room, items }); };
+  // 짐에서 버리기: 그 방 바닥에 남긴다 (i = 짐 칸 · 'pend' = 기다리던 새 물건)
+  function bagDrop(st, i) { const e = i === 'pend' ? (st.pend || []).shift() : (st.loot || []).splice(i, 1)[0]; if (!e) return null; floorDrop(curS, st.floor, st.at, [e]); while ((st.pend || []).length && roomFor(st, st.pend[0])) bagAdd(st, st.pend.shift()); return e; }
+  // 짐의 물건을 영웅에게: 끼울 수 없으면 까닭 (문자열) · 끼우면 빠진 것은 짐으로 (넘치면 기다리는 줄)
+  function bagEquip(f, st, i, m, at = null) { const e = (st.loot || [])[i]; if (!e?.x) return '없음'; const x = mat(f, e.x), ok = G.Gear.can(m, x, f, at); if (!ok.ok) { drain(f); return ok.why; } G.Gear.equip(f, m, x, at); st.loot.splice(i, 1); for (const d of drain(f)) bagAdd(st, entryOf(d)); return true; }
+  function bagUnequip(f, st, m, slot) { G.Gear.unequip(f, m, slot); for (const d of drain(f)) bagAdd(st, entryOf(d)); }
+  // 판이 끝났다 (bank 전에 — settleRun): 짐의 장비 → 창고 · 전멸이면 짐 → 그 방 바닥 · 죽은 영웅의 마법 물건 → 죽은 방 바닥. 창고가 넘치면 판 금화 (돌려준다)
+  function settleRun(s, st, f, lose, deadMs) { let sold = 0; const gear = (st.loot || []).filter(e => !e.gem && e.x).concat((st.pend || []).filter(e => e.x));
+    if (lose) floorDrop(s, st.floor, st.at, gear.concat((st.loot || []).filter(e => e.gem)));
+    else { s.stash = s.stash || []; for (const e of gear) { if (s.stash.length < STASH_CAP) s.stash.push(e); else sold += e.gold || 0; } }
+    for (const m of deadMs) { const A = G.Trinket.all(f), mine = A.filter(t => t.on === m.uid); if (!mine.length) continue; const items = mine.map(t => entryOf(xDesc({ kind: 'magic', t }))); for (const t of mine) A.splice(A.indexOf(t), 1); floorDrop(s, st.floor, st.died?.[m.uid] ?? st.at, items); }
+    st.loot = []; st.pend = []; return sold; }
+  // 그 방에 떨어진 것 (다음 판에 들어서면 짐으로)
+  const dropsAt = (s, fl, room) => (s?.drops?.[fl] || []).find(q => q.room === room)?.items || [];
+  function pickDrops(s, st) { const L = s?.drops?.[st.floor]; if (!L) return []; const i = L.findIndex(q => q.room === st.at); if (i < 0) return []; const got = L.splice(i, 1)[0].items; for (const e of got) bagAdd(st, e); if (got.length) st.log.push({ t: `떨어진 장비 ${got.length}개를 주웠다`, k: 'dv' }); return got; }
+  // 창고 (길드): 영웅에게 끼우기 · 빼기 · 팔기 — 잠깐 길드 세계에 그 영웅을 세워 엔진 규칙(숙련 · 조율 · 칸)대로 하고 명단에 되적는다
+  function stashEquip(s, cls, i, at = null) { const e = (s.stash || [])[i], h = s.roster[cls]; if (!e || !h) return '없음'; const f = G.S.w.fantasy, m = revive(f, s, cls), x = mat(f, e.x), ok = G.Gear.can(m, x, f, at); let out = ok.ok ? true : ok.why;
+    if (ok.ok) { G.Gear.equip(f, m, x, at); s.stash.splice(i, 1); h.m.eq = JSON.parse(JSON.stringify(m.eq)); } return stashBack(s, f, m, h, out); }
+  function stashUnequip(s, cls, slot) { const h = s.roster[cls]; if (!h) return false; const f = G.S.w.fantasy, m = revive(f, s, cls); G.Gear.unequip(f, m, slot); h.m.eq = JSON.parse(JSON.stringify(m.eq)); return stashBack(s, f, m, h, true); }
+  function stashBack(s, f, m, h, out) { const A = G.Trinket.all(f); h.tr = A.filter(t => t.on === m.uid).map(t => ({ ...t, on: null })); for (let k = A.length - 1; k >= 0; k--) if (A[k].on === m.uid) A.splice(k, 1); for (const d of drain(f)) (s.stash = s.stash || []).push(entryOf(d)); return out; }
+  // 화면이 읽는 것 (세계를 잠깐 세웠다 치운다): 물건의 자세한 글 · 그 영웅이 끼울 수 있나 + 비교 · 영웅이 낀 칸들
+  function xInfo(d) { const f = G.S.w.fantasy, x = mat(f, d), o = G.Gear.info(x); drain(f); return o; }
+  function fitOf(f, m, d) { const x = mat(f, d), sl = G.Gear.slotOf(x), at = sl === 'w' && G.Gear.can(m, x, f).ok === false && G.Gear.can(m, x, f, 'o').ok ? 'o' : null, c = G.Gear.can(m, x, f, at), cm = c.ok ? (at === 'o' ? '보조 손' : G.Gear.cmp(m, x, f)) : ''; drain(f); return { ok: c.ok, why: c.why || '', cmp: cm, at }; }
+  function guildHero(s, cls, fn) { const f = G.S.w.fantasy, m = revive(f, s, cls); try { return fn(f, m); } finally { const A = G.Trinket.all(f); for (let k = A.length - 1; k >= 0; k--) if (A[k].on === m.uid) A.splice(k, 1); drain(f); } }
+  const stashWorn = (s, cls) => guildHero(s, cls, (f, m) => G.Gear.worn(f, m));
+  const stashFit = (s, cls, d) => guildHero(s, cls, (f, m) => fitOf(f, m, d));
+  function stashSell(s, i) { const e = (s.stash || []).splice(i, 1)[0]; if (!e) return 0; s.gold += e.gold || 0; return e.gold || 0; }
   // 보석 떨어뜨리기: 보물 방 · 상자 = 1~2개 · 정예 1 · 우두머리 2 — 층이 깊을수록 높은 단계 (두 단계 중 하나, 9층 이상은 드물게 큰 다이아몬드)
   function gemDrop(st, kind, rng = Math.random) { const fl = st.floor || 1, lo = Math.min(4, Math.floor((fl - 1) / 2)), n = kind === 'boss' ? 2 : kind === 'treasure' ? 1 + (rng() < 0.4 ? 1 : 0) : 1, out = [];
     for (let i = 0; i < n; i++) { const t = fl >= 9 && rng() < 0.08 ? 5 : lo + (rng() < 0.35 ? 1 : 0), G0 = GEMS[Math.min(5, t)]; out.push({ n: G0.n, gem: G0.id, gold: G0.g, r: 0, cnt: 1 }); } return out; }
@@ -246,9 +291,9 @@ G.Dive = (() => {
   // 원정의 희귀도 표 (시험값): 구역마다 [고급, 희귀, 매우 희귀, 전설]의 무게. 우두머리는 두 번 굴려 높은 쪽 (gear.js). 9~10층은 매우 희귀 · 전설이 실제로 나오게
   const R_TABLE = [[10, 2, 0, 0], [8, 4, 0.5, 0], [5, 5, 1.5, 0.1], [3, 5, 3, 0.5], [1, 4, 4, 1.5]];
   const R_UP = { elite: 1, treasure: 1 }; // 정예 · 보물 방은 한 구역 깊은 표로
-  function pickR(floor, type, rng = Math.random) { const w = R_TABLE[Math.min(R_TABLE.length - 1, Math.floor((floor - 1) / 2) + (R_UP[type] || 0))]; let x = rng() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < 4; i++) if ((x -= w[i]) < 0) return i + 1; return 1; }
+  function pickR(floor, type, rng = Math.random) { const w = R_TABLE[Math.min(R_TABLE.length - 1, Math.floor((floor - 1) / 4) + (R_UP[type] || 0))]; /* 구역(네 층)마다 한 줄 (20층) */ let x = rng() * w.reduce((a, b) => a + b, 0); for (let i = 0; i < 4; i++) if ((x -= w[i]) < 0) return i + 1; return 1; }
   const LOOT = []; // 이번 판에 주운 것들 { n, r, k, to: 낀 사람 이름 | null, gold: 판 값 } — 화면이 읽고 비운다
-  const dexItems = () => Object.keys(G.D.ARTS).filter(k => G.D.ARTS[k].props?.length).map(k => ({ k, n: G.D.ARTS[k].n, r: G.D.ARTS[k].r || 1 })).sort((a, b) => a.r - b.r);
+  const dexItems = () => Object.keys(G.D.ARTS).filter(k => !gearBan(G.D.ARTS[k])).map(k => ({ k, n: G.D.ARTS[k].n, r: G.D.ARTS[k].r || 1 })).sort((a, b) => a.r - b.r);
   const dexHeroes = () => G.Builds.LIST.filter(b => CLS.includes(b.cls) && !b.mc).map(b => ({ id: b.id, cls: b.cls, n: b.n }));
   const dexCount = s => { const M = dexMons(), H = dexHeroes(), I = dexItems(); return { got: M.filter(x => s.dex.m[x.n]?.met).length + H.filter(b => s.dex.h[b.id]).length + I.filter(x => s.dex.i[x.k]).length, all: M.length + H.length + I.length }; };
   let hooked = false, cur = null, curS = null, live = [], xp0 = []; // cur = 지금 원정의 탐사 기록 · curS = 그 저장 (도감을 적는다) — outfit이 건다 · live = 이번 판의 엔진 사람들(명단 차례) · xp0 = 출발 때 누적 경험치
@@ -351,7 +396,7 @@ G.Dive = (() => {
       F.hurt = function (f, rt, m, dmg, src, from) { const c = cur?.stat && m ? ownerOf(from) : null, b = m?.hp; if (c) m._dvBy = c;
         if (c && m.kind === 'mon' && m.stat && b > 0) { const dt = G.Skill.dtOver || G.Foe.dtype || (from?.merc ? G.Dnd.weapon(from).t : null), k = G.Foe.typeK(m, dt, from), w = tkWord(k); if (curS && m.n) affMark(curS, m.n); if (w) { const q = statOf(cur, c); q.tk = q.tk || {}; q.tk[w] = (q.tk[w] || 0) + 1; tkQ.push([from?.merc?.name || from?.by?.merc?.name || '', w]); if (tkQ.length > 8) tkQ.shift(); } } // 상성: 싸워 본 몬스터는 도감에 · 배율 기록
         const out = hu0.apply(this, arguments); if (c && b > 0) statOf(cur, c).dmg += b - Math.max(0, m.hp); return out; };
-      F.hurtMember = function (f, rt, p, dmg, mo) { const b = p?.hp, out = hm0.apply(this, arguments); if (cur?.stat && p?.merc && b > 0) { const q = statOf(cur, p.merc.cls); q.took += b - Math.max(0, p.hp); if (p.hp <= 0) q.downs++; hpSeen.set(p, { hp: Math.max(0, p.hp), max: p.max }); } return out; };
+      F.hurtMember = function (f, rt, p, dmg, mo) { const b = p?.hp, out = hm0.apply(this, arguments); if (cur && p?.merc && b > 0 && p.hp <= 0) (cur.died = cur.died || {})[p.merc.uid] = cur.at; /* 쓰러진 방 (떨어진 장비 — settle) */ if (cur?.stat && p?.merc && b > 0) { const q = statOf(cur, p.merc.cls); q.took += b - Math.max(0, p.hp); if (p.hp <= 0) q.downs++; hpSeen.set(p, { hp: Math.max(0, p.hp), max: p.max }); } return out; };
       F.kill = function (f, rt, m, src, from) { if (cur?.stat && m?.kind === 'mon' && !m._dvDead) { m._dvDead = true; cur.stat.foes++; const c = ownerOf(from) || m._dvBy; if (c) statOf(cur, c).kills++; } return kl0.apply(this, arguments); }; }
     { const h0 = G.Story.heat; G.Story.heat = function (f, list) { h0.apply(this, arguments); for (const o of list) if (o.wvK && !o.wvDone) { o.wvDone = true; o.gold *= o.wvK; o.xpK = (o.xpK || 1) * o.wvK; } }; } // 늘어난 적의 값
     const m0 = G.Guild.mult; G.Guild.mult = function (m, k) { const v = m0.apply(this, arguments); return k === 'xp' ? v * XP_K * (curS ? catchK(m.lv, Math.max(...live.map(x => x.lv))) / pace(m.lv) : 1) : v; };
@@ -369,7 +414,7 @@ G.Dive = (() => {
     cdHook();
     if (G.Lines) { const L = G.Builds.LIST, cls = new Set(G.Lines.LIST.map(b => b.cls)); for (let i = L.length - 1; i >= 0; i--) if (cls.has(L[i].cls) && !L[i].mc) L.splice(i, 1); L.push(...G.Lines.LIST); } // 밀리 · 원거리 직업은 계열 빌드로 (2026-11-27 — inc/SKILL_LINES.md)
     if (G.Builds?.CARD) { G.Builds.CARD.on = true; const gr0 = G.Guild.grow; G.Guild.grow = function (m) { cardInit(m); const out = gr0.apply(this, arguments); if (G.Builds.CARD.on && G.Builds.byId(m.build) && !G.Builds.byId(m.build).line) { const q = (m.cardq = m.cardq || []); if (CARD.PICK.includes(m.lv) && (m.picks || []).length + q.filter(x => x.kind === 'pick').length < G.Builds.SLOT_N) q.push({ lv: m.lv, kind: 'pick' }); else if (CARD.PICK.includes(m.lv) || CARD.SWAP.includes(m.lv)) q.push({ lv: m.lv, kind: 'swap' }); } return out; }; } // 레벨업 카드
-    G.Gear.pickR = pickR; G.Gear.noRand = true; // 원정의 희귀도 표 · 랜다트(지어낸 물건) 없이 SRD 물건만
+    G.Gear.pickR = pickR; G.Gear.noRand = true; G.Gear.half = true; G.Gear.ban = gearBan; // 원정의 희귀도 표 · 랜다트(지어낸 물건) 없이 SRD 물건만
     // 첫 층은 더 순하게: 한 무리 둘까지 (탐사 게임은 셋). 원정 페이지에서만 바뀐다
     zoneFix(); // 20층 구역 표 (고블린 굴의 기준 인원 1 · 2 · 2 · 3도 거기서)
   }
@@ -689,7 +734,7 @@ G.Dive = (() => {
   const POL = {
     // 방에 들어섰다 (설계서 층): 함정 · 숨은 통로를 저절로 찾아본다 (조사 판정 — 탐사 규칙 그대로, 방마다 한 번)
     // 방에 들어섰다: 조사(함정 · 숨은 통로) · 함정 찾기 · 신성 감지 · 사냥꾼의 지식 · 마법 탐지를 저절로, 그리고 아직 안 간 이웃 방을 미리 알기(정찰 · 흔적 · 점술) — 탐사 규칙 그대로
-    arrive(st) { if (st.here.xdone) return; st.here.xdone = true;
+    arrive(st) { if (st.here.xdone) return; st.here.xdone = true; pickDrops(curS, st);
       if (XRUN.keyed) for (const x of RUN.nexts(st)) { x.n.seenMap = true; x.e.seen = x.e.seen || {}; if (x.e.kind === 'locked') x.e.seen.lock = true; if (x.e.kind === 'trap') x.e.seen.trap = true; if (x.e.kind === 'dark') x.e.seen.dark = true; } // 방 상태: 이웃 방의 종류와 상태는 늘 보인다 (적은 가 봐야 안다)
       const mark = a => { const L = st.log[st.log.length - 1]; if (L && !L.g && !L.r) L.g = { who: a.who || '', gate: '탐험', how: a.label, ok: true }; }; // 탐험 스킬 (판정 없는 것): 화면의 알림 판으로 — 판정 있는 것은 그 기록(.r)을 쓴다
       for (const a of RUN.roomActs(st)) if (['search', 'findtraps', 'sense', 'lore', 'detect'].includes(a.id)) { const n0 = st.log.length; a.run(); if (st.log.length > n0 && a.id !== 'search' && a.id !== 'findtraps') mark(a); }
@@ -728,22 +773,13 @@ G.Dive = (() => {
     who: cands => cands.map((c, i) => [c.bonus, i]).sort((a, b) => b[0] - a[0])[0][1],
     // 잠긴 문 (따기 · 부수기가 안 됐다): 대가가 있는 방법 — 너머가 보물 방이면 쓴다, 아니면 두고 간다
     // 보석 (원정 — crawl이 보물 상자 · 정예 · 우두머리를 이긴 뒤 부른다): 짐으로 (가득 차면 싼 것부터 두고 감). 정예 · 우두머리는 그 판 금화의 일부를 보석으로 돌린 셈 치고 금화에서 뺀다
-    gem(st, kind, gold0 = 0) { const gs = gemDrop(st, kind); let v = 0; for (const e of gs) { v += e.gold; LOOT.push({ ...e, bag: true }); for (const q of stow(st, e)) { q.dropped = true; st.log.push({ t: `두고 감 · ${q.n}`, k: 'dv' }); } } if (gold0 > 0) st.gold -= Math.min(Math.round(gold0 * 0.5), v); return gs; },
+    gem(st, kind, gold0 = 0) { const gs = gemDrop(st, kind); let v = 0; for (const e of gs) { v += e.gold; LOOT.push({ ...e, bag: true }); bagAdd(st, e); } if (gold0 > 0) st.gold -= Math.min(Math.round(gold0 * 0.5), v); return gs; },
     paid: (st, acts) => acts.findIndex(a => a.id === 'knock'), // 따기 · 부수기가 안 되면 열림 (쿨타임 스킬 — 물건은 없앴다)
     // 주운 장비: 낄 사람이 있으면 끼우고(기본 장비는 가장 나아지는 사람, 마법 물건은 낄 수 있는 첫 사람), 아니면 반값에 판다 → 판 금화
     // 마법 물건은 그 칸이 비었거나 지금 낀 것보다 등급이 높은 사람에게 (장신구는 두 칸). 주운 것은 LOOT에 적는다 (화면의 알림 · 지난 판 결과 · 아이템 도감)
     gear(f, ms, drops, floor) {
-      const X = G.Gear; let gold = 0;
-      const room = (m, x) => { const sl = X.slotOf(x), on = G.Trinket.worn(f, m.uid).filter(t => X.slotOf({ kind: 'magic', t }) === sl); return sl === 't' ? on.length < 2 || on.some(t => rOf({ kind: 'magic', t }) < rOf(x)) : !on.length || on.every(t => rOf({ kind: 'magic', t }) < rOf(x)); };
-      for (const d of drops) {
-        const x = X.take(f, d, floor), live = ms.filter(m => m && !m.dead), o = X.info(x);
-        const to = x.kind === 'base' ? live.map(m => [m, X.can(m, x, f).ok ? X.better(m, x) : 0]).filter(([, g]) => g > 0).sort((a, b) => b[1] - a[1])[0]?.[0] : live.find(m => X.can(m, x, f).ok && room(m, x));
-        const e = { n: o.n, r: o.r || 0, k: x.kind === 'magic' ? x.t.k || null : null, to: null, gold: 0, x: x.kind === 'base' ? { kind: 'base', e: { slot: x.e.slot, k: x.e.k } } : { kind: 'magic', t: { k: x.t.k, rand: x.t.rand, base: x.t.base } } }; // x: 그 물건 (화면이 그림을 찾는다 — MD.itemUrl)
-        e.gold = Math.round(X.price(x.kind === 'base' ? d : x) / 2); // 길드에 돌아와 팔 값
-        if (to && X.equip(f, to, x)) e.to = to.name; else if (cur) { e.bag = true; for (const q of stow(cur, e)) { q.dropped = true; cur.log.push({ t: `두고 감 · ${q.n}`, k: 'dv' }); } } // 못 끼는 것은 짐으로 (가득 차면 싼 것부터 두고 간다)
-        LOOT.push(e); if (e.k && curS) curS.dex.i[e.k] = (curS.dex.i[e.k] || 0) + 1;
-      }
-      return gold;
+      for (const d of drops) { const x = G.Gear.take(f, d, floor), dd = xDesc(x); drain(f); const e = entryOf(dd); bagAdd(cur, e); LOOT.push({ ...e }); if (e.k && curS) curS.dex.i[e.k] = (curS.dex.i[e.k] || 0) + 1; } // 끼우지 않는다 — 짐으로 (가득 차면 기다리는 줄 · 화면이 묻는다)
+      return 0;
     },
   };
   // 지도에서 야영 지점 켜고 끄기 (경로 위의 방만, 입구 빼고)
@@ -760,5 +796,5 @@ G.Dive = (() => {
   function evOut(evId, choiceName) { const ev = RUN.EVENTS.find(x => x.id === evId); if (!ev) return { ok: [], no: [] }; const o = ev.opts.find(q => choiceName === q.n || choiceName.endsWith(`] ${q.n}`)); if (!o) return { ok: [], no: [] };
     const f = r => (!r ? [] : [r.gold ? `금화 +${r.gold}` : '', r.ally ? '동료 +1' : '', r.healAll ? `체력 +${r.healAll}` : '', r.hurt ? `체력 −${r.hurt}` : '', r.fight ? '싸움' : '', r.mapPiece || r.revealRow || r.scoutAhead ? '지도' : '', r.bless ? '가호' : '', r.curse ? '저주' : '', r.warn || r.alert ? '경보' : ''].filter(Boolean));
     return { ok: f(o.ok), no: o.sk ? f(o.no) : [], cost: o.cost || 0 }; }
-  return { DEP, depZone, depForm, depSave, restCost, REST, REST_CAMP, CAMP_FREE, KNACK, knacksOf, rollXsp, known, learn, KEYUSE, STATE, stateOf, passInfo, gateShut, USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, drawState, segPts, reward, SPECS, FV, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, starts, startFloor, reach, routes, toBoss, floorSeed, remember, recall, explored, view, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, POL };
+  return { DEP, depZone, depForm, depSave, restCost, REST, REST_CAMP, CAMP_FREE, STASH_CAP, gearBan, bagAdd, bagDrop, bagEquip, bagUnequip, settleRun, dropsAt, xInfo, fitOf, stashWorn, stashFit, pickDrops, stashEquip, stashUnequip, stashSell, entryOf, KNACK, knacksOf, rollXsp, known, learn, KEYUSE, STATE, stateOf, passInfo, gateShut, USED, waves, waveSizes, soloBuilds, sheetOf, firstLineOf, DT_N, TY_N, affOf, affKnown, affTag, edgeOf, planFoes, mainType, tkTake, endWhy, statTick, statOf, ownerOf, GEMS, GEM_STACK, gemDrop, slotsOf, evPass, BRANCH, evOf, evMark, evOpen, evPlanSet, evDecide, evOut, CARD, cardCands, cardRec, cardOffer, cardChoose, cardAuto, cardInit, cdOf, canCamp, campHere, wantCamp, gateTxt, PARTS, EXPL, XCD, XRUN, gateInfo, TUNE, SUP_KEYS, reviveCost, raise, deadList, strMod, bagCap, supMax, bagPlan, supCost, pack, supN, bagUsed, bagFull, stow, lootGold, drawState, segPts, reward, SPECS, FV, KEY, ZONES, LAST, CLS, TREE, CAMP, fresh, load: loadFix, noMc, dump, step, cost, buy, total, complete, seats, classes, camp, speeds, kit, team, toggle, bonus, bonusTo, starts, startFloor, reach, routes, toBoss, floorSeed, remember, recall, explored, view, killGold, finish, rate, xpRate, settle, AWAY_K, AWAY_CAP, XP_K, PACE_LV, PACE_K, pace, LV_MAX, CATCH, BENCH, NEW_GAP, catchK, gain, autoPick, totalXp, newLv, revive, bank, rebuild, dexMons, dexHeroes, dexItems, dexCount, RARITY, R_TABLE, pickR, rOf, LOOT, hook, member, world, outfit, POL };
 })();

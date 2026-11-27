@@ -3,8 +3,13 @@
 // 캔버스 한 장(지도 전체 · 칸 c px)을 지도 칸 안에서 끌어 넘겨 본다. 그리는 순서: 양피지 → 바닥(방 종류 색조) → 둘레 음영 띠 → 관문 · 발자국 · 경로 선 → 아이콘 · 글씨(바탕 판).
 // 읽는 것: 탐사 기록 꼴 V(G.Dive.view / drawState), 경로 · 발자국 · 못 연 길 · 야영 지점, G.Dive의 보상 · 관문 · 사건 기억. 화면 밖 규칙은 없다.
 const DIVEMAP = (() => {
-  const PAL = { bg: '#e6cf9c', bg2: '#d6ba82', bg3: '#efdcae', ink: '#2b1d14', pen: '#7b6852', rust: '#8e2a1a', paper: '#f3e4c3', gold: '#d9a441', band: '#3b2a1c', band2: '#a88e66', floor: '#f6ead0', seen: '#ead6a8', fog: '#d9c08c', shade: '#d8c49a' };
-  const TINT = { fight: '#f4e3c9', elite: '#ecd2c0', boss: '#e6c3b4', treasure: '#f3e7b2', event: '#e2e6d0', camp: '#dfe7c8', start: '#f6ead0', shop: '#f0e0c0' }; // 방 종류 색조
+  const LIGHT = { plate: 'rgba(243,228,195,0.88)', bg: '#e6cf9c', bg2: '#d6ba82', bg3: '#efdcae', ink: '#2b1d14', pen: '#7b6852', rust: '#8e2a1a', paper: '#f3e4c3', gold: '#d9a441', band: '#3b2a1c', band2: '#a88e66', floor: '#f6ead0', seen: '#ead6a8', fog: '#d9c08c', shade: '#d8c49a' };
+  const TINT_L = { fight: '#f4e3c9', elite: '#ecd2c0', boss: '#e6c3b4', treasure: '#f3e7b2', event: '#e2e6d0', camp: '#dfe7c8', start: '#f6ead0', shop: '#f0e0c0' }; // 방 종류 색조
+  // 원정 중 지도(미니맵 · 크게 본 지도)는 던전 화면에 맞춘 어두운 돌 빛 (2026-11-27 사용자: 「컬러감이라던가 스타일이 지금 게임화면에 안어울리는거같아서」) — 길드 지도는 양피지 그대로
+  //   바탕 = 화면 판(#160f0a)보다 한 단계 어두운 바위 · 바닥 = 따뜻한 회갈색 돌 · 선 · 글씨 = 양피지색 · 길 = 붉은 불빛 · 고르기 = 금색 (UI 판과 같은 색)
+  const DARK = { plate: 'rgba(22,15,10,0.85)', bg: '#0e0a08', bg2: '#16110d', bg3: '#090605', ink: '#f3e4c3', pen: '#8a7656', rust: '#e0603f', paper: '#160f0a', gold: '#e8b84a', band: '#000000', band2: '#2a1f17', floor: '#3b3129', seen: '#2b231d', fog: '#221a15', shade: '#231c17' };
+  const TINT_D = { fight: '#4b3f35', elite: '#563b31', boss: '#62312a', treasure: '#5a4b2a', event: '#3f4638', camp: '#394a33', start: '#4a4038', shop: '#504333' };
+  let PAL = LIGHT, TINT = TINT_L; const pal = o => { PAL = o.dark ? DARK : LIGHT; TINT = o.dark ? TINT_D : TINT_L; };
   const RC = ['#7b6852', '#2f8a3e', '#2f63c9', '#8a3fc4', '#c9741a'];
   // 8×8 픽셀 아이콘 (두 배로 16px) — 1 잉크 · 2 붉은 잉크 · 3 금색
   const ICON = {
@@ -45,7 +50,7 @@ const DIVEMAP = (() => {
     x.font = `${bold ? 700 : 400} ${size}px Galmuri11, sans-serif`; x.textAlign = align; x.textBaseline = 'alphabetic';
     let t = String(s); while (t.length > 1 && x.measureText(t).width > maxW) t = t.slice(0, -1); if (t !== String(s)) t = t.slice(0, -1) + '…';
     const w = Math.ceil(x.measureText(t).width), lx = align === 'center' ? X - w / 2 : align === 'right' ? X - w : X;
-    if (plate) { x.fillStyle = 'rgba(243,228,195,0.88)'; x.fillRect(Math.round(lx) - 2, Math.round(Y) - size + 1, w + 4, size + 2); }
+    if (plate) { x.fillStyle = PAL.plate; x.fillRect(Math.round(lx) - 2, Math.round(Y) - size + 1, w + 4, size + 2); }
     x.fillStyle = col; x.fillText(t, Math.round(X), Math.round(Y)); return w;
   }
   // 직업 기호: 색 네모 + 첫 글자 (긴 직업 이름 대신)
@@ -53,7 +58,7 @@ const DIVEMAP = (() => {
   function clsMark(x, nm, X, Y) { const base = nm.replace(/ \d+$/, ''), lv = (/ (\d+)$/.exec(nm) || [])[1]; x.fillStyle = PAL.ink; x.fillRect(X, Y, 13, 13); x.fillStyle = CLS_COL[base] || PAL.pen; x.fillRect(X + 1, Y + 1, 11, 11); x.font = '700 10px Galmuri11, sans-serif'; x.textAlign = 'center'; x.fillStyle = base === '클레릭' ? PAL.ink : PAL.paper; x.fillText(base[0], X + 7, Y + 11); if (lv) { x.fillStyle = PAL.rust; x.font = '700 9px Galmuri11, sans-serif'; x.fillText(lv, X + 15, Y + 6); } return lv ? 20 : 15; }
   // ── 바탕 (방 · 복도 · 음영 · 관문 아이콘) — 한 번 그려 두고 경로만 다시 ──
   function base(V, o) {
-    const { c, x0, y0, W, H, fl, mini } = o, L = V.map._lay, N = V.map.nodes, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const x = cv.getContext('2d');
+    pal(o); const { c, x0, y0, W, H, fl, mini } = o, L = V.map._lay, N = V.map.nodes, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const x = cv.getContext('2d');
     const hide = o.hide || null, shown = n => shownAll(n) && !(hide && hide.has(n.id)); // hide: 지도 그리기 연출에서 아직 안 그린 방
     const P = ([cx, cy]) => [(cx - x0) * c, (cy - y0) * c];
     rnd = 7 + fl * 13; x.fillStyle = PAL.bg; x.fillRect(0, 0, W, H);
@@ -81,7 +86,7 @@ const DIVEMAP = (() => {
   }
   // ── 위 층 (관문 · 경로 · 발자국 · 아이콘 · 글씨) ──
   function draw(cv, V, o, st) {
-    const x = cv.getContext('2d'), { c, x0, y0, mini } = o, P = ([a, b]) => [(a - x0) * c + c / 2, (b - y0) * c + c / 2], L = V.map._lay, N = V.map.nodes, fl = o.fl;
+    pal(o); const x = cv.getContext('2d'), { c, x0, y0, mini } = o, P = ([a, b]) => [(a - x0) * c + c / 2, (b - y0) * c + c / 2], L = V.map._lay, N = V.map.nodes, fl = o.fl;
     x.imageSmoothingEnabled = false; x.drawImage(st.animBase || st.base, 0, 0);
     const seg = (a, b) => { const r = G.Dive.segPts(V.map, a, b); return r ? r.pts.map(P) : null; };
     // 발자국 (지난 판 · 이번 판)
@@ -182,7 +187,7 @@ const DIVEMAP = (() => {
     // 칸 크기: 미니맵은 작게 · 지도는 폭(가로로 긴 층이면 높이)에 맞추되 10~14px — 넘치면 끌어서 본다
     const fitB = opts.fit?.length ? opts.fit.map(id => L.room[id]).reduce((b, r) => [Math.min(b[0], r.x), Math.min(b[1], r.y), Math.max(b[2], r.x + r.w), Math.max(b[3], r.y + r.h)], [1e9, 1e9, -1e9, -1e9]) : null; // fit: 한눈에 들어와야 할 방들 (다음 방 고르기 — 지금 방과 고를 수 있는 방): 칸을 9px까지 줄여 담고 그 가운데를 본다
     const tall = bh / bw > VH / VW, small = typeof RUN !== 'undefined' && RUN.SMALL, c = opts.mini ? 5 : fitB ? Math.max(9, Math.min(opts.cell || 16, Math.floor(Math.min(VW / (fitB[2] - fitB[0] + 2), VH / (fitB[3] - fitB[1] + 2))))) : opts.cell || Math.max(small ? 16 : 10, Math.min(small ? 20 : 14, Math.floor(tall ? VW / bw : VH / bh))); // 작은 방(5칸)은 칸을 크게 (16~20px) — 방 글씨가 붙지 않게, 넘치면 끌어서 본다
-    const W = Math.max(VW, bw * c), H = Math.max(VH, bh * c), x0 = bx0 - Math.floor((W / c - bw) / 2), y0 = by0 - Math.floor((H / c - bh) / 2), o = { c, x0, y0, W, H, fl: V.floor, mini: !!opts.mini };
+    const W = Math.max(VW, bw * c), H = Math.max(VH, bh * c), x0 = bx0 - Math.floor((W / c - bw) / 2), y0 = by0 - Math.floor((H / c - bh) / 2), o = { c, x0, y0, W, H, fl: V.floor, mini: !!opts.mini, dark: !!opts.dark };
     cv.width = W; cv.height = H; cv.style.width = W + 'px'; cv.style.height = H + 'px';
     const st = { base: base(V, o), plan: opts.plan, trail: opts.trail, fail: opts.fail, camp: opts.camp || [], S: opts.S, gateInfo: opts.gateInfo, here: opts.here, pick: opts.pick || null }; // pick: [[방, 드는 물자]] 고를 수 있는 방
     if (opts.anim) animate(cv, V, o, st, opts.anim); else draw(cv, V, o, st);

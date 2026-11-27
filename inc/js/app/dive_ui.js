@@ -40,7 +40,7 @@ const DIVEUI = (() => {
     PMAP.view = st => D.drawState(S, st); // 원정 중 지도 = 지도 기억 + 이번 판
     PMAP.render = (box, st, big) => { if (!box) return; box.querySelector('#pmap')?.style.setProperty('display', 'none'); let w = box.querySelector('.dvpmw'); if (!w) { w = document.createElement('div'); w.className = 'dvpmw'; box.append(w); const t = document.createElement('b'); t.className = 'dvpm-t'; box.append(t); }
       const V = D.drawState(S, st), ex = D.explored(S, st.floor); box.querySelector('.dvpm-t').textContent = `${RUN.zone(st.floor).n} · ${st.floor}층${ex ? ` · 탐사 ${ex[0]}/${ex[1]}` : ''}`; // 큰 지도 머리는 칸 밖(위)에 따로
-      DIVEMAP.mount(w, V, { plan: null, trail: st.path, fail: [], camp: [], S, gateInfo: q0 => D.gateInfo(S, V, q0), here: st.at, mini: !big }); }; // 원정 중 지도: 작게 = 방 · 지금 위치 · 계획 점선 · 발자국 / 크게 = 길드 지도와 같은 그림
+      DIVEMAP.mount(w, V, { plan: null, trail: st.path, fail: [], camp: [], S, gateInfo: q0 => D.gateInfo(S, V, q0), here: st.at, mini: !big, dark: true }); }; // 원정 중 지도: 작게 = 방 · 지금 위치 · 계획 점선 · 발자국 / 크게 = 길드 지도와 같은 그림
     PMAP.bigBox = (svg, st) => { // 크게 본 지도: 아는 곳 + 계획한 길에 맞춘 틀 (길드 지도와 같은 방식, 칸 비율에 맞춰 넓힌다)
       const V = D.drawState(S, st), L = st.map._lay, cs = [], add = id => { const r = L.room[id]; cs.push([r.x, r.y], [r.x + r.w, r.y + r.h]); };
       V.map.nodes.forEach(q => { if (q.visited || q.seenMap || q.info >= 2) add(q.id); }); (st.plan || []).forEach(add); add(st.at);
@@ -62,10 +62,11 @@ const DIVEUI = (() => {
     const lose = st.done === 'lose', deadC = lose ? D.team(S) : R.party.filter(p => p.merc && p.dead).map(p => p.merc.cls);
     for (const c of deadC) S.dead[c] = true;
     const loot = (st.loot || []).filter(e => !e.dropped), lootG = lose ? 0 : D.lootGold(st), gemN = loot.filter(e => e.gem).reduce((a, e) => a + (e.cnt || 1), 0);
-    const f = G.S.w.fantasy, xp = D.bank(S, f), ups = Object.entries(S.roster).filter(([c, h]) => h.m.lv > (run.lv0[c] || 0)).map(([c, h]) => [h.m.name, run.lv0[c], h.m.lv]), won = st.done === 'win', cleared = won ? st.floor : 0, /* 한 판 = 한 층: 우두머리를 잡았으면 그 층을 깼다 · 못 잡았으면 깬 층 없음 */ earned = st.gold - (st.gold0 ?? 0) + lootG, deep0 = S.deep, g = D.finish(S, cleared, earned, min, run.start, xp); S.seen = Date.now(); put(S);
+    const stashSold = D.settleRun(S, st, G.S.w.fantasy, lose, R.party.filter(p => p.merc && p.dead && !lose).map(p => p.merc)); // 짐 → 창고 · 전멸이면 짐 → 그 방 바닥 · 죽은 영웅의 마법 물건 → 쓰러진 방 바닥 (bank 전에)
+    const f = G.S.w.fantasy, xp = D.bank(S, f), ups = Object.entries(S.roster).filter(([c, h]) => h.m.lv > (run.lv0[c] || 0)).map(([c, h]) => [h.m.name, run.lv0[c], h.m.lv]), won = st.done === 'win', cleared = won ? st.floor : 0, /* 한 판 = 한 층: 우두머리를 잡았으면 그 층을 깼다 · 못 잡았으면 깬 층 없음 */ earned = st.gold - (st.gold0 ?? 0) + lootG + stashSold, deep0 = S.deep, g = D.finish(S, cleared, earned, min, run.start, xp); S.seen = Date.now(); put(S);
     document.body.dataset.dive = won ? 'won' : 'result'; document.body.dataset.diveMin = min;
     const items = D.LOOT.filter(e => e.r >= 1).map(e => ({ ...e }));
-    const res = { maps, items, skills: run.skills.slice(), won, how: won ? (st.floor >= D.LAST ? '붉은 성룡을 쓰러뜨렸다' : '승리') : st.done === 'lose' ? '전멸' : '귀환', start: run.start, floor: st.floor, g, earned: Math.max(0, earned), bonus: D.bonusTo(cleared, run.start), min, ups, best: cleared > deep0, lootN: loot.filter(e => !e.gem).length, gemN, lootG, lost: lose && loot.length > 0,  deadN: deadC.length };
+    const res = { maps, items, skills: run.skills.slice(), won, how: won ? (st.floor >= D.LAST ? '붉은 고룡을 쓰러뜨렸다' : '승리') : st.done === 'lose' ? '전멸' : '귀환', start: run.start, floor: st.floor, g, earned: Math.max(0, earned), bonus: D.bonusTo(cleared, run.start), min, ups, best: cleared > deep0, lootN: loot.filter(e => !e.gem).length, gemN, lootG, lost: lose && loot.length > 0,  deadN: deadC.length };
     // 결과 보고서 (2026-11-23): 끝난 이유 · 얻은 것 · 잃은 것 · 쓴 물자 · 영웅마다 레벨 · 경험치 · 피해 · 회복 · 처치 (집계는 D — st.stat)
     const stt = st.stat || { h: {}, fights: 0, foes: 0 }, fin = R.party.filter(p => p.merc), gemL = {};
     for (const e of loot.filter(e => e.gem)) { const q = gemL[e.n] = gemL[e.n] || [e.n, 0, e.gold, e.gem]; q[1] += e.cnt || 1; }
@@ -94,7 +95,7 @@ const DIVEUI = (() => {
       + `<div class="dv-res rp-head"><span class="chip">${r.start === r.floor ? `${r.floor}층` : `${r.start}→${r.floor}층`}</span><span class="chip">${r.min < 1 ? `${Math.round(r.min * 60)}초` : `${r.min}분`}</span><span class="chip">방 +${r.rooms}</span><span class="chip">탐사 ${r.ex}%</span><span class="chip">전투 ${r.fights}</span><span class="chip">처치 ${r.foes}</span></div>`
       + `<h4>${r.chest ? `<img class="rp-chest" src="assets/ll/chest_${r.chest}_open.png" alt="" onerror="this.remove()">` : ''}얻은 것</h4><div class="dv-res"><span class="chip c-gold">${UI.px('coin')} +${r.g}</span>${(r.gems || []).map(([n, c, g, id]) => `<span class="chip">${ico(id ? { gem: id } : null) || UI.px('gem')} ${esc(n)} ×${c} <small>${UI.px('coin')} ${g * c}</small></span>`).join('')}${sup}</div>`
       + ((r.items || []).length ? `<p class="dv-items">${r.items.map(e => `${ico(itemX(e))}<span class="r${e.r}">${D.RARITY[e.r]} · ${esc(e.n)}</span>${e.to ? ` → ${esc(e.to)}` : e.dropped ? ' · 두고 감' : ''}`).join('<br>')}</p>` : '')
-      + ((r.lost || []).length ? `<h4 class="dv-bad">${UI.px('skull')} 잃은 것</h4><p class="rp-lost">${r.lost.map(([n, c, q]) => `<span class="r${q}">${esc(n)}${c > 1 ? ` ×${c}` : ''}</span>`).join(' · ')}</p>` : '')
+      + ((r.lost || []).length ? `<h4 class="dv-bad">${UI.px('chest')} ${r.floor}층에 떨어뜨림</h4><p class="rp-lost">${r.lost.map(([n, c, q]) => `<span class="r${q}">${esc(n)}${c > 1 ? ` ×${c}` : ''}</span>`).join(' · ')}</p>` : '')
       + (revT ? `<p class="rp-rev">${UI.px('skull')} ${r.rev.map(([n, c]) => `${esc(n)} <small>부활 ${UI.px('coin')} ${c}</small>`).join(' · ')}${revT > Math.max(0, r.gold) ? ` <b class="dv-bad">빚 ${revT - Math.max(0, r.gold)}</b>` : ''}</p>` : '')
       + `<ul class="rp-hs">${hs.map(h => `<li class="${h.dead ? 'dead' : ''}"><canvas width="26" height="30"></canvas><b>${esc(h.n)}</b><small>${esc(clsN(h.c))}</small><em>${h.lv1 > h.lv0 ? `Lv ${h.lv0} → <b>${h.lv1}</b>` : `Lv ${h.lv1}`}</em><i>XP +${h.xp.toLocaleString()}</i>${h.dead ? `<i class="dv-bad">${UI.px('skull')} 사망</i>` : h.downs ? `<i class="dv-bad">${UI.px('down')} ${h.downs}</i>` : ''}`
         + (h.tk && Object.keys(h.tk).length ? `<i class="rp-tk">${['취약', '저항', '면역'].filter(w => h.tk[w]).map(w => `${w} ${h.tk[w]}`).join(' · ')}</i>` : '') + `<div class="rp-n">${num(h, 'dmg', '피해')}${num(h, 'took', '받음')}${num(h, 'heal', '회복')}${num(h, 'kills', '처치')}</div></li>`).join('')}</ul>`
@@ -116,12 +117,12 @@ const DIVEUI = (() => {
   // ── 길드 (지도가 첫 화면, 2026-11-23): 위 = 지난 판 한 줄 · 층 고르기(자동 · 가 본 층 탐사 수) / 가운데 = 그 층 지도와 경로 / 아래 = 경로 요약 · 파티 · 원정 출발 / 맨 아래 탭 = 명단 · 해금 · 도감
   //    가로로 낮은 창은 지도 왼쪽 · 나머지 오른쪽 기둥 (app.css)
   let mapFl = null; // 지금 보고 있는 층 (없으면 출발 층)
-  const lastLine = () => { const r = cd?.res; return r ? `<div class="dv-last"><b>${esc(r.how)}</b> · ${r.floor}층 · ${UI.px('coin')} +${r.g} · ${r.min}분${r.best ? ' · 최고 층' : ''}${r.lootN || r.gemN ? (r.lost ? ` · <span class="dv-bad">${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} 잃음</span>` : ` · ${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} · ${UI.px('coin')} +${r.lootG}`) : ''}${r.deadN ? ` · <span class="dv-bad">${UI.px('skull')} 사망 ${r.deadN}</span>` : ''}${upsTxt(r.ups)}${gotTxt(r)}${(r.maps || []).length ? `<p class="dv-maps">${r.maps.map(([f, a, b, d, k]) => `${f}층 ${a}/${b}${d ? ` (+${d})` : ''}${k ? ` · 잠긴 문 ✕${k}` : ''}`).join(' · ')}</p>` : ''}<p class="dv-cnt">${cntTxt()}</p>${(S.lastLog || []).length ? `<ul class="dv-lastlog">${logRows(S.lastLog, 200)}</ul>` : ''}</div>` : ''; }; // 지난 판 한 줄 (누르면 펼친다 — 로그 포함)
+  const lastLine = () => { const r = cd?.res; return r ? `<div class="dv-last"><b>${esc(r.how)}</b> · ${r.floor}층 · ${UI.px('coin')} +${r.g} · ${r.min}분${r.best ? ' · 최고 층' : ''}${r.lootN || r.gemN ? (r.lost ? ` · <span class="dv-bad">${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} 떨어뜨림</span>` : ` · ${[r.lootN ? `전리품 ${r.lootN}` : '', r.gemN ? `보석 ${r.gemN}` : ''].filter(Boolean).join(' · ')} · ${UI.px('coin')} +${r.lootG}`) : ''}${r.deadN ? ` · <span class="dv-bad">${UI.px('skull')} 사망 ${r.deadN}</span>` : ''}${upsTxt(r.ups)}${gotTxt(r)}${(r.maps || []).length ? `<p class="dv-maps">${r.maps.map(([f, a, b, d, k]) => `${f}층 ${a}/${b}${d ? ` (+${d})` : ''}${k ? ` · 잠긴 문 ✕${k}` : ''}`).join(' · ')}</p>` : ''}<p class="dv-cnt">${cntTxt()}</p>${(S.lastLog || []).length ? `<ul class="dv-lastlog">${logRows(S.lastLog, 200)}</ul>` : ''}</div>` : ''; }; // 지난 판 한 줄 (누르면 펼친다 — 로그 포함)
   // 선술집: 장면 · 오른쪽 정보 · 아래 파티 줄 · 지도로
   function inn(box) {
     const team = D.team(S), open = D.classes(S), dc = D.dexCount(S), mini = window.name === MINI; if (!open.includes(inC)) inC = team[0] || open[0];
     box.innerHTML = `<header><h2>원정대 길드</h2><div class="dv-res"><span class="chip c-gold${S.gold < 0 ? ' neg' : ''}">${UI.px('coin')} ${S.gold}</span><span class="chip">최고 ${S.deep}층</span>${S.lastRep ? '<button class="chip dv-repb">보고서</button>' : ''}<button class="chip" data-view>${viewTop() ? '탑뷰' : '쿼터뷰'}</button>${mini ? '' : `<button class="chip" data-tab="mini">${mi('map')}작은 창</button>`}${fsBtn()}</div></header>` + lastLine()
-      + `<div class="in-main"><div class="in-scene"><canvas></canvas><nav class="dv-gtabs"><button data-tab="roster"><span>명단</span></button><button data-tab="tree"><span>${tabDot()}해금 <small>${D.TREE.reduce((a, t) => a + D.step(S, t.id), 0)}/${D.TREE.reduce((a, t) => a + t.cost.length, 0)}</small></span></button><button data-tab="dex"><span>도감 <small>${dc.got}/${dc.all}</small></span></button><button data-tab="go" class="in-go"${team.length ? '' : ' disabled'}><span>지도</span></button></nav><div class="in-who"></div></div><aside class="in-info">${DIVEINN.info(S, inC)}</aside></div>`
+      + `<div class="in-main"><div class="in-scene"><canvas></canvas><nav class="dv-gtabs"><button data-tab="roster"><span>명단</span></button><button data-tab="tree"><span>${tabDot()}해금 <small>${D.TREE.reduce((a, t) => a + D.step(S, t.id), 0)}/${D.TREE.reduce((a, t) => a + t.cost.length, 0)}</small></span></button><button data-tab="dex"><span>도감 <small>${dc.got}/${dc.all}</small></span></button><button data-tab="stash"><span>창고 <small>${(S.stash || []).length}/${D.STASH_CAP}</small></span></button><button data-tab="go" class="in-go"${team.length ? '' : ' disabled'}><span>지도</span></button></nav><div class="in-who"></div></div><aside class="in-info">${DIVEINN.info(S, inC)}</aside></div>`
       + `<div class="in-bot">${DIVEINN.party(S, 'sel')}<button class="dv-go in-go"${team.length ? '' : ' disabled'}>${mi('map')}지도</button></div><p class="dv-dim dv-msg" hidden></p>`;
     DIVEINN.scene(box.querySelector('.in-scene'), S, inC); DIVEINN.faces(box, S); document.body.dataset.inn = open.length;
     box.onpointerdown = () => stopCd(box);
@@ -139,6 +140,7 @@ const DIVEUI = (() => {
       if (b.classList.contains('dv-repb')) return repWin(S.lastRep);
       if (ds.tab === 'roster' || ds.tab === 'tree') return sheet(ds.tab);
       if (ds.tab === 'dex') return dex('m');
+      if (ds.tab === 'stash') return invWin('stash');
       if (ds.tab === 'mini') { const w = window.open(location.pathname, MINI, POP), m = box.querySelector('.dv-msg'); if (w) { w.focus(); m.hidden = true; } else { m.hidden = false; m.textContent = '팝업 차단됨'; } }
     };
   }
@@ -532,13 +534,49 @@ const DIVEUI = (() => {
     st.log.push({ t: risk ? '파티 위험 · 귀환' : planDone ? '경로 완주 · 귀환' : '짐 가득 · 귀환', k: 'dv' }); finish(st, risk ? 'risk' : planDone ? 'plan' : 'full');
   }
   // 원정 중 짐 목록 (위 막대의 짐 칩을 누르면): 남은 물자 · 전리품 이름과 등급 색 · 값
-  function bagPop() {
-    let el = $('dv-bagpop'); if (el) { el.remove(); return; } const st = CRAWL.st; if (!st) return;
-    el = document.createElement('div'); el.id = 'dv-bagpop'; el.onpointerup = ev => ev.stopPropagation(); el.onclick = () => el.remove();
-    const sup = D.SUP_KEYS.filter(k => st.items[k] > 0).map(k => `${ico({ sup: k }) || UI.px(SUP_N[k][1])} ${SUP_N[k][0]} ${k === 'tools' ? '' : st.items[k]}`).join(' · ');
-    el.innerHTML = `<p><b>짐 ${D.bagUsed(st)}/${st.bagCap || 0}</b></p>${sup ? `<p>${sup}</p>` : ''}${(st.loot || []).filter(e => !e.gem).map(e => `<p>${ico(itemX(e))}<span class="r${e.r}">${D.RARITY[e.r]} · ${esc(e.n)}</span> <small>${UI.px('coin')} ${e.gold}</small></p>`).join('')}${(st.loot || []).some(e => e.gem) ? `<p><b>보물</b> ${(st.loot || []).filter(e => e.gem).map(e => `${ico({ gem: e.gem }) || UI.px('gem')} ${esc(e.n)} ×${e.cnt} <small>${UI.px('coin')} ${e.gold * e.cnt}</small>`).join(' · ')}</p>` : ''}`;
-    $('stage').append(el);
+  // ── 인벤토리 · 창고 (2026-11-27 사용자: 「인벤토리라던가 창고 ui는 비슷한 게임들 ui참고해서 잘 만들어봐」) ──
+  //   틀: 왼쪽 영웅 장비 칸(배틀 브라더스 · 다크스트 던전의 인물 칸) · 가운데 물건 격자(칸 수 = 짐 칸 · 창고 칸, 빈 칸도 보인다 — 다크스트 던전의 짐 막대) · 오른쪽 자세히 판(비교 · 영웅마다 끼우기 단추 — 모바일 RPG의 물건 상세)
+  //   등급은 테두리 색 (고급 초록 · 희귀 파랑 · 매우 희귀 보라 · 전설 주황). 원정 중(bag)은 전투 밖에서만 바꾼다 · 넘친 새 물건은 격자 위 줄에 (하나를 버려야 들어온다)
+  const SLOT_IC = { w: 'sword', o: 'shield', a: 'armor', t1: 'ring', t2: 'amulet' };
+  let invSel = null;
+  function invWin(mode, keep) {
+    const run0 = mode === 'bag', st = CRAWL.st; if (run0 && !st) return; if (!keep) invSel = null;
+    const el = $('dv-inv') || (() => { const d = document.createElement('div'); d.id = 'dv-inv'; d.onpointerup = ev => ev.stopPropagation(); d.onpointerdown = ev => ev.stopPropagation(); document.body.append(d); return d; })();
+    const f = G.S.w.fantasy, fight = run0 && !!CRAWL.view()?.fighting;
+    const heroes = run0 ? R.party.filter(p => p.merc && !p.dead).map(p => ({ key: p.merc.uid, n: p.merc.name, lv: p.merc.lv, m: p.merc, cls: p.merc.cls, worn: G.Gear.worn(f, p.merc) }))
+      : D.team(S).concat(Object.keys(S.roster).filter(c => !D.team(S).includes(c) && !S.dead[c])).filter(c => S.roster[c]).map(c => ({ key: c, n: S.roster[c].m.name, lv: S.roster[c].m.lv, m: S.roster[c].m, cls: c, worn: D.stashWorn(S, c) }));
+    const items = run0 ? st.loot || [] : S.stash || [], cap = run0 ? st.bagCap || 0 : D.STASH_CAP, pend = run0 ? st.pend || [] : [];
+    const used = run0 ? D.bagUsed(st) : items.length, sup = run0 ? D.SUP_KEYS.filter(k => st.items[k] > 0) : [];
+    const tile = (e, attr, extra = '') => `<button class="iv-c r${e.r || 0}${extra}" ${attr}>${ico(itemX(e)) || UI.px(e.gem ? 'gem' : { w: 'sword', a: 'armor', s: 'shield', t: 'ring' }[e.sl] || 'dots')}${e.gem && e.cnt > 1 ? `<em>${e.cnt}</em>` : ''}</button>`;
+    const cells = [...sup.map(k => `<span class="iv-c iv-sup">${ico({ sup: k }) || UI.px(SUP_N[k][1])}<em>${st.items[k]}</em></span>`), ...items.map((e, i) => tile(e, `data-i="${i}"`, invSel?.i === i ? ' on' : ''))];
+    const free = Math.max(0, cap - (run0 ? used : items.length)); for (let k = 0; k < free; k++) cells.push('<span class="iv-c iv-empty"></span>');
+    const row = h => `<div class="iv-h"><canvas data-f="${h.cls}" width="26" height="30"></canvas><b>${esc(h.n)}<small>Lv ${h.lv}</small></b><span>${h.worn.map(w => `<button class="iv-s r${w.r || 0}${w.empty ? ' empty' : ''}${invSel?.h === h.key && invSel?.slot === w.slot ? ' on' : ''}" data-h="${h.key}" data-s="${w.slot}">${UI.px(SLOT_IC[w.slot] || 'dots')}</button>`).join('')}</span></div>`;
+    // 자세히 판
+    let det = '<div class="iv-none">' + UI.px('dots') + '</div>';
+    const pick = invSel?.p != null ? pend[invSel.p] : invSel?.i != null ? items[invSel.i] : null;
+    if (pick) { const o = pick.x ? D.xInfo(pick.x) : null;
+      det = `<div class="iv-top">${ico(itemX(pick)) || UI.px('gem')}<b class="r${pick.r || 0}">${esc(pick.n)}</b><small>${pick.gem ? `보석 ×${pick.cnt || 1}` : `${D.RARITY[pick.r || 0]} · ${esc(o?.slotN || '')}`}</small></div>`
+        + (o?.lines?.length ? `<ul class="iv-ln">${o.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '')
+        + (pick.x && invSel.p == null ? `<div class="iv-eq">${heroes.map(h => { const ft = run0 ? D.fitOf(f, h.m, pick.x) : D.stashFit(S, h.cls, pick.x); return `<button data-eq="${h.key}"${ft.ok && !fight ? '' : ' disabled'} data-at="${ft.at || ''}"><b>${esc(h.n)}</b><small>${esc(ft.ok ? ft.cmp : ft.why)}</small></button>`; }).join('')}</div>` : '')
+        + `<div class="iv-act">${invSel.p != null ? '<button data-drop="pend">버리기</button>' : run0 ? `<button data-drop="${invSel.i}"${fight ? ' disabled' : ''}>버리기</button>` : `<button data-sell="${invSel.i}">팔기 ${UI.px('coin')} ${pick.gold || 0}</button>`}</div>`; }
+    else if (invSel?.slot) { const h = heroes.find(q => q.key === invSel.h), w = h?.worn.find(q => q.slot === invSel.slot);
+      if (w) det = `<div class="iv-top">${UI.px(SLOT_IC[w.slot])}<b class="r${w.r || 0}">${esc(w.n)}</b><small>${esc(h.n)} · ${esc(w.slotN || '')}</small></div>${w.sub ? `<ul class="iv-ln"><li>${esc(w.sub)}</li></ul>` : ''}<div class="iv-act">${w.off ? `<button data-off="${w.slot}"${fight ? ' disabled' : ''}>빼기</button>` : ''}</div>`; }
+    el.innerHTML = `<div class="iv-pn"><header><h3>${run0 ? `${mi('inventory')} 짐 ${used}/${cap}` : `${mi('inventory')} 창고 ${items.length}/${cap}`}</h3>${run0 ? '' : `<span class="chip c-gold">${UI.px('coin')} ${S.gold}</span>`}<button class="chip iv-x">닫기</button></header>`
+      + `<div class="iv-body"><div class="iv-party">${heroes.map(row).join('')}</div><div class="iv-mid">${pend.length ? `<div class="iv-pend">${UI.px('warn')}${pend.map((e, k) => tile(e, `data-p="${k}"`, invSel?.p === k ? ' on' : '')).join('')}</div>` : ''}<div class="iv-grid">${cells.join('')}</div></div><div class="iv-det">${det}</div></div></div>`;
+    el.querySelectorAll('canvas[data-f]').forEach((cv, k) => { const m = heroes[k]?.m; const draw = () => { if (cv.isConnected && m && !UI.face(cv, m)) setTimeout(draw, 400); }; draw(); });
+    el.onclick = ev => { const b = ev.target.closest('button'); if (!b || b.disabled) return; const ds = b.dataset;
+      if (b.classList.contains('iv-x')) { el.remove(); invSel = null; if (!run0) guild(); return; }
+      if (ds.i != null) { invSel = { i: +ds.i }; return invWin(mode, true); }
+      if (ds.p != null) { invSel = { p: +ds.p }; return invWin(mode, true); }
+      if (ds.h != null) { invSel = { h: run0 ? +ds.h : ds.h, slot: ds.s }; return invWin(mode, true); }
+      const hero = k => heroes.find(q => String(q.key) === String(k));
+      if (ds.eq != null) { const h = hero(ds.eq); if (run0) D.bagEquip(f, st, invSel.i, h.m, ds.at || null); else { D.stashEquip(S, h.cls, invSel.i, ds.at || null); put(S); } invSel = null; refreshHP?.(); return invWin(mode, true); }
+      if (ds.off) { const h = hero(invSel.h); if (run0) D.bagUnequip(f, st, h.m, ds.off); else { D.stashUnequip(S, h.cls, ds.off); put(S); } invSel = null; return invWin(mode, true); }
+      if (ds.drop != null) { D.bagDrop(st, ds.drop === 'pend' ? 'pend' : +ds.drop); invSel = null; return invWin(mode, true); }
+      if (ds.sell != null) { D.stashSell(S, +ds.sell); put(S); invSel = null; return invWin(mode, true); } };
   }
+  const refreshHP = () => { barK = ''; };
+
   // ── 원정 중 위 바 · 아래 파티 (읽는 것은 CRAWL.view · CRAWL.st) ──
   let barK = '', wasFight = null;
   const ITEM = [['potion', '물약'], ['knockScroll', '열림'], ['torch', '횃불'], ['tools', '도구']];
@@ -549,7 +587,7 @@ const DIVEUI = (() => {
         if (b.classList.contains('dv-spd')) { f.turnX = sp[(sp.indexOf(f.turnX || sp[0]) + 1) % sp.length]; S.spdX = f.turnX; put(S); barK = ''; } // 단계는 f.turnX로 (G.Turn.speed에는 PACE가 곱해져 있다)
         if (b.dataset.z) { setZk(zk * (b.dataset.z > 0 ? 1.2 : 1 / 1.2)); put(S); }
         if (b.classList.contains('dv-quit') && !run.over && !CRAWL.view()?.fighting) finish(CRAWL.st, 'quit'); // 귀환은 방 사이에서만 (전투 중에는 못 돌아간다 — 2026-11-27)
-        if (b.classList.contains('dv-bagchip')) bagPop(); }; } // 돌아가기: 여기까지 번 금화 · 깬 층으로 끝낸다
+        if (b.classList.contains('dv-bagchip')) invWin('bag'); }; } // 돌아가기: 여기까지 번 금화 · 깬 층으로 끝낸다
     if (v.fighting !== wasFight) { wasFight = v.fighting; } // 전투가 끝나면 기본 배율로 (전투 중은 fitZoom)
     const earned = Math.max(0, st.gold - (st.gold0 ?? 0)), ps = v.party.map(p => ({ m: p.m, lv: p.m?.lv || 0, n: p.m?.name || '?', c: clsN(p.m?.cls), hp: Math.max(0, p.hp), max: p.max, xp: p.m ? Math.min(1, (p.m.xp || 0) / G.Guild.needOf(p.m)) : 0, dead: p.dead || p.hp <= 0 }));
     if (run.goldSeen == null) run.goldSeen = earned;
@@ -654,11 +692,12 @@ const DIVEUI = (() => {
     if (n.visited) return { cls: ' seen', html: `<div class="ds-get">${UI.px('down')}</div>` };
     const bonus = pi && D.STATE[pi.k].gate && pi.k !== 'rubble' && !n.hostile; // 잠긴 문 · 봉인 너머의 상자는 한 등급 위
     const get = n.type === 'boss' ? UI.px('crown') + chestImg('gold') : n.type === 'elite' ? chestImg('silver') : n.type === 'treasure' || n.chest ? chestImg(bonus ? 'silver' : 'wood') : n.type === 'fight' ? UI.px('coin') : n.type === 'shop' ? UI.px('coin') + UI.px('arrow') + UI.px('armor') : n.type === 'camp' ? UI.px('tent') : '?';
+    const bag = D.dropsAt(S, st.floor, n.id).length ? `<i class="ds-bag">${UI.px('chest')}</i>` : ''; // 떨어진 장비 (전에 쓰러진 자리)
     const sk = SKULLS[n.type] ? `<span class="ds-sk">${UI.px('skull').repeat(SKULLS[n.type] + (n.tier === 'heavy' ? 1 : 0))}</span>` : '';
     const ob = !pi ? '' : pi.shut ? `<span class="ds-shut">${UI.px(pi.ic)}${D.known(S, pi.k).map(g => UI.px(D.KNACK[g].ic)).join('')}</span>`
       : pi.sk ? `<span class="ds-ok">${UI.px(pi.ic)}<canvas width="26" height="30"></canvas></span>`
         : pi.k === 'sleep' ? '<span class="ds-ok">선공</span>' : pi.ok ? `<span class="ds-ok">${UI.px(pi.ic)}</span>` : `<span class="ds-no">${UI.px(pi.ic)}${esc(pi.tag)}</span>`;
-    return { cls: `${pi?.shut ? ' shut' : ''}${n.type === 'boss' ? ' boss' : ''}`, html: `<div class="ds-get">${get}</div>${sk || ob ? `<div class="ds-need">${sk}${ob}</div>` : ''}`, who: pi?.sk ? pi.who : null, shut: !!pi?.shut };
+    return { cls: `${pi?.shut ? ' shut' : ''}${n.type === 'boss' ? ' boss' : ''}`, html: `<div class="ds-get">${get}${bag}</div>${sk || ob ? `<div class="ds-need">${sk}${ob}</div>` : ''}`, who: pi?.sk ? pi.who : null, shut: !!pi?.shut };
   }
   // 다음 방 고르기 (2026-11-26 — Dungeon of the Endless · 하데스처럼): 창을 띄우지 않고 이 방의 문 위에 그 너머 방 종류 · 상태 표지. 표지를 누르면 그 문으로.
   //   위 왼쪽 작은 줄: 물자 · 야영 · 층 지도. 지나온 방은 건너뛴다 (2026-11-27): 층 지도에서 가 본 방을 거쳐 닿는 방을 바로 고른다 (G.Dive.routes — 드는 물자가 방마다 보인다) · 새 방으로 가는 문이 없으면 지도부터 띄운다
@@ -742,7 +781,7 @@ const DIVEUI = (() => {
   function frame(dt) {
     if (!R) return;
     if (run && run.over) return; // 끝난 뒤에는 탐사를 멈춘다 (결과 창 아래)
-    CRAWL.frame(dt); doorTick(); if (run) { cardTick(); if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); gateTick(); D.statTick(CRAWL.st, R); bar(); cdTick(); skillSee(); keySee(); waveSee(); logPoll(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
+    CRAWL.frame(dt); doorTick(); if (run) { cardTick(); if (CRAWL.st?.pend?.length && !CRAWL.view()?.fighting && !$('dv-inv') && !run.over) invWin('bag'); /* 짐이 넘쳤다: 무엇을 버릴지 */ if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); gateTick(); D.statTick(CRAWL.st, R); bar(); cdTick(); skillSee(); keySee(); waveSee(); logPoll(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
   }
   return { world, attach, frame, zoom, camAt, chest: k => chestShow(k), get on() { return ON && on; }, get zk() { return zk; } };
 })();

@@ -845,7 +845,7 @@ body.dive #pmapbox.big { height:min(72vh, 560px) !important; background:#e6cf9c;
 #dv-rep .rp-why { display:flex; align-items:center; gap:8px; margin:0; } #dv-rep .rp-why .px { width:22px; height:22px; } #dv-rep .rp-why small { font-size:13px; color:var(--dim); }
 #dv-rep .rp-lose { color:#ff6a55; } #dv-rep .rp-win { color:var(--gold); } #dv-rep .rp-plan, #dv-rep .rp-full, #dv-rep .rp-risk, #dv-rep .rp-quit, #dv-rep .rp-back { color:#9fe79f; }
 #dv-rep header { border-bottom:2px solid currentColor; } #dv-rep .rp-head { margin:8px auto; } #dv-rep h4 { margin:10px auto 4px; }
-#dv-rep .rp-lost { margin:0 auto; font-size:12px; opacity:.75; text-decoration:line-through; } #dv-rep .rp-rev { font-size:12px; margin:6px auto; }
+#dv-rep .rp-lost { margin:0 auto; font-size:12px; opacity:.75; } #dv-rep .rp-rev { font-size:12px; margin:6px auto; }
 #dv-rep .rp-hs { list-style:none; padding:0; margin:10px auto; display:grid; gap:6px; }
 #dv-rep .rp-hs li { display:grid; grid-template-columns:30px 1fr auto; grid-template-areas:"f n l" "f c x" "s s s"; column-gap:8px; align-items:center; padding:6px 8px; background:#150e09; border:1px solid #3b2b1c; }
 #dv-rep .rp-hs li.dead { border-color:#7a2a20; } #dv-rep .rp-hs canvas { grid-area:f; width:26px; height:30px; image-rendering:pixelated; }
@@ -997,3 +997,44 @@ canvas.sil { filter:brightness(.32); }
 #dvdepsvg .dp-z { fill:rgba(120,200,255,.13); stroke:rgba(150,215,255,.35); stroke-width:1; }
 #dvdepsvg .dp-to { fill:rgba(255,212,90,.45); stroke:#ffd45a; stroke-width:1.5; }
 #dvdepsvg .dp-p { fill:none; stroke:#9fd8ff; stroke-width:2; } #dvdepsvg .dp-p.on { stroke:#ffd45a; stroke-width:3; }
+
+/* ── 인벤토리 · 창고 (2026-11-27): 왼쪽 영웅 장비 칸 · 가운데 물건 격자 · 오른쪽 자세히. 모니터에서는 가운데 고정 크기 ── */
+#dv-inv { position:fixed; inset:0; z-index:90; background:rgba(8,5,4,.6); font-family:"Galmuri11",sans-serif; color:#f3e4c3; }
+#dv-inv .iv-pn { position:absolute; left:50%; top:50%; width:min(820px, calc(100vw - 12px)); height:min(372px, calc(100vh - 12px)); transform:translate(-50%,-50%); display:flex; flex-direction:column; background:#160f0a; border:2px solid #0a0604; box-shadow:inset 0 0 0 1px #6a4a2a, 0 18px 40px rgba(0,0,0,.6); border-radius:6px; overflow:hidden; }
+#dv-inv header { display:flex; align-items:center; gap:8px; height:34px; padding:0 10px; background:linear-gradient(#3a2618, #2a1a10); border-bottom:1px solid #0a0604; }
+#dv-inv header h3 { margin:0; font-size:14px; display:flex; align-items:center; gap:4px; } #dv-inv header .iv-x { margin-left:auto; }
+#dv-inv .iv-body { flex:1; min-height:0; display:grid; grid-template-columns:236px 1fr 240px; }
+#dv-inv .iv-party { overflow-y:auto; padding:6px; border-right:1px solid #3b2b1c; background:#120c08; }
+#dv-inv .iv-h { display:grid; grid-template-columns:30px 1fr; grid-template-rows:auto auto; column-gap:6px; padding:5px; margin-bottom:5px; background:#1c130d; border:1px solid #3b2b1c; border-radius:4px; }
+#dv-inv .iv-h canvas { grid-row:1 / 3; width:30px; height:34px; image-rendering:pixelated; align-self:center; }
+#dv-inv .iv-h b { font-size:12px; } #dv-inv .iv-h b small { margin-left:5px; color:#a8957a; font-weight:400; font-size:10px; }
+#dv-inv .iv-h > span { display:flex; gap:3px; margin-top:3px; }
+#dv-inv .iv-s, #dv-inv .iv-c { --rc:#5a4a38; position:relative; display:grid; place-items:center; padding:0; background:#0e0907; border:2px solid var(--rc); border-radius:4px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.6); cursor:pointer; color:#cdbb98; }
+#dv-inv .iv-s { width:30px; height:30px; } #dv-inv .iv-s .px { width:14px; height:14px; }
+#dv-inv .iv-s.empty { border-style:dashed; opacity:.55; }
+#dv-inv .r1 { --rc:#4fae5a; } #dv-inv .r2 { --rc:#3f86d8; } #dv-inv .r3 { --rc:#9a62d8; } #dv-inv .r4 { --rc:#e0952e; box-shadow:inset 0 0 0 1px rgba(0,0,0,.6), 0 0 6px rgba(224,149,46,.6); }
+#dv-inv .iv-s.on, #dv-inv .iv-c.on { outline:2px solid #ffe08a; outline-offset:1px; }
+#dv-inv .iv-mid { overflow-y:auto; padding:8px; }
+#dv-inv .iv-pend { display:flex; align-items:center; gap:5px; padding:5px 6px; margin-bottom:8px; background:rgba(160,48,42,.25); border:1px solid #a8302a; border-radius:4px; color:#ff8a6a; }
+#dv-inv .iv-grid { display:grid; grid-template-columns:repeat(auto-fill, 46px); gap:5px; }
+#dv-inv .iv-c { width:46px; height:46px; } #dv-inv .iv-c img { width:34px; height:34px; image-rendering:pixelated; } #dv-inv .iv-c .px { width:18px; height:18px; }
+#dv-inv .iv-c em { position:absolute; right:2px; bottom:0; font-style:normal; font-size:10px; font-weight:700; color:#fff; text-shadow:1px 1px 0 #000; }
+#dv-inv .iv-empty { border-style:dashed; border-color:#3b2b1c; background:transparent; cursor:default; box-shadow:none; }
+#dv-inv .iv-sup { cursor:default; border-color:#6a5a40; }
+#dv-inv .iv-det { overflow-y:auto; padding:8px; border-left:1px solid #3b2b1c; background:#120c08; }
+#dv-inv .iv-none { height:100%; display:grid; place-items:center; color:#4a3a2a; } #dv-inv .iv-none .px { width:24px; height:24px; }
+#dv-inv .iv-top { display:grid; grid-template-columns:40px 1fr; column-gap:8px; align-items:center; margin-bottom:6px; }
+#dv-inv .iv-top > img, #dv-inv .iv-top > .px { grid-row:1 / 3; width:40px; height:40px; image-rendering:pixelated; }
+#dv-inv .iv-top b { font-size:13px; } #dv-inv .iv-top small { font-size:10px; color:#a8957a; }
+#dv-inv .iv-ln { list-style:none; margin:0 0 8px; padding:6px 8px; background:#1c130d; border:1px solid #3b2b1c; border-radius:4px; font-size:11px; color:#e8d8b8; } #dv-inv .iv-ln li { line-height:16px; }
+#dv-inv .iv-eq { display:grid; gap:4px; margin-bottom:8px; }
+#dv-inv .iv-eq button { display:grid; text-align:left; padding:4px 8px; background:#2a1c12; border:1px solid #6a4a2a; border-radius:4px; color:#f3e4c3; cursor:pointer; }
+#dv-inv .iv-eq button b { font-size:12px; } #dv-inv .iv-eq button small { font-size:10px; color:#9fd89f; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#dv-inv .iv-eq button:disabled { opacity:.45; cursor:default; } #dv-inv .iv-eq button:disabled small { color:#c09a8a; }
+#dv-inv .iv-act { display:flex; gap:6px; } #dv-inv .iv-act button { flex:1; padding:6px; background:#3a1c16; border:1px solid #a8302a; border-radius:4px; color:#ffb0a0; cursor:pointer; font-family:inherit; }
+#dv-inv .iv-act button:disabled { opacity:.45; }
+@media (max-width:700px) { #dv-inv .iv-body { grid-template-columns:180px 1fr 190px; } }
+.dv-door .ds-bag { margin-left:2px; color:#ffd45a; } .dv-door .ds-bag .px { width:14px; height:14px; }
+/* 원정 중 지도: 어두운 돌 빛 (2026-11-27) — 판 테두리는 다른 HUD 판(인벤토리 · 문 표지)과 같은 검은 선 + 안쪽 갈색 */
+body.dive #pmapbox { background:#0e0a08 !important; border:2px solid #0a0604 !important; box-shadow:inset 0 0 0 1px #6a4a2a, 0 4px 14px rgba(0,0,0,.6) !important; border-radius:4px !important; }
+body.dive #pmapbox.big { background:#0e0a08 !important; } body.dive #pmapbox .dvpm-t { color:#f3e4c3; }

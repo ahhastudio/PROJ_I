@@ -100,12 +100,12 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
 // 아이템 등급
 { const I = D.dexItems(); t('아이템 도감: SRD 마법 물건 (등급 1~4 모두)', I.length > 100 && [1, 2, 3, 4].every(r => I.some(x => x.r === r)) && I.some(x => x.n === '마법 무기 +3'), I.length);
   const cnt = fl => { const c = [0, 0, 0, 0, 0]; let x = 7; const rng = () => (x = (x * 16807) % 2147483647) / 2147483647; for (let i = 0; i < 4000; i++) c[D.pickR(fl, 'fight', rng)]++; return c; };
-  const a = cnt(1), b = cnt(10); t('희귀도: 1층은 고급 위주 · 매우 희귀 이상 없음', a[1] > a[2] && !a[3] && !a[4], a.join());
-  t('희귀도: 10층은 매우 희귀 · 전설이 실제로 (각 10% 넘게)', b[3] / 4000 > 0.25 && b[4] / 4000 > 0.1, b.join());
-  t('정예 · 보물 방은 한 구역 깊은 표', (() => { let x = 3; const rng = () => (x = (x * 16807) % 2147483647) / 2147483647; let n = 0; for (let i = 0; i < 2000; i++) if (D.pickR(7, 'treasure', rng) >= 3) n++; return n / 2000 > 0.35; })());
+  const a = cnt(1), b = cnt(20); t('희귀도: 1층은 고급 위주 · 매우 희귀 이상 없음', a[1] > a[2] && !a[3] && !a[4], a.join());
+  t('희귀도: 20층(용의 둥지)은 매우 희귀 · 전설이 실제로 (각 10% 넘게)', b[3] / 4000 > 0.25 && b[4] / 4000 > 0.1, b.join());
+  t('정예 · 보물 방은 한 구역 깊은 표', (() => { let x = 3; const rng = () => (x = (x * 16807) % 2147483647) / 2147483647; let n = 0; for (let i = 0; i < 2000; i++) if (D.pickR(13, 'treasure', rng) >= 3) n++; return n / 2000 > 0.35; })());
   const s = D.fresh(), F = (G.newState(), G.S.w.fantasy), r = G.Fantasy.rt(F), ms = [D.member(F, 'dragoon', 5)]; D.LOOT.length = 0;
   const g = D.POL.gear(F, ms, [{ kind: 'art', k: 'it_weapon_3' }, { kind: 'art', k: 'it_weapon_1' }], 9);
-  t('주운 것은 LOOT에 (등급 · 낀 사람 · 값) — +3을 끼고, 더 낮은 +1은 그 자리에서 팔지 않는다 (짐으로)', D.LOOT.length === 2 && D.LOOT[0].r === 3 && D.LOOT[0].to === ms[0].name && D.LOOT[1].to === null && D.LOOT[1].gold > 0 && g === 0, JSON.stringify(D.LOOT)); }
+  t('주운 것은 LOOT에 (등급 · 값) — 아무에게도 저절로 끼우지 않는다 (2026-11-27 인벤토리)', D.LOOT.length === 2 && D.LOOT[0].r === 3 && !D.LOOT[0].to && D.LOOT[1].gold > 0 && g === 0 && !G.Trinket.all(F).some(t => t.on === ms[0].uid), JSON.stringify(D.LOOT)); }
 
 { const F = (G.newState(), G.S.w.fantasy), m = D.member(F, 'cleric', 9), lv = m.lv, ab = JSON.stringify(m.ab), other = G.Builds.LIST.find(b => b.cls === 'cleric' && b.id !== m.build);
   t('빌드 바꾸기: 레벨 · 능력치는 그대로, 빌드와 스킬 칸이 바뀐다', D.rebuild(m, other.id) && m.build === other.id && m.lv === lv && JSON.stringify(m.ab) === ab && G.Builds.view(m).n === other.n && !D.rebuild(m, 'fighter')); }
@@ -224,7 +224,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   const st = { items: { torch: 2, camp: 1 }, bagCap: 4, loot: [], log: [] }; // 짐 칸은 횃불만 센다
   D.stow(st, { n: 'a', gold: 50 }); D.stow(st, { n: 'b', gold: 10 }); const out = D.stow(st, { n: 'c', gold: 30 });
   t('짐이 차면 값이 가장 낮은 전리품부터 두고 간다 (물자는 그대로)', out.length === 1 && out[0].n === 'b' && st.items.torch === 2 && st.loot.map(e => e.n).join() === 'a,c' && D.bagFull(st));
-  t('살아 돌아오면 전리품 값', D.lootGold(st) === 80);
+  t('돌아와 금화가 되는 것은 보석뿐 (장비는 창고로)', D.lootGold(st) === 0 && D.lootGold({ loot: [{ gem: 'g', gold: 40, cnt: 2 }, { n: 'x', gold: 99, x: {} }] }) === 80);
   // 경로 끝 · 가득 차면 복귀 · 사망 시 멈춤: 설정은 저장된다
   const s3 = D.fresh(); s3.endMode = 'back'; s3.fullBack = true; s3.deadStop = false; s3.bag = { torch: 1, potion: 0, knockScroll: 0, tools: 0 }; s3.dead = { mage: true };
   const o = D.load(D.dump(s3)); t('설정 · 짐 구성 · 사망자가 저장된다', o.endMode === 'back' && o.fullBack && !o.deadStop && o.bag.torch === 1 && o.dead.mage);
@@ -264,7 +264,23 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   const V3 = D.view(s3, 1), lk = V3.map.edges.find(e => e.kind === 'locked' && (e.lock || 'lock') === 'lock' && !V3.map.nodes[e.b].hostile); lk.seen.lock = true;
   const g1 = D.gateTxt(s3, V3, lk); s3.party = ['dragoon', 'rogue']; const g2 = D.gateTxt(s3, D.view(s3, 1), Object.assign(D.view(s3, 1).map.edges[lk.id], { seen: { lock: true } })); s3.party = ['rogue']; s3.party = []; const g3 = D.gateTxt({ ...s3, party: ['cleric'], roster: { cleric: { m: ST(H('cleric', 3), 10), tr: [] } }, up: { cls: 4 } }, V3, lk);
   t('지도의 문: 넘는 사람(조용한 재주 먼저) · 없으면 닫힘', g1 === '잠긴 문 · 파이터' && g2 === '잠긴 문 · 로그' && g3 === '잠긴 문 · 닫힘', [g1, g2, g3]);
-  // 기존 게임은 원형 표 그대로
+  
+// 인벤토리 · 창고 · 떨어진 장비 (2026-11-27)
+{ const s = D.fresh(), map = RUN.newRun(D.floorSeed(s, 3), ['fighter'], 3), st = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3), { f, r } = D.world(s, map); D.outfit(st, r, s); st.bagCap = 2; st.loot = []; st.items = { torch: 0, camp: 0 };
+  const E = k => D.entryOf({ kind: 'magic', t: { k, rand: null, base: null, lv: 3 } });
+  D.bagAdd(st, E('it_weapon_1')); D.bagAdd(st, E('it_weapon_1')); const ok3 = D.bagAdd(st, E('it_weapon_2'));
+  t('짐이 차면 새 물건은 기다리는 줄 (저절로 버리지 않는다)', !ok3 && st.loot.length === 2 && st.pend.length === 1);
+  st.at = 4; D.bagDrop(st, 0); t('짐에서 버리면 그 방 바닥에 · 기다리던 것이 짐으로', st.loot.length === 2 && !st.pend.length && D.dropsAt(s, st.floor, 4).length === 1);
+  const st2 = { floor: st.floor, at: 4, loot: [], items: {}, bagCap: 5, here: {}, log: [] }; D.pickDrops(s, st2); t('그 방에 들어서면 떨어진 것을 짐으로', st2.loot.length === 1 && !D.dropsAt(s, st.floor, 4).length);
+  const sold = D.settleRun(s, st, f, false, []); t('살아 돌아오면 짐의 장비는 창고로 (팔지 않는다)', s.stash.length === 2 && sold === 0 && !st.loot.length);
+  s.stash.length = D.STASH_CAP; s.stash.fill(E('it_weapon_1')); st.loot = [E('it_weapon_2')]; const sold2 = D.settleRun(s, st, f, false, []); t('창고가 차면 넘친 것은 반값에 판다', s.stash.length === D.STASH_CAP && sold2 > 0);
+  st.loot = [E('it_weapon_2'), { gem: 'g', n: '보석', gold: 30, cnt: 1 }]; st.at = 6; D.settleRun(s, st, f, true, []); t('전멸하면 짐(보석까지)이 그 방 바닥에', D.dropsAt(s, st.floor, 6).length === 2);
+  const m = r.party[0].merc, t0 = G.Trinket.all(f).length; G.Trinket.all(f).push({ id: 999, k: 'it_weapon_1', lv: 3, on: m.uid }); st.died = { [m.uid]: 7 }; st.loot = []; D.settleRun(s, st, f, false, [m]); t('죽은 영웅이 낀 마법 물건은 쓰러진 방 바닥에', D.dropsAt(s, st.floor, 7).length === 1 && G.Trinket.all(f).length === t0);
+  s.stash = [E('it_weapon_1')]; s.roster.dragoon = s.roster.dragoon || { m: D.member(G.S.w.fantasy, 'dragoon', 3), tr: [] }; const res = D.stashEquip(s, 'dragoon', 0);
+  t('창고 → 영웅 (엔진 규칙대로) · 창고에서 빠지고 바꾼 무기가 창고로', res === true && !s.stash.some(e => e.x?.t?.k === 'it_weapon_1') && s.roster.dragoon.tr.some(q => q.k === 'it_weapon_1'), [res, JSON.stringify(s.stash).slice(0, 200), JSON.stringify(s.roster.dragoon.tr)]);
+  const a0 = s.roster.dragoon.m.eq.a; D.stashUnequip(s, 'dragoon', 'a'); t('영웅 → 창고 (방어구 벗기 — 무기는 바꿔 들 뿐 벗지 않는다)', a0 && a0 !== 'none' && s.roster.dragoon.m.eq.a === 'none' && s.stash.some(e => e.x?.e?.k === a0), [a0, s.roster.dragoon.m.eq.a]);
+  const g0 = s.gold, v = D.stashSell(s, 0); t('창고에서 팔기 (반값)', v > 0 && s.gold === g0 + v); }
+// 기존 게임은 원형 표 그대로
   const X0 = RUN.X; RUN.X = undefined; const st5 = RUN.newRun(3, ['rogue'], 3), ck = RUN.checkers(st5, { skill: '은신' })[0]; RUN.X = X0;
   t('기존 게임(RUN.X 없음)은 원형 표 그대로', ck.bonus === RUN.CLS.rogue.sk.은신);
 }
@@ -431,7 +447,8 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 { const s = D.fresh(); s.party = ['dragoon']; const map = { w: 10, h: 10, c: new Array(100).fill('.') };
   G.newState(); const f0 = G.S.w.fantasy; s.roster.dragoon = { m: D.member(f0, 'dragoon', 3), tr: [] };
   const st = RUN.newRun(3, ['fighter'], 1), { f, r } = D.world(s, map); D.outfit(st, r, s); const m = r.party[0].merc, hit0 = G.Dnd.hit({ merc: m }), wk = G.SRD.eq(m).w;
-  D.POL.gear(f, [m], [{ kind: 'art', k: 'it_weapon_1', base: wk }], 3); const wr = G.Gear.worn(f, m).find(q => q.slot === 'w');
+  D.POL.gear(f, [m], [{ kind: 'art', k: 'it_weapon_1', base: wk }], 3); const bi = st.loot.findIndex(e => e.x?.t?.k === 'it_weapon_1'), eqd = D.bagEquip(f, st, bi, m); const wr = G.Gear.worn(f, m).find(q => q.slot === 'w');
+  t('짐의 물건을 끼운다 (bagEquip) · 짐에서 빠진다', bi >= 0 && eqd === true && !st.loot.some(e => e.x?.t?.k === 'it_weapon_1'), [bi, eqd]);
   t('규칙: 주운 +1 무기는 무기 칸 (장신구 칸이 아님) · 실제 명중 +1', /\+1/.test(wr.n) && G.Gear.worn(f, m).filter(q => /^t/.test(q.slot)).every(q => q.empty) && G.Dnd.hit({ merc: m }) === hit0 + 1, [wr.n, hit0, G.Dnd.hit({ merc: m })]);
   D.bank(s, f); const Q = D.sheetOf(s.roster.dragoon);
   t('길드 상태창: 그 물건은 무기 칸(w) · 명중 · 기본 공격 피해에 +1 (원정 전투와 같은 값)', Q.items.length === 1 && Q.items[0].slot === 'w' && Q.hit === hit0 + 1 && G.Trinket.all(G.S.w.fantasy).every(t => t.on !== -9001), [Q.items.map(x => x.slot), Q.hit, hit0]);
@@ -517,5 +534,8 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   const F0 = D.depForm(s, P1, Z1), me = P1.find(p => G.Dnd.melee(p)), ca = P1.find(p => !G.Dnd.melee(p)), a0 = F0.get(me), b0 = F0.get(ca); F0.set(me, b0); F0.set(ca, a0); D.depSave(s, Z1, F0);
   const F1 = D.depForm(D.load(D.dump(s)), P1, Z1); t('배치: 옮긴 자리(줄 · 줄 안 차례)는 저장에 남아 다음 전투의 기본 진형', s.form[me.merc.cls][0] === 'b' && s.form[ca.merc.cls][0] === 'f' && String(F1.get(me)) === String(b0) && String(F1.get(ca)) === String(a0), JSON.stringify(s.form)); }
 
+{ const F = (G.newState(), G.S.w.fantasy), ms = ['dragoon', 'mage', 'cleric', 'archer', 'rogue'].map(c => D.member(F, c, 9)); let bad = [], n = 0; let x = 11; const rng = () => (x = (x * 16807) % 2147483647) / 2147483647;
+  for (let fl = 1; fl <= 20; fl += 3) for (let i = 0; i < 60; i++) { const d = G.Gear.roll(fl, 'treasure', rng, F, ms.map(m => ({ merc: m }))); for (const q of [].concat(d || [])) if (q?.kind === 'art') { n++; if (D.gearBan(G.D.ARTS[q.k])) bad.push(G.D.ARTS[q.k].n); } }
+  t('원정 전리품에 충전식 · 탐험용 · 효과 없는 마법 물건이 나오지 않는다', n > 20 && !bad.length, [n, bad.slice(0, 5)]); }
 console.log(`dive_rules: 통과 ${ok} · 실패 ${bad}`);
 process.exit(bad ? 1 : 0);

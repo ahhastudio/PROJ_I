@@ -21,7 +21,8 @@ G.Gear = (() => {
   const P_MAGIC = { fight: 0.3, elite: 0.6, boss: 1, treasure: 0.7, shop: 1 }; // 마법 물건일 확률 (아니면 기본 장비). 1 · 2층은 절반
   const N_DROP = { fight: 0.15, elite: 1, boss: 2, treasure: 1 };             // 방 종류 → 나오는 수 (1 미만은 확률)
   const PRICE_R = [0, 120, 300, 700, 1500];          // 상인: 마법 물건 값 (금화)
-  const cap = (floor, type) => (type === 'boss' && floor >= 9 ? 4 : R_CAP[Math.max(0, Math.min(9, floor - 1))]);
+  const f10 = floor => (G.Gear.half ? Math.ceil(floor / 2) : floor); // 원정(20층)은 10층용 표에 반으로 맞춘다 — G.Dive.hook이 켠다
+  const cap = (floor, type) => (type === 'boss' && f10(floor) >= 9 ? 4 : R_CAP[Math.max(0, Math.min(9, f10(floor) - 1))]);
   const alive = party => (party || []).filter(p => p.merc && !p.dead).map(p => p.merc);
 
   // ── SRD 표기: 물건의 갈래 · 될 수 있는 종류 · 조율 ──
@@ -104,7 +105,7 @@ G.Gear = (() => {
   const pickW = (list, w, rng) => { let x = rng() * list.reduce((a, q) => a + w(q), 0); for (const q of list) if ((x -= w(q)) < 0) return q; return list[list.length - 1] || null; };
   // 기본 장비: 지금 파티 누군가가 숙련이 있고, 지금 든 것보다 나은 것만 (그 층의 값 상한 안)
   function rollBase(floor, rng, f, party) {
-    const ms = alive(party), gp = GP_CAP[Math.max(0, Math.min(9, floor - 1))], have = new Set((f.gearBag || []).map(e => e.slot + e.k)), out = [];
+    const ms = alive(party), gp = GP_CAP[Math.max(0, Math.min(9, f10(floor) - 1))], have = new Set((f.gearBag || []).map(e => e.slot + e.k)), out = [];
     const add = (slot, k, gpv) => { if (gpv > gp || have.has(slot + k)) return; const gain = Math.max(0, ...ms.map(m => better(m, { kind: 'base', slot, k }))); if (gain > 0) out.push({ kind: 'base', slot, k, gain }); };
     for (const k in S().WEAPON) if (!S().WEAPON[k].hidden) add('w', k, S().WEAPON[k].gp || 0);
     for (const k in S().ARMOR) if (k !== 'none') add('a', k, S().ARMOR[k].gp || 0);
@@ -127,10 +128,10 @@ G.Gear = (() => {
     const made = (d, t) => { const kd = kindOf(t); if (kd === 'weapon' || kd === 'armor') { const base = bind(def(t), ms, rng); return base ? { ...d, base } : null; } return ms.some(m => can(m, { kind: 'magic', t }, f).ok) ? d : null; };
     const art = k => made({ kind: 'art', k }, { k, id: 0 }), rand = rd => made({ kind: 'rand', rand: rd }, { rand: rd, id: 0 });
     const tryArts = ks => { for (const k of ks.slice().sort(() => rng() - 0.5).slice(0, 24)) { const d = art(k); if (d) return d; } return null; };
-    if (G.Gear.noRand || rng() < 0.6) { const d = tryArts(Object.keys(A).filter(k => (A[k].r || 1) === r && A[k].props?.length && !own.has(k))); if (d) return d; }
+    if (G.Gear.noRand || rng() < 0.6) { const d = tryArts(Object.keys(A).filter(k => (A[k].r || 1) === r && A[k].props?.length && !own.has(k) && !G.Gear.ban?.(A[k]))); if (d) return d; }
     // noRand: 랜다트(지어낸 이름의 물건) 없이 SRD 물건만 (원정 모드)
     for (let i = 0; i < 16 && !G.Gear.noRand; i++) { const rd = T().randart(floor * 4); if (rd.r <= c) { const d = rand(rd); if (d) return d; } }
-    return tryArts(Object.keys(A).filter(k => (A[k].r || 1) <= (G.Gear.pickR ? r : c) && A[k].props?.length && !own.has(k)));
+    return tryArts(Object.keys(A).filter(k => (A[k].r || 1) <= (G.Gear.pickR ? r : c) && A[k].props?.length && !own.has(k) && !G.Gear.ban?.(A[k])));
   }
   // 하나 굴린다. type = fight | elite | boss | treasure | shop
   function roll(floor, type, rng = Math.random, f = G.S.w.fantasy, party = []) {
