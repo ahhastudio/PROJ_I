@@ -625,6 +625,8 @@ canvas { image-rendering:pixelated; }
 .dv-panel .dv-res { display:flex; flex-wrap:wrap; gap:5px; }
 .dv-panel .chip, #dv-bar .chip { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border:1px solid var(--brass, #8a6c3a); border-radius:2px; background:#150e09; font:600 12px "Galmuri11","Noto Sans KR",sans-serif; white-space:nowrap; }
 .dv-panel .c-gold, #dv-bar .c-gold { color:#ffd98a; }
+.dv-flash { animation:dvflash .7s ease-out; } @keyframes dvflash { 0% { filter:brightness(2.2); transform:scale(1.18); } 100% { filter:none; transform:none; } } /* 금화가 오를 때 · 굶주릴 때 물자 칸 */
+#dv-pick .pk-sup.dv-flash { color:#ff8a6a; }
 .dv-panel button, #dv-bar button { font:inherit; color:var(--ink); cursor:pointer; border:1px solid var(--wood-lo, #000); border-radius:2px; background:linear-gradient(#4b3824, #33251a); }
 .dv-panel button:disabled, #dv-bar button:disabled { cursor:default; opacity:.55; }
 .dv-tree { display:grid; grid-template-columns:1fr; gap:6px; }
@@ -705,6 +707,7 @@ body.dive .r0 { color:#cdbb98 !important; } body.dive .r1 { color:#6fd06a !impor
 #dv-hero .dv-stat { grid-template-columns:repeat(4, 1fr) !important; }
 #dv-hero .hs-items { list-style:none; padding:0; display:grid; gap:4px; } #dv-hero .hs-items li { padding:5px 8px; background:#150e09; border:1px solid #3b2b1c; font-size:12px; display:grid; grid-template-columns:1fr auto; } #dv-hero .hs-items span { grid-column:1 / -1; color:var(--dim); font-size:11px; }
 #dv-hero .hs-sk { list-style:none; padding:0; display:grid; grid-template-columns:repeat(3, 1fr); gap:5px; } #dv-hero .hs-sk li { padding:6px 7px; min-height:44px; box-sizing:border-box; background:#150e09; border:1px solid #3b2b1c; font-size:12px; } #dv-hero .hs-sk li b { display:block; } #dv-hero .hs-sk li small { color:var(--dim); font-size:11px; }
+#dv-hero .hs-sk li.hs-skl { cursor:pointer; position:relative; padding-left:34px; } #dv-hero .hs-sk li.hs-skl > img { position:absolute; left:6px; top:50%; width:24px; height:24px; margin-top:-12px; image-rendering:pixelated; } #dv-pop h4 img { width:20px; height:20px; vertical-align:-4px; image-rendering:pixelated; }
 #dv-hero .dv-stat .hs-atk { border-left:3px solid #e0604a; } #dv-hero .hs-sk li.hs-lock { opacity:.5; }
 .dx-grid.dx-i { grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); }
 /* 원정 모드 화면 정리 (2026-11-23): 탐사 기록 줄 · 차례 띠 아래 행동 줄 없이, 위 막대는 늘 한 줄, 아래는 파티 카드 */

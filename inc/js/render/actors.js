@@ -40,14 +40,17 @@ function settle(r, dt) {
   const X = G.Turn.speed(G.S.w.fantasy) || 1; // 배속
   // 보이는 위치: 속도 상한을 두고 진짜 위치를 쫓는다. 벽이 가로막으면 길을 따라 돌아가고, 길이 없거나 너무 멀면 바로 옮긴다
   const GR = G.Grid, clear = (x0, y0, x1, y1) => GR.walkable(m, x0, y0, x1, y1), via = { x: 0, y: 0 };
+  // 탐험 중 같은 칸에 선 같은 편: 그림의 목표를 화면 가로로 MIN_D보다 조금 넓게 벌린다 (2026-11-27 — 전에는 밀어내기와 진짜 자리 쫓기가 프레임마다 싸워 가만히 서서 떨었다)
+  const off = new Map(); if (!r.turn) { const gs = []; for (const e of es) { const g = gs.find(q => q.mon === (e.kind === 'mon') && Math.abs(q.x - e.x) < .3 && Math.abs(q.y - e.y) < .3); if (g) g.L.push(e); else gs.push({ mon: e.kind === 'mon', x: e.x, y: e.y, L: [e] }); }
+    for (const g of gs) if (g.L.length > 1) g.L.forEach((e, j) => { const k = (j - (g.L.length - 1) / 2) * MIN_D * 1.1 * .71; if (open(e.x + k, e.y - k)) off.set(e, k); }); }
   for (const e of es) {
     if (e._dx == null) { e._dx = e.x; e._dy = e.y; }
     e._ldx = e._dx; e._ldy = e._dy;
-    const dx = e.x - e._dx, dy = e.y - e._dy, d = Math.hypot(dx, dy);
-    if (d > SNAP_D) { e._dx = e.x; e._dy = e.y; continue; } // 층 이동 · 소환 같은 진짜 이동만
+    const k0 = off.get(e) || 0, tx = e.x + k0, ty = e.y - k0, dx = tx - e._dx, dy = ty - e._dy, d = Math.hypot(dx, dy);
+    if (d > SNAP_D) { e._dx = tx; e._dy = ty; continue; } // 층 이동 · 소환 같은 진짜 이동만
     if (d < .001) continue;
     const step = Math.min(d, DISP_V * X * dt); // 걷는 속도는 늘 같다 (초당 8칸 × 배속): 멀어도 빨라지지 않고, 끝에서 느려지지 않고 딱 선다 (2026-11-23 — 예전에는 가까울수록 느려져 미끄러지듯 보였고, 빠른 배속에서는 그림이 닿기 전에 공격이 나갔다)
-    if (clear(e._dx, e._dy, e.x, e.y)) { e._dx += dx / d * step; e._dy += dy / d * step; continue; }
+    if (clear(e._dx, e._dy, tx, ty)) { e._dx += dx / d * step; e._dy += dy / d * step; continue; }
     const cells = GR.field(m, Math.round(e.x), Math.round(e.y))[Math.round(e._dy) * m.w + Math.round(e._dx)];
     if (cells < 0 || cells > SNAP_D * 1.5) { e._dx = e.x; e._dy = e.y; continue; }
     via.x = e._dx; via.y = e._dy; GR.moveTo(m, via, e.x, e.y, step / dt, dt); e._dx = via.x; e._dy = via.y;

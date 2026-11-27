@@ -192,12 +192,13 @@ G.Turn = (() => {
     const m = rt.map;
     if ((st.ph === 'show' || st.ph === 'move' || st.ph === 'back') && !foes(rt).length) { pause(st, 0); return; } // 적이 다 쓰러졌으면 걸음을 마저 걷지 않는다
     if (st.ph === 'input') { if (!foes(rt).length || gone(rt, st.cur) || st.cur.dying) pause(st, 0); return; } // 플레이어의 명령을 기다린다 (G.Ctrl.cmd)
-    if (st.ph === 'wait') { G.Tactics.snap(rt); if ((st.t -= dt) > 0) return; next(f, rt, st); return; }
+    if (st.ph === 'walk1') { if ((st.t -= dt) > -3.5 && !settled(rt)) return; const go = st.then; st.then = null; if (gone(rt, st.cur)) { pause(st, SKIP); return; } go(); return; } // 차례 처음의 걷기가 끝나기를 (3.5초까지)
+    if (st.ph === 'wait') { G.Tactics.snap(rt); if ((st.t -= dt) > 0) return; if (T.smooth && !G.quiet && st.t > -3.5 && !settled(rt)) return; next(f, rt, st); return; } // 앞 사람이 다 걸은 뒤에 다음 차례 (3.5초까지)
     if (st.ph === 'idle') return; // 실시간 차선: 다음 시계까지 쉰다 // 행동이 끝나면 밀리거나 소환된 인물을 칸 위로
     if (st.ph === 'show') { G.Tactics.snap(rt, st.cur); if ((st.t -= dt) <= 0) { st.ph = 'move'; st.t = 0; } return; }
     if (st.ph === 'pre') {
       if ((st.t -= dt) > 0) return;
-      if (T.smooth && st.t > -3.5 && st.cur && st.cur._dx != null && Math.hypot(st.cur._dx - st.cur.x, st.cur._dy - st.cur.y) > 0.12) return; // 그림이 다 걸어올 때까지 (3.5초까지 — 그림은 초당 8칸 × 배속으로 걷는다: render/actors settle. 가장 긴 질주 24칸 = 3초)
+      if (T.smooth && !G.quiet && st.t > -3.5 && !settled(rt)) return; // 나와 상대 · 모두의 그림이 다 걸어올 때까지 (3.5초까지 — 그림은 초당 8칸 × 배속으로 걷는다: render/actors settle. 가장 긴 질주 24칸 = 3초)
       const e = st.cur, tg = st.tg;
       if (gone(rt, e) || !tg || (tg.kind === 'mon' ? gone(rt, tg) : tg.dead)) { T.pre = null; pause(st, SKIP); return; }
       act(f, rt, st, e, tg); T.pre = null;
@@ -289,6 +290,8 @@ G.Turn = (() => {
         return;
   }
   const sameNext = st => { const a = st.order[st.i], b = st.order[st.i + 1]; return !!(a && b && a.init === b.init); }; // 같은 선제권 무리 (SRD: 같은 몬스터 무리는 한 번 굴린다)
+  // 모두의 그림이 진짜 자리에 닿았나 (흐르는 턴제 — 2026-11-27 사용자: 「다가가지도 않았는데 때리고, 다른영웅이 가고 있는데 뒤에있던 마법사가 주문을쓰고」): 행동 · 다음 차례는 이것을 기다린다 (그림은 render/actors settle이 초당 8칸 × 배속으로 걷게 한다)
+  const settled = rt => rt.party.concat(rt.mons).every(e => e.dead || e.dying || e.hp <= 0 || e._dx == null || Math.hypot(e._dx - e.x, e._dy - e.y) <= 0.12);
   const pause = (st, t) => { st.ph = 'wait'; st.t = st.fast && sameNext(st) ? 0 : T.smooth ? t * T.beat : t; st.ov = null; };
   // 굴림을 크게 보여 줄 때: 동료가 쓰러질 수 있을 때 · 우두머리를 끝낼 수 있을 때 · 20과 1
   function stakeOf(e, tg, nat) {
@@ -352,11 +355,16 @@ G.Turn = (() => {
       const hand = !!G.Ctrl?.is(e); // 플레이어가 조종하는 사람 (js/game/ctrl.js): 저절로 걷기 · 저절로 쓰는 물건 없이 입력을 기다린다
       // 함께 싸우는 치유 직업은 앞사람 곁으로 먼저 걷고 나서 주문을 쓴다 (새 게임 — 뒤에 혼자 남지 않게). 이 차례의 이동은 여기서 썼다
       st.pm = null; if (!hand && T.smooth && (G.Tactics.escorts(e) || G.Tactics.trails(e)) && !DN().held(e) && !G.Act.adjacent(rt, e).length) { const p = G.Tactics.escorts(e) ? G.Tactics.follow(rt, e, moveOf(e)) : G.Tactics.follow(rt, e, moveOf(e), 6, 4); if (p.length) { const px = e.x, py = e.y; G.Tactics.walk(e, p, MOVE_V, 99); F().fieldMove(f, rt, e, px, py); st.pm = e; } }
-      if (!hand && G.Story.aid(f, rt, e)) { pause(st, BEAT); return; }
-      if (!hand && G.Trinket.beads(f, rt, e)) { pause(st, BEAT); return; } // 화염구 구슬 (SRD)
-      e.slotUsed = false;
-      { const seen = seenBy(rt, e); T.rec = []; for (let i = 0; i < 3; i++) G.Skill.tick(f, rt, e, 0, seen, 'free'); T.rec = null; } // 자유 행동 (무모한 공격 · 행동 쇄도) — 조종해도 저절로
-      if (hand) { G.Ctrl.begin(f, rt, st, e); return; } // 입력을 기다린다 (st.ph 'input' — 명령은 G.Ctrl.cmd)
+      const rest = () => {
+        if (!hand && G.Story.aid(f, rt, e)) { pause(st, BEAT); return; }
+        if (!hand && G.Trinket.beads(f, rt, e)) { pause(st, BEAT); return; } // 화염구 구슬 (SRD)
+        e.slotUsed = false;
+        { const seen = seenBy(rt, e); T.rec = []; for (let i = 0; i < 3; i++) G.Skill.tick(f, rt, e, 0, seen, 'free'); T.rec = null; } // 자유 행동 (무모한 공격 · 행동 쇄도) — 조종해도 저절로
+        if (hand) { G.Ctrl.begin(f, rt, st, e); return; } // 입력을 기다린다 (st.ph 'input' — 명령은 G.Ctrl.cmd)
+        decide(f, rt, st, e);
+      };
+      if (st.pm && !G.quiet) { st.ph = 'walk1'; st.t = 0; st.then = rest; return; } // 앞사람 곁으로 걸어간 그림이 닿은 뒤에 주문 (2026-11-27 — 전에는 걷기 시작하는 프레임에 주문이 나갔다)
+      rest(); return;
     }
     decide(f, rt, st, e);
   }

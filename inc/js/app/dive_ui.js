@@ -247,7 +247,7 @@ const DIVEUI = (() => {
     const tk = mg.filter(x => x.slot === 't'), right = [0, 1, 2].map(i => slot('물건', tk[i]?.n || '', tk[i]?.r || 0, mx(tk[i])));
     const cell = c0 => { if (!c0.s && G.Builds.CARD?.on) return '<li class="hs-lock"><b>+</b><small></small></li>'; /* 카드 모드: 빈 칸 (다음 카드로 찬다) */ if (!c0.s) { const wl = c0.will; return `<li class="hs-lock"><b>${wl ? esc(wl.n) : '?'}</b><small>Lv ${wl?.lv || c0.open}</small></li>`; }
       const num = G.SkillNum_at?.(c0.s.k, m.cls, m.lv), cdn = G.Res.cdOf ? G.Res.cdOf(c0.s.k) : /쿨 (\d+)/.exec(c0.s.tag || '')?.[1]; // 원정: 쿨타임 하나 (횟수 · 주문 칸 표시 없음)
-      return `<li><b>${esc(c0.s.n)}</b><small>${[skTag(m, c0.s.k) || num?.d, !G.Res.cdOf && c0.s.left != null && c0.s.left < 20 ? `${c0.s.left}회` : '', cdn ? `쿨 ${cdn}` : ''].filter(Boolean).join(' · ')}</small></li>`; };
+      return `<li class="hs-skl" data-sk="${c0.s.k}">${SKUI.img(c0.s.k)}<b>${esc(c0.s.n)}</b><small>${[skTag(m, c0.s.k) || num?.d, !G.Res.cdOf && c0.s.left != null && c0.s.left < 20 ? `${c0.s.left}회` : '', cdn ? `쿨 ${cdn}` : ''].filter(Boolean).join(' · ')}</small></li>`; };
     const box = panel('dv-hero');
     box.innerHTML = `<header><h2>${esc(m.name)} <small>${esc(sh.cls)} · Lv ${m.lv}</small></h2><div class="dv-res"><button class="chip dv-x">닫기</button></div></header>`
       + `<div class="hs-doll"><div class="hs-col">${base.join('')}</div><div class="hs-mid"><canvas width="32" height="40"></canvas><i class="dv-xp"><em style="width:${m.lv >= D.LV_MAX ? 100 : Math.round(100 * Math.min(1, (m.xp || 0) / need))}%"></em></i><small>${m.lv >= D.LV_MAX ? 'MAX' : `${Math.round(m.xp || 0).toLocaleString()} / ${need.toLocaleString()}`}</small></div><div class="hs-col">${right.join('')}</div></div>`
@@ -258,7 +258,7 @@ const DIVEUI = (() => {
       + (sh.traits.length ? `<h4>패시브</h4><p class="dv-dim">${sh.traits.map(t => esc(t.n)).join(' · ')}</p>` : '')
       + `<h4>빌드</h4><p class="dv-dim">${esc(G.Builds.byId(m.build)?.n || '')}</p>`; // 빌드는 영입할 때 고르고 고정 (바꾸는 버튼 없음)
     const cv = box.querySelector('.hs-mid canvas'), draw = () => { if (box.isConnected && !UI.face(cv, m)) setTimeout(draw, 400); }; draw();
-    box.onclick = ev => { const b = ev.target.closest('button'); if (!b) return; if (b.classList.contains('dv-x')) { box.remove(); return; }
+    box.onclick = ev => { const sl = ev.target.closest('[data-sk]'); if (sl) return skPop(m, sl.dataset.sk); const b = ev.target.closest('button'); if (!b) return; if (b.classList.contains('dv-x')) { box.remove(); return; }
       if (b.classList.contains('dv-pickb')) return cardWin(m, () => { put(S); hero(c); }, false); // 길드에서 고를 것
     };
   }
@@ -368,9 +368,30 @@ const DIVEUI = (() => {
   let logSrc = { st: null, i: 0, roll: 0 };
   function logPush(k, t, d = '') { if (!run || !t) return; const L = run.log = run.log || []; if (L.length && L[L.length - 1].t === t) return; L.push({ k, t, d }); if (L.length > LOG_MAX) L.shift(); run.logDirty = true; }
   function logPoll() {
-    const st = CRAWL.st; if (st) { if (logSrc.st !== st) { const keep = logSrc.st && st.log[logSrc.i - 1] === logSrc.st.log[logSrc.i - 1]; logSrc.st = st; logSrc.i = keep ? logSrc.i : 0; /* 계단: 새 층 기록은 지난 층 기록 뒤에 이어 붙는다 — 이미 읽은 줄은 건너뛴다 */ logPush('floor', `${st.floor}층 · ${RUN.zone(st.floor).n}`); } for (; logSrc.i < st.log.length; logSrc.i++) { gateSee(st, st.log[logSrc.i]); const o = logLine(st, st.log[logSrc.i]); if (o) logPush(o[0], o[1], o[2]); } }
+    const st = CRAWL.st; if (st) { if (logSrc.st !== st) { const keep = logSrc.st && st.log[logSrc.i - 1] === logSrc.st.log[logSrc.i - 1]; logSrc.st = st; logSrc.i = keep ? logSrc.i : 0; /* 계단: 새 층 기록은 지난 층 기록 뒤에 이어 붙는다 — 이미 읽은 줄은 건너뛴다 */ logPush('floor', `${st.floor}층 · ${RUN.zone(st.floor).n}`); } for (; logSrc.i < st.log.length; logSrc.i++) { gateSee(st, st.log[logSrc.i]); noteSee(st, st.log[logSrc.i]); const o = logLine(st, st.log[logSrc.i]); if (o) logPush(o[0], o[1], o[2]); } }
     const r = R.roll; if (R.turn && r && r.id !== logSrc.roll && r.who) { logSrc.roll = r.id;
-      const tw = D.tkTake(r.who); logPush('fight', `${r.who} · ${r.what || '공격'}${r.tg ? ` → ${r.tg}` : ''}${r.word ? ` · ${r.word}` : ''}${r.res ? ` · ${r.res}` : ''}${tw ? ` · ${tw}` : ''}`, `${r.nat ? `d20 ${r.nat}` : ''}${r.calc ? ` ${r.calc}` : ''}${r.need ? ` · 필요 ${r.need}` : ''}`.trim()); }
+      const tw = D.tkTake(r.who); logPush('fight', rollLine(r) + (tw ? ` · ${tw}` : ''), `${r.nat ? `d20 ${r.nat}` : ''}${r.calc ? ` ${r.calc}` : ''}${r.need ? ` · 필요 ${r.need}` : ''}`.trim()); }
+  }
+  // 굴림 한 줄 (2026-11-27 사용자: 「게임로그를 조금 더 trpg스럽게」): 누가 누구를 · 주사위 · 결과를 진행자가 읽듯이. 「엘티가 그림록을 공격한다 · 14+15=29 vs AC 11 · 명중! 11 피해 · 그림록이 쓰러진다」
+  const jo = (w, a, b) => { const c = String(w).charCodeAt(String(w).length - 1) - 0xac00; return w + (c >= 0 && c < 11172 && c % 28 ? a : b); }; // 받침이 있으면 a
+  function rollLine(r) {
+    const who = r.who, tg = r.tg, what = r.what || '공격', C = (r.calc || '').split(' · '), ac = C.find(x => /^AC /.test(x)), dc = (r.calc || '').match(/^(.+) DC (\d+)/), mods = C.filter(x => x !== C[0] && x !== ac);
+    const res = (r.res || '').split(' · ').filter(Boolean).map(x => (x === '쓰러짐' && tg ? jo(tg, '이', '가') + ' 쓰러진다' : x.replace(/^(\d+)회 중 (\d+) 명중$/, '$2/$1회'))).join(' · ');
+    if (r.atk && tg && ac) { const b = parseInt(C[0], 10), roll = r.nat != null && !isNaN(b) ? `${r.nat}${b >= 0 ? '+' : '−'}${Math.abs(b)}=${r.nat + b} vs ${ac}${mods.length ? ` (${mods.join(' · ')})` : ''}` : ac;
+      const hit = r.nat === 20 ? '치명타!' : r.nat === 1 ? '대실패' : r.ok ? '명중!' : '빗나갔다';
+      return `${what === '공격' ? `${jo(who, '이', '가')} ${jo(tg, '을', '를')} 공격한다` : `${who}의 ${what} → ${tg}`} · ${roll} · ${hit}${r.ok && res ? ` ${res}` : ''}`; }
+    if (tg && dc) return `${who}의 ${what === '공격' ? '기본 공격' : what} → ${jo(tg, '은', '는')} ${dc[1]} DC ${dc[2]} · ${r.word === '실패' ? '실패' : '성공'}${res ? ` · ${res}` : ''}`;
+    if (tg) return `${who}의 ${what} → ${tg}${res ? ` · ${res}` : ''}`;
+    return `${jo(who, '이', '가')} ${jo(what, '을', '를')} 쓴다${res ? ` · ${res}` : ''}`;
+  }
+  // 로그 대신 게임 화면에 (2026-11-27 사용자: 「메인 게임화면상에서 확인할수 있는 방법으로 · 로그는 없애자」): 함정 피해 · 굶주림 · 문 부수기를 그 영웅 머리 위에
+  const entOf = (st, n) => { const m = st.party.find(q => q.n === n); return m && R.party.find(p => p.merc && m.hero && p.merc.uid === m.hero.uid); };
+  const float = (e, s, col, sz = 0.85) => { if (e) G.fx(R, { k: 'text', x: e.x, y: e.y - 0.6, s, col, t: 1.1, sz }); };
+  function noteSee(st, e) {
+    if (!run || run.over) return; const t = String(e.t || '');
+    if (e.trap) { for (const [n, v] of e.trap) float(entOf(st, n), v > 0 ? `-${v}` : '회피', v > 0 ? '#ff6b6b' : '#9aa0a8'); const a = entOf(st, e.trap[0]?.[0]); if (a) G.fx(R, { k: 'text', x: a.x, y: a.y - 1.4, s: '함정!', col: '#ffb050', t: 1.2, sz: 1 }); return; }
+    if (/^물자 0 · 굶주림/.test(t)) { for (const m of st.party) if (!m.dead) float(entOf(st, m.n), t.replace(/^.*체력 /, ''), '#ffb050'); const sup = document.querySelector('#dv-pick .pk-sup'); if (sup) { sup.classList.remove('dv-flash'); void sup.offsetWidth; sup.classList.add('dv-flash'); } return; }
+    let m; if ((m = t.match(/^(.+) · (부숨|치움) · 적이 알아챔$/)) || (m = t.match(/^(.+) · (부숨|치움)$/))) { const a = entOf(st, m[1]); if (a) G.fx(R, { k: 'text', x: a.x, y: a.y - 1.4, s: '쾅!', col: '#ffd45a', t: 1, sz: 1.2 }); }
   }
   // 탐사 기록 한 줄 → 로그 줄 [종류, 글, 굴림] (원정 모드): 이름 · 선택 · 결과 · 수치만. 옛 서술 문장은 숨긴다 (사건은 note가 한 줄로 남긴다)
   const heroN = (st, n) => { const i = st.party.findIndex(m => m.n === n), p = CRAWL.view()?.party?.[i]; return p?.m?.name || n; };
@@ -384,25 +405,18 @@ const DIVEUI = (() => {
       if (r.what === '정찰' || r.what === '추적') return ['exp', `${r.what} · ${ok}`];
       return null; } // 사건 판정은 note가 사건 이름 · 선택과 함께 한 줄로
     let m;
-    if ((m = t.match(/^(.+) — 전투가 시작된다$/))) return ['fight', `전투 · ${m[1]}`];
-    if ((m = t.match(/^전투에서 이겼다 \((\d+)라운드\)(?:\. )?(.*)$/))) return ['got', `승리 · ${m[1]}라운드${m[2] ? ` · ${m[2]}` : ''}`];
+    if ((m = t.match(/^(.+) — 전투가 시작된다$/))) return ['fight', `${m[1]} — 선제권을 굴린다`];
+    if ((m = t.match(/^전투에서 이겼다 \((\d+)라운드\)(?:\. )?(.*)$/))) return ['got', `전투 끝 (${m[1]}라운드)${m[2] ? ` · 전리품: ${m[2]}` : ''}`];
     if ((m = t.match(/^합류: (.+?) \(/))) return ['got', `동료 +1 · ${m[1]}`];
     if (/전멸/.test(t)) return ['fight', '전멸'];
-    if (/먼저 덮쳐/.test(t)) return ['fight', '기습당함'];
+    if (/먼저 덮쳐/.test(t)) return ['fight', '기습! 적이 먼저 움직인다'];
     if (/적이 달아났다/.test(t)) return ['fight', '교착 · 적이 달아남'];
     if (/쓰러졌다\. 아래로/.test(t)) return ['exp', '우두머리 · 계단'];
     return null;
   }
   const LOG_IC = { fight: '⚔', exp: '›', got: '+', floor: '▼' };
   const logRows = (L, n) => L.slice(-n).map((e, i) => `<li class="lg-${e.k}"${e.d ? ` data-d="${esc(e.d)}"` : ''}><i>${LOG_IC[e.k] || '›'}</i>${esc(e.t)}${e.d ? `<small>${esc(e.d)}</small>` : ''}</li>`).join('');
-  function logBox() {
-    const bar0 = $('dv-bar'); if (!bar0 || !run) return; let el = $('dv-log');
-    if (!el) { el = document.createElement('div'); el.id = 'dv-log'; el.onpointerup = ev => ev.stopPropagation(); el.innerHTML = '<ul></ul>'; bar0.insertBefore(el, bar0.querySelector('.dv-ps'));
-      el.onclick = ev => { const li = ev.target.closest('li'); if (li && el.classList.contains('open') && li.dataset.d) { li.classList.toggle('det'); return; } el.classList.toggle('open'); run.logDirty = true; }; }
-    const ps = bar0.querySelector('.dv-ps'); el.style.bottom = (ps ? ps.offsetHeight : 0) + 'px';
-    if (!run.logDirty) return; run.logDirty = false; const open = el.classList.contains('open'), ul = el.firstChild;
-    ul.innerHTML = logRows(run.log || [], open ? LOG_MAX : (innerHeight < 480 ? 2 : 3)); if (open) ul.scrollTop = ul.scrollHeight;
-  }
+
   // 원정 중 미니맵(#pmapbox): 이 층의 계획한 길을 점선으로 (지나온 길의 발자국 점은 RUN.draw가 찍는다). 미니맵을 다시 그리면 다시 얹는다
   function miniPlan() {
     const svg = $('pmap'), st = CRAWL.st; if (!svg || !st || svg.querySelector('.dv-mini')) return;
@@ -458,7 +472,22 @@ const DIVEUI = (() => {
     return Math.max(1, Math.round(DPR * Math.min(w / (wide ? 560 : 230), wide ? (h + 100) / 190 : h / 200))); /* 넓은 가로 화면(폰 가로 844×340): 높이 항이 반올림으로 배율을 1로 떨어뜨려 캐릭터가 절반 크기가 됐다 (2026-11-24) — 가로에서는 위아래 막대가 전장 위에 얹히니 전체 높이로 본다 */ // 탐사 · 전투 같은 기본 배율 — 전투 중에는 fitZoom이 싸우는 사람들에 맞춰 한 칸씩 (카메라 가운데는 main.js)
   }
   // 스킬 효과 꼬리표 (설명 문장 대신 짧게 — 엔진 스킬 자료의 효과 줄을 그 영웅의 수치로, 추가 행동이면 표시)
-  const skTag = (m, k) => { let t = ''; try { t = G.Skill.text(m, k) || ''; } catch (e) { t = G.D.MSKILLS[k]?.d || ''; } t = t.replace(/\s*\([^)]*\)/g, '').replace(/\.$/, '').split(' · ').filter(x => !/슬롯/.test(x)).join(' · '); /* 원정엔 올려 쓰기가 없어 「슬롯당」은 뺀다 */ if (t.length > 26) t = t.slice(0, 25) + '…'; return [t, G.Skill.SK[k]?.bonus ? '추가 행동' : ''].filter(Boolean).join(' · '); };
+  // 스킬 글 (2026-11-27 사용자: 「간결하게 효과만」 · 「8d6이라는거 자체가 현대식이 아니잖아 · 데미지 범위를 써줘야지 · 회피하면 절반 이런건 빼고」 · 「범위는 1칸 범위, 4칸 범위 같은 형태로 동일하게」)
+  //   규칙 글에서 내성 · 집중 · 슬롯 · AI가 쓰는 때(체력 절반 아래 등 — 규칙이 아니라 스킬 AI의 조건)를 덜고, 주사위는 범위(8d6 → 8~48), 넓이는 「N칸 범위」 하나로
+  const SK_DROP = /집중|슬롯|^무기 공격$|^(근력|민첩|건강|지혜|지능|매력) 내성( 절반| 무효)?$|^절반$|^무효$|경량 무기|중 하나|^$/;
+  const SK_RW = [[/^무기 공격 \+ /, ''], [/^(무기로 )?맞히면 |^명중하면 |^내가 맞히면 /, ''], [/^명중 (?=\d)/, ''], [/^자신 |^멀리서 |^반드시 맞는 |^체력 절반 아래 |^절반 아래 |^이번 차례에 |^이번 라운드 |^라운드마다 |^가장 다친 동료 |^기습 /, ''], [/ ?(차례|라운드)마다 /, ' '],
+    [/^(근력|민첩|건강|지혜|지능|매력) 내성 /, ''], [/ (근력|민첩|건강|지혜|지능|매력) 내성$/, ''], [/나를 노리는 공격 불리/, '피격 불리'], [/공격 행동 한 번 더/, '공격 +1회'], [/incapacitated/, '무력'], [/unconscious/, '기절'],
+    [/^곁의 (다른 )?적(에게)? /, '1칸 범위 '], [/^(?:반경|곁) (\d+)칸( |$)/, '$1칸 범위$2'], [/^(\d+)칸( (?!범위|밀침)|$)/, '$1칸 범위$2'], [/^(\d+칸 범위) (?!·)/, '$1 · '], [/^넷에게 /, '4명 '], [/^셋에게 /, '3명 '], [/^여섯 /, '6명 '], [/^셋 /, '3명 '], [/강한 적 표식/, '표식'],
+    [/ (화염|광휘|사령|관통|베기|둔기|역장|냉기|번개|천둥|정신)(?= |$)/, ''], [/^먼 적 곁으로 뛰어든다$/, '돌진'], [/^위험하면 순간 이동$/, '순간 이동'], [/(\d+)라운드/g, '$1턴'], [/^\s+|\.$/g, '']];
+  const dr = (n, m, k = 0) => `${n + k}~${n * m + k}`; // 주사위 → 범위
+  const skDice = t => t.replace(/(\d+)d(\d+)\s*([+−-])\s*(\d+)(?![d\d])/g, (_, n, m, sg, k) => dr(+n, +m, (sg === '+' ? 1 : -1) * +k)).replace(/(\d+)d(\d+)/g, (_, n, m) => dr(+n, +m)).replace(/\+d(\d+)(?![~\d])/g, (_, m) => `+1~${m}`).replace(/(\d+~\d+) \+ (\d+)~(\d+)/g, (_, a, b, c) => { const [x, y] = a.split('~').map(Number); return `${x + +b}~${y + +c}`; });
+  const skParts = (t, heal) => { let P = skDice(String(t || '').replace(/\s*\([^)]*\)/g, '')).split(' · ').map(p => SK_RW.reduce((q, [a, b]) => q.replace(a, b), p.trim())).filter(p => !SK_DROP.test(p));
+    return P.map(p => (/^\+?\d+~\d+$|^\d+$/.test(p) ? `${heal ? '회복' : /^\+/.test(p) ? '추가 피해' : '피해'} ${p.replace(/^\+/, '')}` : p.replace(/^(\d+칸 범위 ·|\d+명|일직선|파티(?: \d+명)?) (\d+~\d+|\d+)$/, `$1 · ${heal ? '회복' : '피해'} $2`).replace(/ · · /g, ' · '))); };
+  const skShort = (t, heal) => { const P = skParts(t, heal); let o = P.slice(0, 2).join(' · '); if (o.length > 22) o = P[0] || ''; return o.length > 22 ? o.slice(0, 21) + '…' : o; };
+  const skHeal = k => !!G.Skill.SK[k]?.heal || /회복|체력 절반 아래/.test(G.D.MSKILLS[k]?.d || ''), skTag = (m, k) => { let t = ''; try { t = G.Skill.text(m, k) || ''; } catch (e) { t = ''; } return skShort(t, skHeal(k)) || skShort(G.D.MSKILLS[k]?.d, skHeal(k)) || (/소환/.test(G.D.MSKILLS[k]?.n || '') ? '소환' : ''); };
+  // 스킬 자세히 (영웅 창에서 누르면): 종류 · 쿨 · 규칙 글 전체
+  const skPop = (m, k) => { let t = ''; try { t = G.Skill.text(m, k) || ''; } catch (e) { t = G.D.MSKILLS[k]?.d || ''; } const kd = G.Skill.kindOf(k), cd = G.Res.cdOf ? G.Res.cdOf(k) : 0;
+    pop(`<h4>${SKUI.img(k)} ${esc(G.D.MSKILLS[k]?.n || k)}</h4><p class="gp-row">${esc(kd === '늘 적용' ? '패시브' : '스킬')}${cd ? ` · 쿨 ${cd}` : ''}</p><p>${esc(skParts(t, skHeal(k)).join(' · ') || t)}</p>`); };
   // ── 레벨업 카드 창 (2026-11-23): 카드 셋(이름 · 주사위 · 쿨 N) — 칸이 다 찼으면 고른 뒤 바꿀 칸 또는 넘김. 원정 중에는 CARD.WAIT초 안에 답이 없으면 추천 · 떠 있는 동안 원정은 멈춘다
   function cardWin(m, done, timed) {
     const q = (m.cardq || [])[0]; if (!q) return done && done(); const offer = D.cardOffer(m), full = q.kind === 'swap' || (m.picks || []).length >= G.Builds.SLOT_N, K = G.D.MSKILLS;
@@ -523,9 +552,11 @@ const DIVEUI = (() => {
         if (b.classList.contains('dv-bagchip')) bagPop(); }; } // 돌아가기: 여기까지 번 금화 · 깬 층으로 끝낸다
     if (v.fighting !== wasFight) { wasFight = v.fighting; } // 전투가 끝나면 기본 배율로 (전투 중은 fitZoom)
     const earned = Math.max(0, st.gold - (st.gold0 ?? 0)), ps = v.party.map(p => ({ m: p.m, lv: p.m?.lv || 0, n: p.m?.name || '?', c: clsN(p.m?.cls), hp: Math.max(0, p.hp), max: p.max, xp: p.m ? Math.min(1, (p.m.xp || 0) / G.Guild.needOf(p.m)) : 0, dead: p.dead || p.hp <= 0 }));
+    if (run.goldSeen == null) run.goldSeen = earned;
     const k = JSON.stringify([st.floor, !!v.fighting, v.sub, earned, st.items, (st.loot || []).length, G.Res.clock || 0, G.Turn.speed(G.S.w.fantasy), ps.map(p => [p.lv, p.n, p.hp, p.max, Math.round(p.xp * 50), p.dead])]); if (k === barK) return; barK = k;
     const its = ITEM.filter(([id]) => st.items[id] > 0).map(([id, n]) => `<span class="chip">${n} ${st.items[id]}</span>`).join('') + `<button class="chip dv-bagchip${D.bagFull(st) ? ' full' : ''}">짐 ${D.bagUsed(st)}/${st.bagCap || 0}</button>`; // 파티 짐 (누르면 목록)
-    el.firstChild.innerHTML = `<div><b>${st.floor}층</b><small>${esc(RUN.zone(st.floor).n)} · ${esc(v.sub)}</small></div><div class="dv-r"><span class="chip c-gold">${UI.px('coin')} ${earned}</span>${its}<button class="dv-spd"${D.speeds(S).length > 1 ? '' : ' disabled'}>×${(G.S.w.fantasy.turnX || D.speeds(D.fresh())[0]) / D.speeds(D.fresh())[0]}</button><button class="dv-zm" data-z="-1">−</button><button class="dv-zm" data-z="1">＋</button>${fsBtn()}<button class="dv-quit"${v.fighting ? ' disabled' : ''}>돌아가기</button></div>`;
+    const goldUp = earned > run.goldSeen; run.goldSeen = earned;
+    el.firstChild.innerHTML = `<div><b>${st.floor}층</b><small>${esc(RUN.zone(st.floor).n)} · ${esc(v.sub)}</small></div><div class="dv-r"><span class="chip c-gold${goldUp ? ' dv-flash' : ''}">${UI.px('coin')} ${earned}</span>${its}<button class="dv-spd"${D.speeds(S).length > 1 ? '' : ' disabled'}>×${(G.S.w.fantasy.turnX || D.speeds(D.fresh())[0]) / D.speeds(D.fresh())[0]}</button><button class="dv-zm" data-z="-1">−</button><button class="dv-zm" data-z="1">＋</button>${fsBtn()}<button class="dv-quit"${v.fighting ? ' disabled' : ''}>돌아가기</button></div>`;
     // 파티 카드 (시안 ①): 얼굴 · 레벨 · 이름 · 직업 · 체력 막대와 숫자 · 경험치 막대
     el.querySelector('.dv-ps').innerHTML = ps.map(p => `<div class="dv-p${p.dead ? ' dead' : ''}" data-u="${p.m?.uid ?? ''}">${p.dead ? UI.px('skull') : ''}<canvas width="26" height="30"></canvas><em>${p.lv}</em><b>${esc(p.n)}</b><small>${esc(p.c)}</small><i class="hp"><em style="width:${Math.round(100 * p.hp / Math.max(1, p.max))}%"></em></i><span>${p.hp}/${p.max}</span>${p.m ? `<i class="dv-cd">${G.Builds.slots(p.m).filter(Boolean).map(k => `<em data-cu="${p.m.uid}" data-ck="${k}" style="background-image:url(${SKUI.icon(k)})"></em>`).join('')}</i>` : ''}<i class="xp"><em style="width:${Math.round(100 * p.xp)}%"></em></i></div>`).join('');
     const pse = el.querySelector('.dv-ps'); pse.innerHTML += '<div class="dv-p empty"></div>'.repeat(Math.max(0, D.seats(S) - ps.length)); pse.style.gridTemplateColumns = `repeat(${Math.max(ps.length, D.seats(S))}, 1fr)`; // 자리 수만큼 칸 (빈 자리는 빈 칸)
@@ -592,7 +623,7 @@ const DIVEUI = (() => {
   // ── 스킬 보이기 (js/app/skill_ui.js): 쓴 순간 · 쿨타임 덮개 ──
   let rollSeen = null;
   function skillSee() {
-    const by = m => R.party.find(p => p.merc && p.merc.uid === m.uid), show = (p, k) => { if (p && G.D.MSKILLS[k] && R.turn) SKUI.cast(p, k, skTag(p.merc, k).split(' · ').filter(x => x !== '추가 행동').slice(0, 2).join(' · ')); };
+    const by = m => R.party.find(p => p.merc && p.merc.uid === m.uid), show = (p, k) => { if (p && G.D.MSKILLS[k] && R.turn) SKUI.cast(p, k); }; // 머리 위에는 이름만 (2026-11-27 사용자 — 효과는 영웅 창에서 눌러 본다)
     for (const q of D.USED.splice(0)) show(by(q.m), q.k);
     SKUI.tick();
   }
@@ -711,7 +742,7 @@ const DIVEUI = (() => {
   function frame(dt) {
     if (!R) return;
     if (run && run.over) return; // 끝난 뒤에는 탐사를 멈춘다 (결과 창 아래)
-    CRAWL.frame(dt); doorTick(); if (run) { cardTick(); if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); gateTick(); D.statTick(CRAWL.st, R); bar(); cdTick(); skillSee(); keySee(); waveSee(); logPoll(); logBox(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
+    CRAWL.frame(dt); doorTick(); if (run) { cardTick(); if (R.turn && R.turn.round !== run.rd) { if (run.rd != null) G.Res.clock = (G.Res.clock || 0) + 1; run.rd = R.turn.round; } else if (!R.turn) run.rd = null; /* 전투 라운드마다 쿨타임 시계 +1 */ unstick(); firstLine(); gateTick(); D.statTick(CRAWL.st, R); bar(); cdTick(); skillSee(); keySee(); waveSee(); logPoll(); autoBack(); grow(dt); fitZoom(dt); if ((run.memT = (run.memT || 0) + dt) > 2 && CRAWL.st) { run.memT = 0; D.remember(S, CRAWL.st); } miniPlan(); }
   }
   return { world, attach, frame, zoom, camAt, chest: k => chestShow(k), get on() { return ON && on; }, get zk() { return zk; } };
 })();

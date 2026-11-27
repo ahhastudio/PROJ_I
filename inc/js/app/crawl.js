@@ -137,6 +137,7 @@ const CRAWL = (() => {
     st.here.auto = true;
     if (POL?.fork && RUN.X?.keyed) { // 원정 (2026-11-26, FTL처럼): 방을 정리하면 다음 방 고르기 — 플레이어가 고를 때까지 기다린다 (2026-11-27 시간제한 없음). 자동 재출발 · ?fork=0이면 묻지 않고 정책이 (다쳤으면 먼저 야영)
       POL.arrive?.(st); // 입구 방도 이웃 방의 종류 · 상태가 보이게 (방마다 한 번)
+      G.Tactics.snap(R); // 서서 기다리는 동안 한 칸에 한 사람 (2026-11-27 사용자: 「서로 다른칸에 세우고 idle 모션으로」 — 입구 방은 모두 한 칸에서 시작했다)
       const opts = exits().filter(x => !x.e.stuck); if (!opts.length) return;
       // path = 지나는 방 차례 (G.Dive.routes — 끝이 가려는 방): 사이의 가 본 방은 일 · 고르기 없이 빠르게 지나간다 (물자는 방마다)
       const go = path => { const ex = opts.find(x => x.to === path[0]); if (!ex) return; via = path.slice(1); rush = via.length > 0; takeExit(ex); };
@@ -382,9 +383,9 @@ const CRAWL = (() => {
     else if (n.sleepy && !n.alert) { G.Encounter.applyPrep(R, { asleep: mons, surprise: true }); R.nextFirst = 'party'; R.dvWhy = 'sleep'; }
     else if (n.surprisedNow) { const look = G.Mission.roll(G.S.w.fantasy, R, 'perception'); R.nextFirst = look && look.ok ? 'party' : 'foes'; R.dvWhy = look && look.ok ? 'look' : 'ambush'; R.roll = null; }
     R.dvDark = st.roomDark === st.at; if (R.dvDark) st.log.push({ t: '어둠 속 전투', k: 'dv' }); // 어두운 방을 빛 없이: 엔진 어둠 (G.Dive가 빛을 끈다)
-    const others = st.map.nodes.filter(o => o.hostile && !o.visited && o.id !== n.id).map(o => { const [x, y] = centerOf(o.id); return { x, y, aware: o.alert ? 'alert' : 'idle', node: o }; }), d = dep, waiting = [];
+    const d = dep; // 소음 증원은 원정에서 뺐다 (2026-11-27 사용자: 「소음은 빼는걸로 · 해당 방 전투에서 선공 뺏기는 정도로」 — 부수면 안쪽이 알아채는 것만 남는다). 옛 게임(doorFight)은 그대로
     const go = () => { if (FIGHT.on || dep !== d) return; form = null; dep = null; for (const [p, [x, y]] of d.slots) if (!p.dead) { p.x = x; p.y = y; } G.Tactics.snap(R);
-      FIGHT.start(R, { n, mod: {}, log: t => { st.log.push({ t }); say(); }, purse, done: fightDone, onRound: r => fightRound(r, waiting, others), quiet: true, calm: true });
+      FIGHT.start(R, { n, mod: {}, log: t => { st.log.push({ t }); say(); }, purse, done: fightDone, quiet: true, calm: true });
       st.log.push({ t: `${n.g.label} — 전투가 시작된다.` }); say(); };
     if (R.nextFirst !== 'foes' && POL.deploy?.(d.Z, d.slots, go)) return; // 적 선공이면 배치 없이
     go();

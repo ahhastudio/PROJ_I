@@ -1,6 +1,5 @@
 'use strict';
 // 사건 그리기 (화면 쪽): 규칙이 G.Feed에 넣은 일을 매 틱 꺼내 보여 준다 + 바닥에 놓인 것(기름 · 마름쇠)을 그린다.
-// - 소리: 소리 난 곳에서 파문이 크기만큼 퍼진다 (클수록 진하게)
 // - 적의 상태: 머리 위에 z · ? · ! · !! (아직 모르는 적 — 안 보이고 엿듣지도 않은 적은 그리지 않는다)
 // - 기름: 마른 기름은 거무스름한 웅덩이, 타는 기름은 주황빛 + 불꽃. 마름쇠는 잿빛 가시
 // - 판정: 굴린 사람 머리 위에 「따기 12 + 7 = 19 성공」처럼
@@ -13,7 +12,6 @@ const FXUI = (() => {
   const TRY = { pick: '따기', kick: '걷어차기', knock: '노크', push: '열기' };
   function show(e) {
     switch (e.k) {
-      case 'noise': if (e.n > 0) anim.push({ k: 'ripple', x: e.x, y: e.y, r: e.r, n: e.n, t: 0, T: 0.6 + e.r * 0.04 }); break;
       case 'aware': if (knownMon(e.who)) { const [s, col] = AW[e.to] || ['?', '#fff']; text(e.who.x, e.who.y, s, col, 1.4, 1.1); } break;
       case 'ignite': text(e.p.x, e.p.y, '기름이 타오른다!', '#ffb050', 1.6, 1); anim.push({ k: 'flash', x: e.p.x, y: e.p.y, t: 0, T: 0.6 }); break;
       case 'burn': text(e.e.x, e.e.y + 0.4, '불탄다', '#ff8a40', 1, 0.75); break;
@@ -41,7 +39,6 @@ const FXUI = (() => {
     anim = anim.filter(a => (a.t += dt) < a.T);
     for (const a of anim) {
       const q = a.t / a.T;
-      if (a.k === 'ripple') for (const off of [0, 0.18, 0.36]) { const qq = q - off; if (qq <= 0) continue; out += `<path class="ripple" style="opacity:${((1 - qq) * Math.min(1, 0.25 + a.n / 12)).toFixed(2)};stroke-width:${(1 + a.n / 5).toFixed(1)}" d="${UI.ring(a.x, a.y, Math.max(0.2, Math.min(a.r, 14) * qq))}"/>`; } // 화면을 다 덮지 않게 그리는 크기는 14타일까지
       if (a.k === 'flash') out += `<path class="g-flash" style="opacity:${(1 - q).toFixed(2)}" d="${UI.ring(a.x, a.y, 0.8 + q * 1.4)}"/>`;
     }
     UI.svg('fxsvg', 2).innerHTML = out;
