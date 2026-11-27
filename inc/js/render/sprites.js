@@ -124,6 +124,7 @@ function blitRot(sp, cx, cy, ang, sc, d, o = {}) {
     if (iu < 0 || iv < 0 || iu >= sp.w || iv >= sp.h) continue;
     const c = sp.px[iv * sp.w + (o.flip ? sp.w - 1 - iu : iu)]; if (!c) continue;
     const ix = Math.round(cx) + a, iy = Math.round(cy) + b; if (ix < 0 || ix >= W || iy < 0 || iy >= H) continue;
+    if (o.dim && bayer(ix, iy) < o.dim) continue; // 점점이 사라진다 (쓰러진 적)
     if (o.ghost && ((ix + iy) & 1)) continue; // 잔상: 체크무늬로 반만 · 밝게 (휘두름 궤적)
     const k = iy * W + ix; if (d <= zb[k]) continue; zb[k] = d; pix[k] = o.ghost ? GHOSTC(c) : o.flash ? (c === rgb(...C.ink) ? c : FLASH) : o.gray ? GRAYC(c) : c;
   }

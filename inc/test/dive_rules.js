@@ -4,7 +4,7 @@ const vm = require('vm'), L = require('./_load.js');
 const ctx = { console, Math, JSON, Date, btoa, atob }; vm.createContext(ctx); L.load(ctx); L.load(ctx, ['run/core', 'run/data', 'run/rooms', 'run/combat', 'run/gen', 'run/rules']);
 const G = ctx.G, D = G.Dive, RUN = ctx.RUN; G.quiet = true; G.Reward.on = true;
 // 아래 검사 대부분은 파이터 · 클레릭 둘이 나가는 저장을 가정한다 (직업 둘이 열렸고 1층을 깼다). 새 저장(무작위 앞줄 + 뒷줄 둘)은 fresh1로 따로 본다
-const fresh1 = D.fresh; D.fresh = () => Object.assign(fresh1(), { cls0: 2, deep: 1, party: ['dragoon'], order: null });
+const fresh1 = D.fresh; D.fresh = () => Object.assign(fresh1(), { deep: 1, party: [], start2: ['dragoon'] }); // 명단은 검사마다 직접 채운다 (번호 대신 직업 이름을 열쇠로 써도 된다)
 let ok = 0, bad = 0; const t = (name, v, extra = '') => { if (v) ok++; else { bad++; console.log('  실패:', name, extra); } };
 
 // 차례로 몰려오는 적
@@ -16,19 +16,20 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
 { const s = D.fresh(); s.gold = D.total(); let n = 0;
   for (let k = 0; k < 200; k++) { const can = D.TREE.filter(x => D.cost(s, x.id) != null); if (!can.length) break; if (D.buy(s, can[0].id)) n++; }
   t('트리를 다 살 수 있다 (합계 금화로 딱)', D.complete(s) && s.gold === 0, `산 것 ${n} · 남은 금화 ${s.gold}`);
-  t('다 산 줄은 더 못 산다', D.cost(s, 'cls') == null && !D.buy(s, 'cls'));
-  t('다 열면 직업 12 · 엔진 배속 8 · 계단 회복 없음 · 「파티 자리」 줄은 없다 (자리는 깬 층으로)', !D.TREE.some(x => x.id === 'seat') && D.classes(s).length === 12 && D.camp(s) === 0 && D.speeds(s).join() === '2,4,8');
+  t('다 산 줄은 더 못 산다', D.TREE.every(x => D.cost(s, x.id) == null && !D.buy(s, x.id)));
+  t('다 열면 직업 12 · 엔진 배속 8 · 계단 회복 없음 · 「파티 자리」 줄은 없다 (자리는 깬 층으로)', !D.TREE.some(x => x.id === 'seat') && !D.TREE.some(x => x.id === 'cls') && D.camp(s) === 0 && D.speeds(s).join() === '2,4,8');
   t('다 열면 물자: 횃불 3 · 야영 물자 18 (공짜 몫 따로) (물약 · 도둑 도구 · 열림 두루마리는 없앴다)', JSON.stringify(D.kit(s)) === JSON.stringify({ torch: 3, camp: 6 + 4 * 3 }) && !D.TREE.some(x => x.id === 'tools' || x.id === 'knock' || x.id === 'pot')); }
-{ const s = fresh1(), FR = ['dragoon', 'barbarian', 'paladin', 'monk']; t('새 저장: 무작위 앞줄 + 뒷줄 둘 · 열린 직업 둘 · 자리 둘 · 빈 명단 · 레벨 줄 없음 · 짐은 횃불 1 · 위험 귀환 끔', s.risk === false && s.bag.torch === 1 && !s.bag.potion && s.gold === 0 && D.team(s).length === 2 && FR.includes(D.team(s)[0]) && !FR.includes(D.team(s)[1]) && D.classes(s).join() === D.team(s).join() && s.order.length === 12 && new Set(s.order).size === 12 && D.seats(s) === 2 && !Object.keys(s.roster).length && !D.TREE.some(x => x.id === 'lv'));
-  t('금화가 모자라면 못 산다', !D.buy(s, 'cls') && D.step(s, 'cls') === 0);
+{ const s = fresh1(), FR = ['dragoon', 'barbarian', 'paladin', 'monk']; t('새 저장: 첫 두 영웅은 무작위 앞줄 + 뒷줄 직업 · 자리 둘 · 빈 명단 · 레벨 줄 없음 · 짐은 횃불 1 · 위험 귀환 끔', s.risk === false && s.bag.torch === 1 && !s.bag.potion && s.gold === 0 && s.start2.length === 2 && FR.includes(s.start2[0]) && !FR.includes(s.start2[1]) && D.seats(s) === 2 && !Object.keys(s.roster).length && !D.TREE.some(x => x.id === 'lv'));
+  { const s0 = fresh1(), want = s0.start2.join(); G.newState(); D.ensure(s0, G.S.w.fantasy); const hs = D.team(s0).map(h => s0.roster[h].m); t('세계가 서면 첫 두 영웅: 1성 · 1레벨 · 그 직업 · 번호 열쇠 · 둘 다 파티', hs.length === 2 && hs.every(m => m.star === 1 && m.lv === 1 && /^h\d+$/.test(m.hid)) && hs.map(m => m.cls).join() === want && !s0.start2, hs.map(m => [m.cls, m.star, m.lv, m.hid]).join('|')); }
+  t('금화가 모자라면 못 산다', !D.buy(s, 'torch') && D.step(s, 'torch') === 0);
   const g = D.finish(s, 0, 37); t('전멸해도 판에서 번 금화는 들어온다', g === 37 && s.gold === 37 && s.runs === 1);
   const g2 = D.finish(s, 2, 10); t('깬 층 보너스 = 1층 + 2층', g2 === 10 + D.bonus(1) + D.bonus(2) && s.deep === 2);
   t('깊을수록 보너스가 많다', [...Array(D.LAST).keys()].every(i => i === 0 || D.bonus(i + 1) > D.bonus(i)));
   t('파티 자리 = 깬 층 + 1, 둘부터 다섯까지 · 옛 저장의 자리 해금(up.seat)은 무시', [0, 1, 2, 3, 4, 5, 9].map(d => D.seats({ ...s, deep: d, up: { seat: 2 } })).join() === '2,2,3,4,5,5,5');
-  Object.assign(s, { party: ['dragoon'], order: null }); // 아래는 직업이 CLS 차례로 열리는 저장으로 본다
-  s.up.cls = 2; s.deep = 1; D.toggle(s, 'mage'); D.toggle(s, 'cleric');
-  t('파티는 자리 수까지 (넘치면 마지막을 바꾼다)', D.team(s).join() === 'dragoon,cleric', D.team(s).join());
-  { const shut = D.CLS.find(c => !D.classes(s).includes(c)); D.toggle(s, shut); t('안 열린 직업은 못 고른다', !D.team(s).includes(shut)); }
+  Object.assign(s, { party: ['h1'], roster: { h1: { m: { cls: 'dragoon', lv: 1, hid: 'h1', xsp: [] }, tr: [] }, h2: { m: { cls: 'cleric', lv: 1, hid: 'h2', xsp: [] }, tr: [] }, h3: { m: { cls: 'mage', lv: 1, hid: 'h3', xsp: [] }, tr: [] } }, start2: null }); // 명단 셋 (번호 열쇠)
+  s.deep = 1; D.toggle(s, 'h3'); D.toggle(s, 'h2');
+  t('파티는 자리 수까지 (넘치면 마지막을 바꾼다)', D.team(s).join() === 'h1,h2', D.team(s).join());
+  D.toggle(s, 'h9'); t('명단에 없는 영웅은 못 고른다', !D.team(s).includes('h9'));
   const back = D.load(D.dump(s)); t('저장을 쓰고 읽으면 같다', JSON.stringify(back) === JSON.stringify(s));
   t('깨진 저장 · 옛 저장(v1 · v2)은 새 저장으로', D.load('{망가짐').gold === 0 && D.load(null).runs === 0 && D.load('{"v":1,"gold":999}').gold === 0 && D.load('{"v":2,"gold":999,"dex":5}').gold === 0); }
 // 출발 층
@@ -79,7 +80,7 @@ t('값은 단계마다 오른다', D.TREE.every(x => x.cost.every((c, i) => i ==
   const avg = D.bank(s, f); t('판 끝: 명단에 레벨 · 경험치 · 마법 물건이 적힌다', s.roster.dragoon.m.lv === 4 && s.roster.dragoon.tr.length === 1 && avg > 0, avg);
   const W2 = D.world(s, map), L2 = G.Guild.leader(W2.f);
   t('다음 판: 같은 이름 · 빌드 · 레벨 · 기본 장비 · 마법 물건', L2.name === nm && L2.build === bd && L2.lv === 4 && JSON.stringify(G.SRD.eq(L2)) === wpn && G.Trinket.all(W2.f).some(t => t.tag === '시험 물건' && t.on === L2.uid));
-  s.roster.rogue = { m: D.member(f, 'rogue', 3), tr: [] }; s.party = ['dragoon', 'cleric', 'mage']; s.deep = 2; s.up.cls = 2; const W3 = D.world(s, map), st3 = RUN.newRun(4, ['fighter', 'cleric', 'wizard'], 1); D.outfit(st3, W3.r, s); t('새로 들인 영웅은 (최고 − 2)레벨, 최소 1', s.roster.mage.m.lv === Math.max(1, Math.max(...['dragoon', 'cleric', 'rogue'].map(c => s.roster[c].m.lv)) - 2), s.roster.mage.m.lv);
+  s.roster.rogue = { m: D.member(f, 'rogue', 3), tr: [] }; const nl = D.newLv(s); s.roster.mage = { m: D.member(f, 'mage', nl), tr: [] }; s.party = ['dragoon', 'cleric', 'mage']; s.deep = 2; const W3 = D.world(s, map), st3 = RUN.newRun(4, ['fighter', 'cleric', 'wizard'], 1); D.outfit(st3, W3.r, s); t('새로 들이는 영웅 레벨 = (최고 − 2), 최소 1', nl === Math.max(1, Math.max(...['dragoon', 'cleric', 'rogue'].map(c => s.roster[c].m.lv)) - 2), nl);
   t('따라잡기 배율: 하나 낮을 때마다 +50%, 상한 +200%', D.catchK(5, 5) === 1 && D.catchK(4, 6) === 2 && D.catchK(1, 12) === 3);
   { const x0 = s.roster.rogue.m.xp || 0, mage = W3.r.party.find(p => p.merc.cls === 'mage').merc, mx = mage.xp || 0, fx = G.Guild.leader(W3.f).xp; const o = G.Fantasy.spawnMon(W3.r, 1, { n: '고블린 전사', ...G.D.F.mon['고블린 전사'] }, 5, 5, false, { major: true }); G.Guild.onKill(W3.f, W3.r, o);
     const Lv = G.Guild.leader(W3.f).lv, top = Math.max(...W3.r.party.map(p => p.merc.lv)); t('낮은 영웅은 더 빨리 (따라잡기 배율 ÷ 그 레벨의 PACE)', Math.abs((mage.xp - mx) - D.catchK(mage.lv, top) / D.catchK(Lv, top) * D.pace(Lv) / D.pace(mage.lv) * (G.Guild.leader(W3.f).xp - fx)) < 0.01, [mage.xp - mx, G.Guild.leader(W3.f).xp - fx]); D.bank(s, W3.f); t('쉬는 영웅도 받는다 (나간 영웅 평균의 25% × 따라잡기)', (s.roster.rogue.m.xp || 0) > x0 || s.roster.rogue.m.lv > 3); } }
@@ -380,7 +381,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 { const F = G.S.w.fantasy; let mcN = 0; for (let i = 0; i < 40; i++) { const m = D.member(F, 'paladin', 9); if (m.mc?.length || G.Builds.byId(m.build)?.mc) mcN++; }
   t('영웅 들이기: 다중 직업 빌드 · 다른 직업 레벨이 없다 (40명)', mcN === 0, mcN);
   G.Builds.CARD.on = false; const old = D.member(F, 'paladin', 1); G.Builds.apply(old, G.Builds.byId('hexadin')); while (old.lv < 9) { old.lv++; G.Guild.grow(old); } G.Builds.CARD.on = true;
-  const hadMc = G.MC.lvOf(old, 'paladin') < 9 && old.mc?.length > 0, raw = JSON.stringify({ ...D.fresh(), roster: { paladin: { m: old, tr: [] } } }), s2 = D.load(raw), m2 = s2.roster.paladin.m;
+  const hadMc = G.MC.lvOf(old, 'paladin') < 9 && old.mc?.length > 0, raw = JSON.stringify({ ...D.fresh(), roster: { paladin: { m: old, tr: [] } } }), s2 = D.load(raw), m2 = Object.values(s2.roster)[0].m; // 옛 저장 (직업 열쇠) → 번호 열쇠로 옮겨진다
   t('옛 저장의 다중 직업 영웅: 불러오면 팔라딘 9 · 한 직업 빌드 · 소생술 후보', hadMc && !m2.mc && m2.lv === 9 && G.MC.lvOf(m2, 'paladin') === 9 && !G.Builds.byId(m2.build).mc && (m2.picks = [], D.cardCands(m2).includes('sr_revive')), [hadMc, m2.build, m2.lv]);
   t('빌드 바꾸기에 다중 직업 빌드는 없다', !D.rebuild(D.member(F, 'paladin', 3), 'hexadin') && !D.dexHeroes().some(b => G.Builds.byId(b.id).mc));
 }
@@ -423,7 +424,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   const mo = G.Fantasy.spawnMon(r, 1, { n: '해골', ...G.D.F.mon['해골'] }, 5, 5, false, {}), t0 = G.Foe.dtype; G.Foe.dtype = 'bludgeoning'; G.Fantasy.hurt(f, r, mo, 3, 'hit', { merc: r.party[0].merc }); G.Foe.dtype = t0;
   t('싸워 보면 도감에 · 표시 ▲타격 ✕독 · 배율 기록(취약)', D.affKnown(s, '해골') && /▲타격/.test(D.affTag(s, '해골')) && /✕독/.test(D.affTag(s, '해골')) && st.stat.h.dragoon.tk?.취약 === 1, D.affTag(s, '해골'));
   const s2 = D.fresh(); s2.dex.m['구울'] = { met: 1, kill: 0 }; s2.party = ['archer']; s2.up = { cls: 4 }; s2.roster.archer = { m: D.member(f0, 'archer', 3), tr: [] };
-  t('레인저(사냥꾼의 지식, 3레벨)가 파티에 있으면 만난 것만으로', D.affKnown(s2, '구울') && !D.affKnown({ ...s2, party: [] }, '구울'));
+  t('레인저(사냥꾼의 지식, 3레벨)가 파티에 있으면 만난 것만으로', D.affKnown(s2, '구울') && !D.affKnown({ ...s2, roster: {} }, '구울'));
   t('주 피해 유형이 저항에 막히면 ▼ · 취약을 찌르면 ▲', D.edgeOf(s, { ...s.roster.dragoon.m }, ['해골']) !== undefined);
 }
 // 사건의 직업 선택지: 열두 직업의 실제 영웅 (옛 다섯 직업 표 대신)
@@ -455,8 +456,8 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 }
 // 빌드는 영입할 때 고르고 고정: 고른 빌드로 들어오고 · 고르는 단계 없이 들어오면 기본 빌드
 { const F = (G.newState(), G.S.w.fantasy), L = D.soloBuilds('paladin'), b2 = L[L.length - 1];
-  const m = D.member(F, 'paladin', 3, Math.random, b2.id), s = D.fresh(); s.party = ['dragoon']; const { f } = D.world(s, { w: 10, h: 10, c: new Array(100).fill('.') });
-  t('영입: 고른 빌드로 들어온다 · 기본 빌드는 목록의 첫째 · 다중 직업 빌드는 후보에 없다', m.build === b2.id && s.roster.dragoon.m.build === D.soloBuilds('dragoon')[0].id && L.length > 1 && L.every(b => !b.mc), [m.build, s.roster.dragoon.m.build]); }
+  const m = D.member(F, 'paladin', 3, Math.random, b2.id);
+  t('영입: 고른 빌드로 들어온다 · 다중 직업 빌드는 후보에 없다', m.build === b2.id && L.length > 1 && L.every(b => !b.mc), m.build); }
 // 전투 방 하나를 세워 보는 시험 (고블린 전사 셋): 배속 · 스킬 예외 뒤처리
 { const RM = { id: 'A', x: 2, y: 2, w: 16, h: 10, cx: 10, cy: 7, tags: ['hall'] }, W = 20, Hh = 14, c = new Array(W * Hh).fill('#'); for (let y = 2; y < 12; y++) for (let x = 2; x < 18; x++) c[y * W + x] = '.';
   const rig = first => { const map = { w: W, h: Hh, c, kindAt: new Uint8Array(W * Hh), poi: {}, passChars: '.>,', ver: 1, dist: {}, rooms: [RM], start: RM, end: RM, fixed: true };
@@ -523,7 +524,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   const st = RUN.newRun(D.floorSeed(s, 3), ['fighter', 'cleric'], 3); st.items = { camp: 4 }; st.party.forEach(m => { m.hp = 1; }); st.map.nodes[0].hostile = false;
   t('야영: 쉬고 나면 우두머리 방까지 갈 물자가 안 남을 때는 쉬지 않는다', D.canCamp(st) && !D.wantCamp(s, st) && (st.items.camp = 8, D.wantCamp(s, st))); }
 // 전투 전 배치: 어느 방 · 어느 문으로 들어서도 구역에 다섯이 선다 (근접 앞줄 · 나머지 뒷줄) · 옮긴 자리는 기억
-{ const s = D.fresh(); s.deep = 4; s.up.cls = 11; s.party = ['dragoon', 'cleric', 'mage', 'paladin', 'rogue']; const badD = []; let Z1 = null, P1 = null;
+{ const s = D.fresh(); s.deep = 4; s.start2 = null; G.newState(); ['dragoon', 'cleric', 'mage', 'paladin', 'rogue'].forEach((c, i) => { s.roster['h' + (i + 1)] = { m: D.member(G.S.w.fantasy, c, 3), tr: [] }; }); s.party = ['h1', 'h2', 'h3', 'h4', 'h5']; const badD = []; let Z1 = null, P1 = null;
   for (const fl of [1, 3, 5, 9]) { const m = RUN.gen.make(D.floorSeed(s, fl), fl), { iso, roomAt } = G.Floor.fromRun(m), { r } = D.world(s, iso), ps = r.party;
     if (ps.length !== 5) badD.push(`${fl}층 파티 ${ps.length}`);
     for (const e of m.edges) { const c = m._lay.cor[e.id]; for (const [id, out] of [[e.b, c.cells[c.cells.length - 1]], [e.a, c.cells[0]]]) { const Z = D.depZone(iso, roomAt, id, G.Floor.tile(out)), F = D.depForm({}, ps, Z), ts = [...F.values()], dep = t0 => t0[0] * Z.ax[0] + t0[1] * Z.ax[1];
@@ -532,10 +533,31 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
         if (fl === 3 && !Z1) { Z1 = Z; P1 = ps; } } } }
   t('배치: 1 · 3 · 5 · 9층의 모든 방 · 모든 문에서 다섯이 배치 구역(입구 쪽 4타일)의 서로 다른 칸에 · 근접은 앞줄', !badD.length, badD.slice(0, 6).join(' / '));
   const F0 = D.depForm(s, P1, Z1), me = P1.find(p => G.Dnd.melee(p)), ca = P1.find(p => !G.Dnd.melee(p)), a0 = F0.get(me), b0 = F0.get(ca); F0.set(me, b0); F0.set(ca, a0); D.depSave(s, Z1, F0);
-  const F1 = D.depForm(D.load(D.dump(s)), P1, Z1); t('배치: 옮긴 자리(줄 · 줄 안 차례)는 저장에 남아 다음 전투의 기본 진형', s.form[me.merc.cls][0] === 'b' && s.form[ca.merc.cls][0] === 'f' && String(F1.get(me)) === String(b0) && String(F1.get(ca)) === String(a0), JSON.stringify(s.form)); }
+  const F1 = D.depForm(D.load(D.dump(s)), P1, Z1); t('배치: 옮긴 자리(줄 · 줄 안 차례)는 저장에 남아 다음 전투의 기본 진형', s.form[me.merc.hid][0] === 'b' && s.form[ca.merc.hid][0] === 'f' && String(F1.get(me)) === String(b0) && String(F1.get(ca)) === String(a0), JSON.stringify(s.form)); }
 
 { const F = (G.newState(), G.S.w.fantasy), ms = ['dragoon', 'mage', 'cleric', 'archer', 'rogue'].map(c => D.member(F, c, 9)); let bad = [], n = 0; let x = 11; const rng = () => (x = (x * 16807) % 2147483647) / 2147483647;
   for (let fl = 1; fl <= 20; fl += 3) for (let i = 0; i < 60; i++) { const d = G.Gear.roll(fl, 'treasure', rng, F, ms.map(m => ({ merc: m }))); for (const q of [].concat(d || [])) if (q?.kind === 'art') { n++; if (D.gearBan(G.D.ARTS[q.k])) bad.push(G.D.ARTS[q.k].n); } }
   t('원정 전리품에 충전식 · 탐험용 · 효과 없는 마법 물건이 나오지 않는다', n > 20 && !bad.length, [n, bad.slice(0, 5)]); }
+// 영웅 모델 (2026-11-27): 성급 = 최대 레벨 · 계열 칸 / 모집 공고 · 고용 / 같은 직업 · 높은 성급에게서 계승 / 옛 저장 옮기기
+{ G.newState(); const F = G.S.w.fantasy, s = D.fresh(); s.start2 = null; s.party = []; s.gold = 100000;
+  const a = D.member(F, 'dragoon', 1, Math.random, 'fighter', 1); t('1성: 최대 레벨 4 · 계열 칸 둘', D.maxLv(a) === 4 && G.Builds.slots(a).filter(Boolean).length === 2, G.Builds.slots(a).join());
+  D.gain(a, 1e9); t('성급의 최대 레벨에서 멈춘다', a.lv === 4, a.lv);
+  const c3 = D.member(F, 'dragoon', 1, Math.random, 'fighter', 3); t('3성은 1레벨이어도 칸 넷 (그 계열 차례)', G.Builds.slots(c3).filter(Boolean).join() === G.Builds.byId('fighter').core.slice(0, 4).join(), G.Builds.slots(c3).join());
+  const g0 = s.gold; t('공고: 금화를 내고 지원자 다섯', D.post(s, 0, false) && s.board.list.length === D.SMALL_N && s.gold === g0 - D.postCost(0, false));
+  t('지원자: 성급 · 레벨 ≤ 성급 최대 · 고용비 = 별 기본 × 레벨 배율', s.board.list.every(x => x.m.star >= 1 && x.m.lv <= D.maxLv(x.m) && x.fee === D.fee(x.m.star, x.m.lv)), s.board.list.map(x => [x.m.cls, x.m.star, x.m.lv, x.fee]).join('|'));
+  let ok10 = true; for (let k = 0; k < 30; k++) { D.post(s, 0, true); if (s.board.list.length !== D.BIG_N || !s.board.list.some(x => x.m.star >= 3)) ok10 = false; } t('10명 공고: 열 명 · 3성 이상 하나는 늘', ok10);
+  let okX = true; for (let k = 0; k < 20; k++) { D.post(s, 2, false); if (s.board.list.some(x => x.m.star < 2)) okX = false; } t('특급 공고에는 1성이 없다', okX);
+  const f0 = s.board.list[0].fee, gg = s.gold, id = D.hire(s, 0); t('고용: 고용비를 내고 명단 · 파티에 (자리가 있으면) · 지원자에서 빠진다', id && s.roster[id] && s.gold === gg - f0 && D.team(s).includes(id) && s.board.list.length === D.SMALL_N - 1);
+  while (D.heroes(s).length < D.ROSTER_CAP) D.addHero(s, D.member(F, 'cleric', 1)); t('명단이 차면 고용 못 함', D.canHire(s, 0) === '명단' && !D.hire(s, 0));
+  // 계승
+  const s2 = D.fresh(); s2.start2 = null; s2.party = []; s2.stash = [];
+  const to = D.addHero(s2, D.member(F, 'dragoon', 1, Math.random, 'fighter', 1)), fr = D.addHero(s2, D.member(F, 'dragoon', 1, Math.random, 'fighter_shield', 3)), lo = D.addHero(s2, D.member(F, 'dragoon', 1, Math.random, 'fighter_twin', 1)), ot = D.addHero(s2, D.member(F, 'barbarian', 1, Math.random, 'barbarian', 4)), cl = D.addHero(s2, D.member(F, 'cleric', 1, Math.random, null, 1));
+  const O = D.inheritOpts(s2, to); t('계승 후보: 같은 직업 · 더 높은 성급만 · 받는 쪽에 없는 스킬', O.length === 1 && O[0].hid === fr && O[0].sk.includes('ln_parry') && !O[0].sk.includes('sr_second'), JSON.stringify(O));
+  t('주문 직업은 계승을 받지 못한다 (성급 배치 전)', !D.inheritOpts(s2, cl).length);
+  t('계승: 받는 영웅 별 +1 · 새 칸에 고른 스킬 · 최대 레벨 +4 · 바친 영웅은 사라진다', D.inherit(s2, to, fr, 'ln_parry') === true && s2.roster[to].m.star === 2 && G.Builds.slots(s2.roster[to].m)[2] === 'ln_parry' && D.maxLv(s2.roster[to].m) === 8 && !s2.roster[fr], G.Builds.slots(s2.roster[to].m).join());
+  t('없는 영웅 · 고를 수 없는 스킬은 막는다', D.inherit(s2, to, fr, 'ln_parry') === '불가' && D.inherit(s2, lo, to, 'sr_cleave') === true && D.inherit(s2, to, ot, 'sr_rage') === '불가');
+  // 옛 저장
+  const old = D.member(F, 'paladin', 14), raw = JSON.stringify({ ...fresh1(), roster: { paladin: { m: { ...old, star: undefined, star0: undefined }, tr: [] }, rogue: { m: D.member(F, 'rogue', 3), tr: [] } }, party: ['paladin', 'rogue'], dead: { rogue: true }, form: { paladin: ['f', 0] }, start2: undefined }), s3 = D.load(raw), ids = D.heroes(s3);
+  t('옛 저장: 직업 열쇠 → 번호 열쇠 · 성급 = 레벨 ÷ 4 올림 · 파티 · 사망 · 진형도 번호로', ids.join() === 'h1,h2' && s3.roster.h1.m.star === 4 && s3.roster.h2.m.star === 1 && s3.party.join() === 'h1,h2' && s3.dead.h2 === true && s3.form.h1[0] === 'f' && !s3.start2, JSON.stringify([ids, s3.party, s3.dead, s3.form])); }
 console.log(`dive_rules: 통과 ${ok} · 실패 ${bad}`);
 process.exit(bad ? 1 : 0);

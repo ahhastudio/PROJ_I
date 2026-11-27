@@ -409,7 +409,7 @@ G.Dnd = (() => {
       return v;
     },
     // 빗나감 표시: 피해 숫자 자리에 작은 회색
-    miss(rt, tg) { G.fx(rt, { k: 'text', x: tg.x, y: tg.y - 0.6, s: '회피', col: '#9aa0a8', t: 0.6, sz: 0.65 }); },
+    miss(rt, tg) { G.fx(rt, { k: 'text', x: tg.x, y: tg.y - 0.6, s: '회피', col: '#dfe4ea', t: 0.8, sz: 0.9 }); },
 
     // ── 전투에 끼어드는 규칙 ──
     // 우리가 거는 기절 · 정지 · 감전: 몬스터가 내성에 성공하면 걸리지 않는다

@@ -22,7 +22,7 @@ function frame(tt) {
   drawProps(r, t); if (VOXON) VOX.flush(t); /* 복셀 소품 */ drawTufts(t); HDBG.mark(0); // 선 그림 배경: 소품까지 그린 상태
   if (SPR) {
     settle(r, dt);
-    const recs = r.mons.concat(r.party).map(e => prep(e, r, t, dt)).filter(Boolean);
+    const recs = r.mons.concat(r.party).map(e => prep(e, r, t, dt)).filter(Boolean).concat(prepDying(r, t, dt)); // 쓰러지는 적도 (엔진 목록에서는 이미 빠졌다)
     flushShadow(); applyShadows(bakedZ); shadeEdges(); HDBG.mark(1); // 그림자까지
     drawRange(r); drawAim(r, t); drawDecals(); stepFx(dt); paintFx(true); HDBG.mark(2); // 바닥 이펙트(횃불 빛)까지
     if (D25) MD.zref(zb); // 시안: 시체 · 땅 위 그림은 서 있는 인물을 가리지 않는다

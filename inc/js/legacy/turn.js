@@ -440,6 +440,7 @@ G.Turn = (() => {
     pause(st, BEAT);
   }
   function finish(f, rt, st) {
+    if (T.hold && T.hold(rt)) { rt.turn = st; st.ph = 'wait'; st.t = 0.1; return; } // 화면이 아직 마지막 타격 · 쓰러지는 모습을 그리는 중 (앱이 건다 — 없으면 바로)
     if (!foes(rt).length && T.refill && T.refill(f, rt, st)) { rt.turn = st; st.i = st.order.length; st.ph = 'wait'; st.t = 0.3; return; } // 다음 무리 (원정)
     if (st.round >= 5 || st.downs) dm(rt, `전투 끝 · ${st.round}라운드`);
     G.Story.endFight(f, rt);

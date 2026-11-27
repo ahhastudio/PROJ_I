@@ -371,7 +371,7 @@ const MD = (() => {
   function drawD25(R0, flip, fx, fy, k) {
     const { sp, sc } = R0, P = R0.pose, s = sc * k, body = pxCanvas(sp.px, sp.w, sp.foot + 1);
     tx.save(); tx.imageSmoothingEnabled = false;
-    tx.translate(fx, fy); tx.transform(P.px, 0, -P.lean, P.py, 0, 0); if (flip) tx.scale(-1, 1);
+    tx.translate(fx, fy); if (P.rot) tx.rotate(P.rot); if (P.alpha != null) tx.globalAlpha = P.alpha; if (P.gray) tx.filter = `grayscale(${(P.gray * .7).toFixed(2)}) brightness(${(1 - P.gray * .25).toFixed(2)})`; tx.transform(P.px, 0, -P.lean, P.py, 0, 0); if (flip) tx.scale(-1, 1);
     tx.drawImage(body, -sp.w / 2 * s, -sp.foot * s, sp.w * s, (sp.foot + 1) * s);
     const Wp = sp.weapon; if (Wp) {
       const wc = pxCanvas(Wp.px, Wp.w, Wp.h), gx = (-sp.w / 2 + Wp.gx) * s, gy = (-sp.foot + Wp.gy) * s;

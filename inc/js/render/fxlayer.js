@@ -79,14 +79,17 @@ function drawFx(r) {
         nums.push({ v: val, sign: num[1], s: num[1] + val, x: p.sx, y, x0: p.sx, y0: p.sy, c, t0: due ? due.t : n0 });
         continue;
       }
+      const dueT = typeof HITDUE !== 'undefined' ? HITDUE.find(h => h.t > now() && Math.abs(h.x - o.x) < .5 && Math.abs(h.y - o.y - 1) < .7)?.t : 0; // 빗나감 · 회피도 무기가 닿을 때
+      const spawn = () => {
       let [sx, sy] = toScreen(wx(o.x), wy(o.y + (o.ent ? 0 : 1)), 3.1); const el = document.createElement('div');
-      // 겹치지 않게: 같은 말이 같은 자리에 0.5초 안에 또 뜨면 하나만 · 다른 말은 위로 쌓는다
-      { const t1 = now(), word = String(o.s); while (words.length && t1 - words[0].t > 900) words.shift();
-        if (words.some(q => q.s === word && t1 - q.t < 500 && Math.hypot(q.x - sx, q.y0 - sy) < 46)) continue;
-        const y0 = sy; for (let g = 0; g < 4 && words.some(q => Math.abs(q.x - sx) < 48 && Math.abs(q.y - sy) < 15); g++) sy -= 16; words.push({ s: word, x: sx, y: sy, y0, t: t1 }); }
-      el.className = 'fl'; el.textContent = o.s; el.style.left = sx + 'px'; el.style.top = sy + 'px'; el.style.color = o.col === '#fff' || o.col === '#ffffff' ? 'var(--ink)' : o.col; el.style.fontSize = 13 + (o.sz || 1) * 4 + 'px';
-      floats.append(el); const t0 = now();
-      const tick = () => { const q = (now() - t0) / 900; if (q >= 1) { el.remove(); return; } el.style.transform = `translate(-50%,calc(-100% - ${q * 22}px))`; el.style.opacity = q > .7 ? (1 - q) / .3 : 1; requestAnimationFrame(tick); }; tick();
+        // 겹치지 않게: 같은 말이 같은 자리에 0.5초 안에 또 뜨면 하나만 · 다른 말은 위로 쌓는다
+        { const t1 = now(), word = String(o.s); while (words.length && t1 - words[0].t > 900) words.shift();
+          if (words.some(q => q.s === word && t1 - q.t < 500 && Math.hypot(q.x - sx, q.y0 - sy) < 46)) return;
+          const y0 = sy; for (let g = 0; g < 4 && words.some(q => Math.abs(q.x - sx) < 48 && Math.abs(q.y - sy) < 15); g++) sy -= 16; words.push({ s: word, x: sx, y: sy, y0, t: t1 }); }
+        el.className = 'fl'; el.textContent = o.s; el.style.left = sx + 'px'; el.style.top = sy + 'px'; el.style.color = o.col === '#fff' || o.col === '#ffffff' ? 'var(--ink)' : o.col; el.style.fontSize = 13 + (o.sz || 1) * 4 + 'px';
+        floats.append(el); const t0 = now();
+        const tick = () => { const q = (now() - t0) / 900; if (q >= 1) { el.remove(); return; } el.style.transform = `translate(-50%,calc(-100% - ${q * 22}px))`; el.style.opacity = q > .7 ? (1 - q) / .3 : 1; requestAnimationFrame(tick); }; tick();
+        }; if (dueT) setTimeout(spawn, dueT - now()); else spawn();
     } else if (o.k === 'proj' && o.x2 != null) {
       const pr = clamp(1 - o.t / (o.max || 1), 0, 1), a0 = dispAt(o.x, o.y, r), b0 = dispAt(o.x2, o.y2, r), A = project(wx(a0[0]), wy(a0[1]), 1.3), B = project(wx(b0[0]), wy(b0[1]), 1.1), X = lerp(A.sx, B.sx, pr), Y = lerp(A.sy, B.sy, pr) - Math.sin(pr * 3.14) * 7;
       if (o.key === 'fx_arrow') { const sp = sprite('fx_arrow'); if (sp) blitRot(sp, X, Y, Math.atan2(B.sy - A.sy, B.sx - A.sx) + 1.57, .55, 1e5, { py: sp.h / 2 }); }

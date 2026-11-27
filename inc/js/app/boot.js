@@ -71,6 +71,7 @@ J.lunge = (id, a, tg) => {
   const swing = () => { if (a.kind === 'mon') { const beast = STYLE(a.n || '') === 'quad'; return pfx(beast ? 'melee/claw-swipe' : 'melee/sword-slash', ax, ay, 0, { flip, k: 1.5, palette: FOE_SLASH }); }
     const id2 = SWING[(a.merc || f.leader).cls] || 'melee/sword-slash'; return pfx(id2, ax, ay, 0, { flip, k: id2 === 'melee/heavy-cleave' ? 2.2 : 1.4 }); };
   setTimeout(swing, lungeT()[0]); const q = true; // 휘두름 궤적은 모으기가 끝날 때
+  { const [A, B2] = lungeT(); while (HITDUE.length && now() - HITDUE[0].t > 1000) HITDUE.shift(); HITDUE.push({ x: tg.x, y: tg.y, t: now() + A + B2 }); } // 빗나감 글자도 닿을 때
   if (q) { const n = now(); while (SWUNG.length && n - SWUNG[0].t > 600) SWUNG.shift(); SWUNG.push({ x: tg.x, y: tg.y, t: n }); } // 이 휘두름을 그렸다 — 같은 타격의 픽셀 호(엔진의 'slash')는 겹쳐 그리지 않는다 (fxlayer drawFx)
 };
 const SWUNG = [];

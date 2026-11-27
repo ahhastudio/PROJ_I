@@ -4,11 +4,10 @@
 // 화면 전체가 장면 (2026-11-26): 고른 영웅은 앞줄에, 나머지는 탁자에 앉고 마을 사람이 섞인다. 벽의 게시판 = 해금 · 책장 = 도감 · 술청 = 명단 · 문 = 지도. 인형은 게임 안과 같은 픽셀(MD.pix).
 const DIVEINN = (() => {
   const { esc } = UI, D = G.Dive;
-  const prev = new Map(); // 아직 안 들인 직업의 본보기 인형 (직업 → 사람)
-  const demo = (S, c) => { let m = prev.get(c); if (!m) { m = D.member(G.S.w.fantasy, c, 1, () => 0.5, D.soloBuilds(c)[0]?.id); prev.set(c, m); } return m; };
   const clsN = c => G.Guild.def({ cls: c })?.n || c;
-  const merc = (S, c) => S.roster[c]?.m || demo(S, c);
-  const stOf = (S, c) => (S.dead[c] ? 'dead' : !S.roster[c] ? 'new' : 'in');
+  const merc = (S, c) => S.roster[c]?.m || null; // c = 영웅 번호 (2026-11-27 영웅 모델)
+  const stOf = (S, c) => (S.dead[c] ? 'dead' : 'in');
+  const stars = n => `<i class="dv-stars">${'★'.repeat(n || 1)}</i>`;
   // ── 장면: 화면 전체가 술집 한 칸. 인형과 같은 화소 크기로 그린다. F = 정보 칸에 가리지 않는 폭, B = 아래 줄에 가리지 않는 높이 ──
   const at = new Map(), acts = new Map(); // 영웅이 지금 서 있는 곳 (화면을 다시 그려도 이어진다) · 큰 그림의 동작이 시작한 때
   const CASK = ['#7fb069', '#d8553d', '#e8bc4c', '#6a9fd4', '#c07cd6', '#f0e6c8'];
@@ -64,7 +63,7 @@ const DIVEINN = (() => {
   function stool(R, a, b) { R('#24140c', a - 5, b - 7, 10, 4); R('#b0703f', a - 4, b - 6, 8, 2); R('#24140c', a - 4, b - 3, 2, 4); R('#24140c', a + 2, b - 3, 2, 4); }
   const SIT = 5;
   function scene(el, S, cur) {
-    const cs = D.classes(S), team = D.team(S), cv = el.querySelector('canvas'), x = cv.getContext('2d'), R = rect(x), who = el.querySelector('.in-who'), guild = el.closest('.dv-panel'), big = guild.querySelector('.in-big'), back = document.createElement('canvas');
+    const cs = D.heroes(S), team = D.team(S), cv = el.querySelector('canvas'), x = cv.getContext('2d'), R = rect(x), who = el.querySelector('.in-who'), guild = el.closest('.dv-panel'), big = guild.querySelector('.in-big'), back = document.createElement('canvas');
     let W = 0, H = 0, F = 0, P = null, k = 1, cw0 = 0, ch0 = 0, side0 = 0, last = performance.now();
     const tall = [], born = performance.now() / 1000, btn = [];
     if (!acts.has(cur)) { acts.clear(); acts.set(cur, born); }
@@ -76,10 +75,10 @@ const DIVEINN = (() => {
       P = plan(F, B); room(back.getContext('2d'), W, H, F, P, S); at.forEach((v, c) => { v.snap = true; }); marks(); };
     const marks = () => {
       who.innerHTML = cs.map(c => { const st = stOf(S, c), on = team.includes(c) && st !== 'dead';
-        return `<button data-in="${c}" class="in-g ${st}${on ? ' on' : ''}${c === cur ? ' cur' : ''}"><span>${st === 'dead' ? UI.px('skull') : ''}${st === 'new' ? '<em>+</em>' : ''}${on || c === cur || st === 'dead' ? esc(S.roster[c]?.m.name || clsN(c)) : ''}</span></button>`; }).join('');
+        return `<button data-in="${c}" class="in-g ${st}${on ? ' on' : ''}${c === cur ? ' cur' : ''}"><span>${st === 'dead' ? UI.px('skull') : ''}${on || c === cur || st === 'dead' ? esc(S.roster[c]?.m.name || '') : ''}</span></button>`; }).join('');
       cs.forEach((c, i) => { btn[i] = who.children[i]; });
       const hot = (t, a, b, w, h) => { const b0 = guild.querySelector(`.dv-gtabs [data-tab="${t}"]`); if (b0) Object.assign(b0.style, { left: a * k + 'px', top: b * k + 'px', width: w * k + 'px', height: h * k + 'px' }); };
-      hot('roster', 2, 18, P.bar - 4, P.wall - 14); hot('tree', P.pos.board - 18, 18, 36, 34); hot('dex', P.pos.shelf - 17, 16, 34, P.wall - 16); hot('go', P.door - 4, P.wall - 48, 36, 50); };
+      hot('roster', 2, 18, P.bar - 4, P.wall - 14); hot('tree', P.pos.board - 18, 18, 36, 34); if (P.pos.win) hot('recruit', P.pos.win - 16, 16, 32, 32); else hot('recruit', 2, P.wall + 2, P.bar - 4, 26); if (P.pos.fire) hot('stash', P.pos.fire - 20, 18, 40, P.wall - 20); else hot('stash', P.door - 40, P.wall + 2, 34, 26); hot('dex', P.pos.shelf - 17, 16, 34, P.wall - 16); hot('go', P.door - 4, P.wall - 48, 36, 50); };
     const put = (sp, a, b, flip, al, cut) => { const c = TAVERNUI.bitmap(sp), w = sp.w, hh = cut ? sp.foot - cut : sp.h; x.save(); if (al) { x.globalAlpha = 0.5; x.filter = 'grayscale(1)'; } x.translate(Math.round(a), Math.round(b)); if (flip) x.scale(-1, 1); x.drawImage(c, 0, 0, w, hh, -Math.floor(w / 2), -sp.foot, w, hh); x.restore(); };
     const paint = () => {
       fit(); const now = performance.now(), t = now / 1000, dt = Math.min(0.2, (now - last) / 1000); last = now; x.imageSmoothingEnabled = false; x.globalCompositeOperation = 'source-over'; x.drawImage(back, 0, 0);
@@ -98,7 +97,7 @@ const DIVEINN = (() => {
         const dx = g.x - p.x, dy = g.y - p.y, dd = Math.hypot(dx, dy), mv = dd > 0.5; if (mv) { const s = Math.min(dd, 62 * dt); p.x += dx / dd * s; p.y += dy / dd * s; p.dir = Math.abs(dx) > 1 ? Math.sign(dx) : p.dir; } else p.dir = g.dir;
         const sit = !mv && g.sit, on = team.includes(c) && st === 'in', act = acts.get(c), clip = mv ? 'Walk' : 'Idle';
         Q.push({ y: p.y, f: () => {
-          const sp = MD.pix ? MD.pix(merc(S, c), t + i * 0.37, clip) : null;
+          const mm = merc(S, c), sp = mm && MD.pix ? MD.pix(mm, t + i * 0.37, clip) : null;
           if (sit) stool(R, p.x, p.y); else { R('rgba(40,16,6,.35)', p.x - 10, p.y - 1, 20, 3); R('rgba(40,16,6,.35)', p.x - 7, p.y - 2, 14, 5); }
           if (c === cur) { const b = p.y + 2; R('#ffe08a', p.x - 11, b, 22, 1); R('#ffe08a', p.x - 13, b - 3, 2, 3); R('#ffe08a', p.x + 11, b - 3, 2, 3); }
           if (!sp) return; tall[i] = sp.foot - sp.top; put(sp, p.x, sit ? p.y - SIT + 3 : p.y, p.dir < 0, st === 'dead', sit ? 4 : 0); } });
@@ -109,24 +108,23 @@ const DIVEINN = (() => {
       if (fx) glow(fx, w - 6, 74 + 3 * Math.sin(t * 7), `rgba(255,140,50,${0.4 + 0.05 * Math.sin(t * 9)})`); for (const a of lamps(P)) glow(a, 25, 26, 'rgba(255,200,90,.32)'); if (P.pos.win) glow(P.pos.win, 40, 44, 'rgba(255,170,90,.25)');
       x.globalCompositeOperation = 'source-over';
       // 정보 칸의 큰 그림
-      if (big && cur) { const t0 = acts.get(cur) ?? -9, u = t - t0, st = stOf(S, cur), sp = MD.pix ? MD.pix(merc(S, cur), u < 1.2 ? u + 0.35 : t, u < 1.2 && st !== 'dead' ? 'Act' : 'Idle') : null, c = big.getContext('2d'); if (sp) { c.imageSmoothingEnabled = false; c.clearRect(0, 0, big.width, big.height); c.filter = st === 'dead' ? 'grayscale(1)' : 'none'; c.drawImage(TAVERNUI.bitmap(sp), Math.floor(big.width / 2 - sp.w / 2), big.height - 4 - sp.foot); } }
+      if (big && cur) { const t0 = acts.get(cur) ?? -9, u = t - t0, st = stOf(S, cur), sp = merc(S, cur) && MD.pix ? MD.pix(merc(S, cur), u < 1.2 ? u + 0.35 : t, u < 1.2 && st !== 'dead' ? 'Act' : 'Idle') : null, c = big.getContext('2d'); if (sp) { c.imageSmoothingEnabled = false; c.clearRect(0, 0, big.width, big.height); c.filter = st === 'dead' ? 'grayscale(1)' : 'none'; c.drawImage(TAVERNUI.bitmap(sp), Math.floor(big.width / 2 - sp.w / 2), big.height - 4 - sp.foot); } }
     };
-    paint(); const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); if (!document.hidden && !document.querySelector('#dv-sheet,#dv-hero,#dv-dex,#dv-pick')) paint(); }, 66);
+    paint(); const tm = setInterval(() => { if (!el.isConnected) return clearInterval(tm); if (!document.hidden && !document.querySelector('#dv-sheet,#dv-hero,#dv-lic,#dv-dex,#dv-pick,#dv-rc')) paint(); }, 66);
   }
   // 초상: 인형 그림이 아직이면 다시 시도
-  const faces = (box, S) => box.querySelectorAll('canvas[data-f]').forEach(cv => { const go = () => { if (cv.isConnected && !UI.face(cv, merc(S, cv.dataset.f))) setTimeout(go, 400); }; go(); });
+  const faces = (box, S) => box.querySelectorAll('canvas[data-f]').forEach(cv => { const go = () => { if (cv.isConnected && merc(S, cv.dataset.f) && !UI.face(cv, merc(S, cv.dataset.f))) setTimeout(go, 400); }; go(); });
   // 파티 초상 줄 (길드 · 지도가 같이 쓴다): 자리 수만큼 칸
   const party = (S, key) => { const t = D.team(S); return `<div class="in-party">${Array.from({ length: D.seats(S) }, (_, i) => { const c = t[i]; if (!c) return '<i class="in-p empty"></i>'; const m = S.roster[c]?.m;
-    return `<button class="in-p on" data-${key}="${c}"><canvas data-f="${c}" width="26" height="30"${m ? '' : ' class="sil"'}></canvas><b>${esc(m?.name || clsN(c))}</b><em>${m?.lv || D.newLv(S)}</em><i class="in-pk">${D.knacksOf(m || { cls: c, lv: D.newLv(S) }).map(g => UI.px(D.KNACK[g].ic)).join('')}</i></button>`; }).join('')}</div>`; };
+    return `<button class="in-p on" data-${key}="${c}"><canvas data-f="${c}" width="26" height="30"${m ? '' : ' class="sil"'}></canvas><b>${esc(m?.name || '')}</b><em>${m?.lv || ''}</em><i class="in-pk">${D.knacksOf(m || {}).map(g => UI.px(D.KNACK[g].ic)).join('')}</i></button>`; }).join('')}</div>`; };
   // 오른쪽 정보: 큰 그림 · 이름 · 직업 · 레벨 · 단추
   function info(S, c) {
-    if (!c) return ''; const h = S.roster[c], st = stOf(S, c), team = D.team(S), inT = team.includes(c);
-    const keys = `<div class="in-keys">${D.knacksOf(h?.m || { cls: c, lv: D.newLv(S) }).map(g => `<span>${UI.px(D.KNACK[g].ic)}${esc(D.KNACK[g].n)}</span>`).join('')}</div>`; // 탐험 재주 (2026-11-27 — 영입 전에는 직업 · 레벨로 정해지는 것만)
+    const h = c && S.roster[c]; if (!h) return ''; const st = stOf(S, c), team = D.team(S), inT = team.includes(c);
+    const keys = `<div class="in-keys">${D.knacksOf(h.m).map(g => `<span>${UI.px(D.KNACK[g].ic)}${esc(D.KNACK[g].n)}</span>`).join('')}</div>`; // 탐험 재주 (2026-11-27 — 영입 전에는 직업 · 레벨로 정해지는 것만)
     const top = (n, sub) => `<canvas class="in-big" width="80" height="50"></canvas><div class="in-hd"><b>${esc(n)}</b><small>${esc(sub)}</small></div>${keys}`;
-    if (!h) return top(clsN(c), `Lv ${D.newLv(S)}`) + `<div class="in-act"><button class="in-hire" data-hire="${c}">영입</button></div>`;
-    const m = h.m, need = G.Guild.needOf(m);
-    return top(m.name, `${clsN(c)} · ${G.Builds.byId(m.build)?.n || ''}`)
-      + `<div class="in-lv">Lv ${m.lv}<i><em style="width:${m.lv >= D.LV_MAX ? 100 : Math.round(100 * Math.min(1, (m.xp || 0) / need))}%"></em></i></div>`
+    const m = h.m, need = G.Guild.needOf(m), mx = D.maxLv(m);
+    return top(m.name, `${clsN(m.cls)} · ${G.Builds.byId(m.build)?.n || ''}`) + `<div class="in-st">${stars(m.star)}</div>`
+      + `<div class="in-lv">Lv ${m.lv}/${mx}<i><em style="width:${m.lv >= mx ? 100 : Math.round(100 * Math.min(1, (m.xp || 0) / need))}%"></em></i></div>`
       + `<div class="in-act">${st === 'dead' ? `<button class="in-hire" data-rev="${c}">부활 ${UI.px('coin')} ${D.reviveCost(S, c)}</button>` : inT ? `<button data-out="${c}"${team.length < 2 ? ' disabled' : ''}>빼기</button>` : `<button data-add="${c}"${team.length >= D.seats(S) ? ' disabled' : ''}>넣기</button>`}<button data-hero="${c}">상태</button></div>`;
   }
   return { scene, party, info, faces };

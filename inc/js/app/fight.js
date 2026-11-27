@@ -201,7 +201,8 @@ const FIGHT = (() => {
     F.acc += dt; let n = 0; while (F.acc >= 0.1 && n++ < 4) { G.tick(0.1); F.acc -= 0.1; }
     const foes = R.mons.filter(m => m.hp > 0), ps = R.party.filter(p => !p.dead && p.hp > 0);
     document.body.dataset.fight = `${F.round}r:${foes.length}foes:${ps.length}ps`;
-    if (!ps.length) end(false); else if ((!foes.length && !(G.Turn.refill && G.Turn.refill(G.S.w.fantasy, R, R.turn))) || F.t > 600) end(true);
+    if (!ps.length) end(false); else if (F.t > 600) end(true);
+    else if (!foes.length) { if (G.Turn.hold && G.Turn.hold(R)) return true; /* 마지막 타격 · 쓰러지는 모습이 끝날 때까지 (actors.js) */ if (!(G.Turn.refill && G.Turn.refill(G.S.w.fantasy, R, R.turn))) end(true); }
     return true;
   }
   function end(win) {

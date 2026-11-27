@@ -1038,3 +1038,45 @@ canvas.sil { filter:brightness(.32); }
 /* 원정 중 지도: 어두운 돌 빛 (2026-11-27) — 판 테두리는 다른 HUD 판(인벤토리 · 문 표지)과 같은 검은 선 + 안쪽 갈색 */
 body.dive #pmapbox { background:#0e0a08 !important; border:2px solid #0a0604 !important; box-shadow:inset 0 0 0 1px #6a4a2a, 0 4px 14px rgba(0,0,0,.6) !important; border-radius:4px !important; }
 body.dive #pmapbox.big { background:#0e0a08 !important; } body.dive #pmapbox .dvpm-t { color:#f3e4c3; }
+/* 영웅 모델 (2026-11-27): 별 · 모집 창 · 계승 */
+.dv-stars { font-style:normal; color:#ffd45a; letter-spacing:-1px; text-shadow:0 1px 0 #24140c; font-size:12px; white-space:nowrap; }
+#dv-rc .rc-tiers { display:grid; grid-template-columns:repeat(2, 1fr); gap:6px; margin-top:10px; }
+#dv-rc .rc-post { display:grid; grid-template-columns:1fr auto; grid-template-areas:"n c" "s c"; padding:6px 10px; text-align:left; gap:0 8px; align-items:center; }
+#dv-rc .rc-post b { grid-area:n; } #dv-rc .rc-post small { grid-area:s; color:var(--dim); font-size:11px; } #dv-rc .rc-post span { grid-area:c; color:#ffd98a; }
+#dv-rc .rc-list button.rc-a { grid-template-columns:44px 1fr auto 56px 70px; grid-template-areas:"f n st lv fee" "f s st lv fee"; }
+#dv-rc .rc-a canvas { grid-area:f; width:44px; height:50px; image-rendering:pixelated; } #dv-rc .rc-a .dv-stars { grid-area:st; font-size:14px; } #dv-rc .rc-a .dv-lv { grid-area:lv; } #dv-rc .rc-a > span:last-child { grid-area:fee; color:#ffd98a; text-align:right; }
+.hs-inh { list-style:none; margin:0 auto; padding:0; width:100%; display:grid; gap:6px; } .hs-inh li { display:grid; grid-template-columns:auto auto 1fr; gap:2px 8px; align-items:center; } .hs-inh li span { grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:4px; }
+.hs-inh .chip { display:inline-flex; align-items:center; gap:4px; } .hs-inh .chip img, .hs-inh .chip canvas { width:18px; height:18px; } .hs-inh .chip.warn { background:#7a2420; color:#ffe0d0; border-color:#e0584a; }
+.in-st { text-align:center; margin-top:-2px; } .in-st .dv-stars { font-size:14px; }
+.inn .in-st { align-self:center; }
+#dv-rc { z-index:63; background:#120c08; } #dv-rc > * { max-width:560px; margin-left:auto; margin-right:auto; }
+#dv-rc .dv-picks { display:grid; gap:8px; margin-top:10px; } #dv-rc .dv-picks button { display:grid; align-items:center; gap:2px 6px; padding:8px 10px; text-align:left; }
+#dv-rc .dv-picks button > b { grid-area:n; font-size:14px; } #dv-rc .dv-picks button > small { grid-area:s; color:var(--dim); font-size:11px; }
+#dv-hero .hs-lock .dv-stars { font-size:11px; }
+/* 상태창 = 모험가 등록증 (2026-11-27, 시안 card2): 가로 카드 520×328 · 가운데 고정 크기 (--k로 줄인다) · 테두리 재질 = 성급 */
+#dv-lic { position:fixed; inset:0; z-index:63; background:rgba(8,5,4,.62); font-family:"Galmuri11",sans-serif; display:block; padding:0; overflow:hidden; --k:1; }
+#dv-lic > * { max-width:none; margin:0; }
+#dv-lic .lc { --r:#c4cee2; --rd:#4a5470; position:absolute; left:50%; top:50%; width:520px; height:328px; transform:translate(-50%, -50%) scale(var(--k)); transform-origin:50% 50%; box-sizing:border-box; padding:7px; border-radius:14px; background:linear-gradient(150deg, color-mix(in srgb, var(--r) 70%, #fff), var(--r) 35%, var(--rd)); box-shadow:0 18px 44px rgba(0,0,0,.65), inset 0 0 0 2px rgba(255,255,255,.3); }
+#dv-lic .lc-in { position:relative; height:100%; border-radius:9px; overflow:hidden; background:#efe3c6; background-image:radial-gradient(rgba(120,90,50,.08) 1px, transparent 1px), linear-gradient(170deg, #f4ead2, #e6d6b2); background-size:6px 6px, 100% 100%; color:#2a1c12; box-shadow:inset 0 0 0 1px rgba(0,0,0,.35); }
+#dv-lic .lc-hd { display:flex; align-items:center; gap:8px; height:30px; padding:0 6px 0 14px; background:linear-gradient(#3a2618, #2a1a10); color:#f0dcae; font-size:12px; letter-spacing:1px; }
+#dv-lic .lc-hd b { font-size:13px; letter-spacing:2px; } #dv-lic .lc-hd span { margin-left:auto; color:#c9a878; font-size:11px; letter-spacing:0; }
+#dv-lic .lc-x { min-height:0; width:22px; height:22px; padding:0; border:0; background:none; color:#c9a878; font-size:13px; box-shadow:none; }
+#dv-lic .lc-ph { position:absolute; left:14px; top:42px; width:112px; height:136px; background:linear-gradient(#bfd0d8, #95aab4); border:3px solid var(--rd); box-shadow:0 0 0 2px var(--r), 2px 2px 0 rgba(0,0,0,.18); overflow:hidden; }
+#dv-lic .lc-ph canvas { width:112px; height:136px; image-rendering:pixelated; }
+#dv-lic .lc-rar { position:absolute; left:0; right:0; bottom:0; z-index:2; text-align:center; font-style:normal; font-size:13px; letter-spacing:-1px; color:#ffd45a; background:linear-gradient(transparent, rgba(20,12,8,.85)); padding:10px 0 2px; text-shadow:0 1px 0 #000; }
+#dv-lic .lc-cls { position:absolute; left:14px; top:186px; width:118px; text-align:center; font-size:12px; font-weight:700; } #dv-lic .lc-cls small { display:block; font-weight:400; color:#6a5038; font-size:10px; margin-top:1px; }
+#dv-lic .lc-xp { position:absolute; left:14px; top:222px; width:118px; } #dv-lic .lc-xp i { display:block; height:6px; background:#c9b48a; border:1px solid #2a1c12; } #dv-lic .lc-xp em { display:block; height:100%; background:#5a8a3a; } #dv-lic .lc-xp small { font-size:9px; color:#6a5038; }
+#dv-lic .lc-main { position:absolute; left:140px; right:14px; top:38px; }
+#dv-lic .lc-name { display:flex; align-items:baseline; gap:10px; border-bottom:2px solid #2a1c12; padding-bottom:3px; } #dv-lic .lc-name b { font-size:24px; } #dv-lic .lc-name em { font-style:normal; font-size:13px; color:#6a5038; }
+#dv-lic .lc-st { display:grid; grid-template-columns:repeat(4, 1fr); margin-top:7px; border:1px solid #8a7050; } #dv-lic .lc-st span { padding:3px 6px; border-left:1px solid #c9b48a; font-size:9px; color:#6a5038; } #dv-lic .lc-st span:first-child { border-left:none; } #dv-lic .lc-st b { display:block; font-size:15px; color:#2a1c12; }
+#dv-lic .lc-sk { display:grid; grid-template-columns:repeat(2, 1fr); gap:4px; margin-top:8px; }
+#dv-lic .lc-sk > div { position:relative; display:flex; align-items:center; gap:5px; min-width:0; padding:3px 4px; background:rgba(255,255,255,.35); border:1px solid #c9b48a; cursor:pointer; } #dv-lic .lc-sk > div > span { min-width:0; }
+#dv-lic .lc-sk img, #dv-lic .lc-sk canvas, #dv-lic .lc-nok { width:22px; height:22px; flex:0 0 auto; image-rendering:pixelated; background:#1a120c; border:1px solid #2a1c12; display:block; }
+#dv-lic .lc-sk .off { opacity:.42; filter:grayscale(1); } #dv-lic .lc-sk .off em { position:absolute; right:3px; top:2px; display:flex; align-items:center; gap:1px; font-style:normal; font-size:8px; color:#2a1c12; letter-spacing:-1px; } #dv-lic .lc-sk .off em .px { width:8px; height:8px; }
+#dv-lic .lc-sk b { display:block; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } #dv-lic .lc-sk small { display:block; font-size:9px; color:#6a5038; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#dv-lic .lc-ft { display:flex; gap:6px; margin-top:8px; font-size:10px; color:#6a5038; align-items:center; flex-wrap:wrap; max-height:44px; overflow:hidden; } #dv-lic .lc-ft span { display:inline-flex; align-items:center; gap:3px; padding:2px 6px; border:1px solid #8a7050; color:#2a1c12; background:rgba(255,255,255,.3); } #dv-lic .lc-ft .px { width:10px; height:10px; }
+#dv-lic .lc-ft .r1 { border-color:#3a8a3a; } #dv-lic .lc-ft .r2 { border-color:#3a6ac0; } #dv-lic .lc-ft .r3 { border-color:#8a4ac0; } #dv-lic .lc-ft .r4 { border-color:#d0802a; }
+#dv-lic .lc-sig { position:absolute; left:14px; bottom:12px; width:118px; border-top:1px solid #8a7050; font-size:9px; color:#8a7050; padding-top:2px; }
+#dv-lic .lc-more { position:absolute; left:50%; top:calc(50% + 164px * var(--k) + 10px); transform:translateX(-50%) scale(var(--k)); transform-origin:50% 0; width:520px; box-sizing:border-box; display:grid; gap:6px; padding:8px 10px; background:#1c130c; border:1px solid #6a4a2a; border-radius:8px; color:#e8dcc4; font-size:12px; }
+#dv-lic .lc-inh > div { display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin-top:4px; } #dv-lic .lc-inh > div > span { margin-right:4px; }
+#dv-lic .lc-inh .chip { display:inline-flex; align-items:center; gap:4px; } #dv-lic .lc-inh .chip img, #dv-lic .lc-inh .chip canvas { width:18px; height:18px; } #dv-lic .lc-inh .chip.warn { background:#7a2420; color:#ffe0d0; border-color:#e0584a; }

@@ -112,7 +112,8 @@ G.Builds = (() => {
   // 칸 6개 (자리 그대로 — 아직 안 열렸거나 빈 칸은 null)
   function slots(m) {
     m = base(m); const b = byId(m.build); if (!b) return [];
-    if (b.line) return G.Lines.LINE_LV.map((lv, i) => (m.lv >= lv ? b.core[i] || null : null)); // 계열 빌드 (js/rules/lines.js): 여섯 칸을 성급 차례로 — 레벨이 열고, 고르지 않는다
+    if (b.line && m.star) return G.Lines.LINE_LV.map((_, i) => (i > m.star ? null : i <= (m.star0 ?? m.star) ? b.core[i] || null : m.inh?.[i] || null)); // 계열 빌드 + 성급 (영웅 모델, 2026-11-27): 칸 별 + 1개 — 태어난 성급까지는 그 계열 차례, 그 위는 계승으로 받은 스킬 (G.Dive.inherit)
+    if (b.line) return G.Lines.LINE_LV.map((lv, i) => (m.lv >= lv ? b.core[i] || null : null)); // 성급이 없는 사람(시험 · 옛 경로): 레벨이 연다
     if (CARD.on && m.picks) return SLOT_LV.map((_, i) => (m.picks[i] && ready(m, m.picks[i]) ? m.picks[i] : null)); // 카드 모드: 고른 것
     return SLOT_LV.map((lv, i) => (m.lv < lv ? null : b.core[i] ? (ready(m, b.core[i]) ? b.core[i] : null) : freeAt(m, i)));
   }

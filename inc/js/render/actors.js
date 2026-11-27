@@ -71,6 +71,12 @@ const dispAt = (x, y, r) => { for (const e of r.party.concat(r.mons)) if (e._dx 
 // 모으기는 치기 직전(차례의 'pre' — 그림이 도착한 뒤)에 미리 하고, 엔진이 치는 순간(피해 · 피격 이펙트)에는 휘두름부터 시작한다 — 예전에는 피해가 뜬 뒤에야 모으기를 시작해 이펙트가 동작보다 0.1초쯤 앞섰다.
 // 길이는 배속만큼 짧아진다 (걷기와 같은 박자, 너무 짧아 안 보이지 않게 바닥을 둔다)
 const LUNGE_MS = QPX.on ? 430 : 300, LUNGE_0 = .22;
+// 쓰러지는 적 (2026-11-27 사용자: 「죽였을때 적이 너무 빨리 사라져」): 엔진은 죽은 적을 목록에서 바로 지운다 → 화면이 붙잡아 무기가 닿을 때까지 서 있다가 · 움찔 · 넘어지고 · 누웠다가 · 점점이 사라진다.
+//   마지막 적이면 전투 끝(G.Turn.hold → turn.js finish)도 넘어질 때까지 기다린다
+const DIE_FLINCH = 170, DIE_FALL = 280, DIE_LIE = 950, DIE_FADE = 450, DYING = [];
+{ const F = G.Fantasy, rm = F.removeMon; F.removeMon = function (rt, m) { if (!G.quiet && m && m.hp <= 0 && m.spotted && rt === G.Fantasy.rt(G.S.w.fantasy)) { m._dieT = Math.max(now(), m._hitDue || 0); DYING.push({ e: m, map: rt.map }); } return rm.apply(this, arguments); };
+  G.Turn.hold = () => DYING.some(d => now() - d.e._dieT < DIE_FLINCH + DIE_FALL + 150) || (typeof HITDUE !== 'undefined' && HITDUE.some(h => h.t > now())); }
+function prepDying(r, t, dt) { const n = now(); for (let i = DYING.length - 1; i >= 0; i--) if (DYING[i].map !== r.map || n - DYING[i].e._dieT > DIE_LIE + DIE_FADE) DYING.splice(i, 1); return DYING.map(d => prep(d.e, r, t, dt)).filter(Boolean); }
 // 근접 공격의 세 토막 (ms): 모으기 · 휘두름 · 마무리. 배속만큼 짧아지되 바닥을 둔다 — 빠른 배속에서도 누가 누구를 치는지 보이게 (2026-11-27 — 예전에는 ×4 이상에서 동작 전체가 0.11초라 적이 치는 게 안 보였다)
 //   피해 숫자 · 맞는 효과 · 쓰러짐은 무기가 닿는 때(모으기 + 휘두름)로 미룬다 (boot.js J.hit · fxlayer.js drawFx)
 function lungeT() { const X = G.Turn.speed(G.S.w.fantasy) || 1; return [clamp(240 / X, 120, 240), clamp(90 / X, 60, 90), clamp(260 / X, 140, 260)]; }
@@ -107,7 +113,7 @@ function prep(e, r, t, dt) {
   const hq = e._hit ? (n - e._hit) / 260 : 1;
   if (hq < 1) { const sx = ((e._kx || 0) - (e._ky || 0)) / R2, sy = ((e._kx || 0) + (e._ky || 0)) / R2 * SIN, kb = (1 - hq) * (1 - hq) * 6; ox += sx * kb + Math.sin(n / 18) * (1 - hq) * 1.4; oy += sy * kb; if (hq < .3) { if (n - (e._flT || 0) > 400) e._flT = n; flash = n - e._flT < 80; } } // 잇달아 맞을 때 몸이 내내 하얗지 않게 0.4초에 한 번만
   if (moving && !DCSS) oy -= Math.abs(Math.sin(t * 13 + e.x)) * 2;
-  const down = (e.dying || e.dead || (e.kind === 'mon' && !!e.down)) && !(e._hitDue > n); // 무기가 닿기 전에는 아직 서 있다 // down: 쓰러져 재생을 기다리는 몸 (트롤)
+  const dAge = e._dieT != null ? n - e._dieT : null, down = dAge != null ? dAge > DIE_FLINCH : (e.dying || e.dead || (e.kind === 'mon' && !!e.down)) && !(e._hitDue > n); // 무기가 닿기 전에는 아직 서 있다 · 쓰러지는 적은 움찔한 뒤 넘어진다 // down: 쓰러져 재생을 기다리는 몸 (트롤)
   const key = e.t, hitKey = key + '_hit', runKey = key + '_run';
   e._ph = e._ph == null ? Math.random() * 4 : e._ph;
   const k2 = hq < .5 && G.ARTSET[hitKey] ? hitKey : moving && G.ARTSET[runKey] ? runKey : key, fr = Math.floor(t * (k2 === runKey ? 11 : 6) + e._ph);
@@ -127,7 +133,7 @@ function prep(e, r, t, dt) {
   if (!sp) return null;
   e._sz = (e._sz ?? 1) + (G.Dnd.sizeK(e) - (e._sz ?? 1)) * Math.min(1, dt * 6); const sc = SC * (sp.native ? 1 : e.boss || (e.kind === 'mon' && e.s >= 2) ? 2 : 1) * e._sz * (D25 ? 1.5 : 1); // 용 그림은 이미 제 크기 (배율 1이라 복셀 다시 칠하기도 탄다) // 보스 · 큰 몬스터는 두 배로, 거대화는 서서히 커진다
   if (!down) { if (typeof HDBG !== 'undefined' && HDBG.on && !f.town) HDBG.shadow(wxp, wyp, .42 * sc); /* 선 그림 배경: 발밑 둥근 그림자 하나 */ else if (D25) castShadow(wxp, wyp, 0, .36 * sc, 2, .6); /* 시안: 발밑 그림자만 */ else { pend.push([wxp, wyp, 0], .34 * sc, [wxp, wyp, ((sp.hh ?? sp.foot) * sc) / (COS * S) * .85]); castShadow(wxp, wyp, 0, .42 * sc, 2); } }
-  return { e, sp, sx: base.sx + ox, sy: base.sy + oy, d: base.d, sc, flash, down, lq, moving, fk };
+  return { e, sp, sx: base.sx + ox, sy: base.sy + oy, d: base.d, sc, flash, down, lq, moving, fk, die: dAge };
 }
 // 활 (쏘는 사람의 칸은 그대로): 대상 쪽으로 활을 돌려 겨누고 → 시위를 당겼다가 → 놓으면 시위가 떨린다
 const AIM_UP = .14, DRAW_T = .4, RECOIL = 2.5, AIM_LIFT = 2, AIM_FWD = 2, PULL_MIN = 2, PULL_MAX = 7, SHAFT = 9, STR_C = rgb(226, 220, 196), WOOD_C = rgb(140, 100, 62), TIP_C = rgb(214, 222, 232), HAND_C = rgb(226, 178, 140), AIM_MAX = 1.25;
@@ -157,8 +163,10 @@ function drawRec(R0, t) {
   const { e, sp, sx, sy, d, sc, flash, down, lq } = R0, st = rt().turn;
   if (R0.body) { if (!(VCH.on && VCH.draw(sp, sx, sy, d, { flip: false, sc, dim: R0.dim }, e))) blit(sp, sx, sy, d, { sc }); return; } // 쓰러진 적 (qpx.js)
   if (down && sp.qpx && (e.dying || !e.merc)) { if (!(VCH.on && VCH.draw(sp, sx, sy, d, { flip: false, sc, xray: true }, e))) blit(sp, sx, sy, d, { sc, gray: true }); return; }
+  const fallK = R0.die != null ? ease(clamp((R0.die - DIE_FLINCH) / DIE_FALL, 0, 1)) : 1, fadeK = R0.die != null ? clamp((R0.die - DIE_LIE) / DIE_FADE, 0, 1) : 0, fallS = Math.sign((e._kx || 0) - (e._ky || 0)) || (e._flipS ? -1 : 1);
+  if (D25 && R0.die != null && !sp.qpx && sp.px) { const fl = !e._flipS; R0.pose = pose25(R0, fl); Object.assign(R0.pose, { rot: fallS * 1.57 * fallK, alpha: 1 - fadeK, gray: fallK }); MD.enqueue(R0, fl, flash); return; } // 2.5D 시안: 고해상도 층에서 발끝을 축으로 넘어진다
   if (down) {
-    if (e.dying || !e.merc) { blitRot(sp, sx, sy - 4, e._flipS ? -1.57 : 1.57, sc, d + .05, { px: sp.w / 2, py: sp.foot / 2, gray: true, flip: e._flipS }); for (let i = 0; i < 14; i++) { const a = hash(i, e.uid || 1) * 6.28, r2 = hash(i, 5) * 9, k = (sy + Math.sin(a) * r2 * .5 | 0) * W + (sx + Math.cos(a) * r2 | 0); if (k >= 0 && k < pix.length && zb[k] === bakedZ[k]) pix[k] = rgb(...C.blood); } if (e.dying) { if (Math.floor(t * 2) % 2) drawArrowAt(sx, sy - 14, t, C.red); } }
+    if (e.dying || !e.merc) { blitRot(sp, sx, sy - 4 * fallK, R0.die != null ? fallS * 1.57 * fallK : e._flipS ? -1.57 : 1.57, sc, d + .05, { px: sp.w / 2, py: R0.die != null ? lerp(sp.foot, sp.foot / 2, fallK) : sp.foot / 2, gray: fallK > .5, flip: e._flipS, dim: fadeK }); for (let i = 0; i < 14; i++) { const a = hash(i, e.uid || 1) * 6.28, r2 = hash(i, 5) * 9, k = (sy + Math.sin(a) * r2 * .5 | 0) * W + (sx + Math.cos(a) * r2 | 0); if (k >= 0 && k < pix.length && zb[k] === bakedZ[k]) pix[k] = rgb(...C.blood); } if (e.dying) { if (Math.floor(t * 2) % 2) drawArrowAt(sx, sy - 14, t, C.red); } }
     return;
   }
   if (DCSS) {
