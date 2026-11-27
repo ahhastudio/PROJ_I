@@ -171,6 +171,7 @@ function drawRec(R0, t) {
       if (lq < 1) { if (ranged) { const u = Math.sin(Math.PI * lq); ang = sign * .3 * u; lift = u * 3; } else ang = sign * (lq < .22 ? lerp(0, -.8, lq / .22) : lq < .5 ? lerp(-.8, 1.7, ease((lq - .22) / .28)) : lerp(1.7, 0, ease((lq - .5) / .5))); }
       const L = sx - sp.w * sc / 2, B0 = sy - sp.foot * sc, gx = fl ? Wp.w - 1 - Wp.gx : Wp.gx, ox = fl ? -of[0] : of[0];
       if (Wp.bow && drawBow(e, Wp, L + gx * sc + ox, B0 + Wp.gy * sc + of[1], gx, sc, d, fl, lq, st)) return;
+      if (!ranged && lq > .24 && lq < .56) { const angAt = q => sign * (q < .22 ? lerp(0, -.8, q / .22) : q < .5 ? lerp(-.8, 1.7, ease((q - .22) / .28)) : lerp(1.7, 0, ease((q - .5) / .5))); for (const g of [.09, .05]) blitRot(Wp, L + gx * sc + ox, B0 + Wp.gy * sc + of[1], angAt(Math.max(.22, lq - g)), sc, d + .11, { px: gx, py: Wp.gy, flip: fl, ghost: true }); } // 휘두름 잔상 두 장 (빠른 구간만)
       blitRot(Wp, L + gx * sc + ox, B0 + Wp.gy * sc + of[1] - lift, ang, sc, d + .12, { px: gx, py: Wp.gy, flip: fl });
     }
   } else blit(sp, sx, sy, d, { flip: e._flipS, flash, sc });

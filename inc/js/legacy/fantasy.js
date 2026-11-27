@@ -296,7 +296,7 @@ G.Fantasy = (() => {
       const big = src !== 'hit' && src !== 'dot';
       if (src !== 'dot' || Math.random() < 0.3) G.fx(rt, { k: 'text', x: m.x, y: m.y - 0.6, s: U.fmt(dmg) + (src === 'crit' ? '!' : ''), col: src === 'crit' ? '#ffd24a' : src === 'smite' ? '#bfe8ff' : src === 'dot' ? '#9fe79f' : '#fff', t: 0.8, sz: (big ? 1.3 : src === 'dot' ? 0.7 : 0.85) + 0.5 * Math.min(1, dmg / m.max), pop: big });
       if (src !== 'dot') {
-        G.J.hit('fantasy', m, src === 'smite' ? 0.5 : src === 'crit' ? 0.25 : 0, from, dmg);
+        G.J.hit('fantasy', m, src === 'smite' ? 0.5 : src === 'crit' ? 0.25 : 0, from, dmg, dtype);
         const dx = from ? m.x - from.x : 0, dy = from ? m.y - from.y : 0;
         G.fx(rt, { k: 'splat', x: m.x, y: m.y, dx, dy, n: big ? 9 : 5, s: big ? 1.3 : 0.9, t: 0.5 });
         if (big) G.fx(rt, { k: 'impact', x: m.x, y: m.y - 0.1, s: src === 'smite' ? 1.8 : 1.4, col: src === 'smite' ? '#d8f0ff' : '#fff3b0', t: 0.22 });
@@ -505,7 +505,7 @@ G.Fantasy = (() => {
         // 수호의 노래 · 성벽은 AC로, 버티기 전술은 공격에 불리로 (G.Dnd.ac · adv)
         dmg = Math.max(0, Math.floor(dmg)); // SRD: 피해는 정수 (소수는 내림)
         
-        G.J.hit('fantasy', p, 0, mo, dmg);
+        G.J.hit('fantasy', p, 0, mo, dmg, G.Foe.dtype || null);
         G.J.lunge('fantasy', mo, p);
         G.fx(rt, { k: 'splat', x: p.x, y: p.y, dx: p.x - mo.x, dy: p.y - mo.y, n: 4, s: 0.8, t: 0.45 });
         G.fx(rt, { k: 'slash', x: p.x, y: p.y, t: 0.22, rot: Math.random() - 0.5, flip: mo.x > p.x });

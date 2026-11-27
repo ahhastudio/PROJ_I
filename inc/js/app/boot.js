@@ -24,7 +24,7 @@ const JU = { tr: 0, kx: 0, ky: 0, stop: 0, stopCd: 0, off: q.has('noshake') || m
 };
 G.quiet = false; G.DICE_ALL = q.get('dice') === 'all'; G.ISO = true; G.CHECK_DC = +q.get('dc') || 0; // ?dc=10 : 판정을 어렵게 (실패 장면 보기)
 const J = G.J, now = () => performance.now();
-J.hit = (id, e, power = 0, from, dmg = 0) => { e._hit = now(); e._hitP = power;
+J.hit = (id, e, power = 0, from, dmg = 0, dtype = null) => { e._hit = now(); e._hitP = power;
   if (win.map && inWin(e.x, e.y)) { // 화면 안 타격만
     const R = rt(), crowd = (R?.party?.length || 0) + (R?.mons?.filter(o => o.hp > 0 && o.aggro).length || 0), damp = crowd > 16 ? 16 / crowd : 1; // 큰 전투: 한 대 한 대는 작게
     const mon = e.kind === 'mon', kill = mon ? e.hp <= 0 : dmg >= e.hp, r = Math.min(1, dmg / (e.max || 1)), big = mon && (e.boss || e.major && e.s >= 2), me = !mon && (e.merc || e === rt()?.hero);
@@ -36,8 +36,22 @@ J.hit = (id, e, power = 0, from, dmg = 0) => { e._hit = now(); e._hitP = power;
     // 약한 손맛 (2026-11-23): 치명타 · 큰 놈 처치는 화면이 살짝 번쩍, 처치는 잠깐 느려진다 (큰 전투에서는 느려짐 없이)
     if (power >= .25) JU.flash(.1); if (kill && big) JU.flash(.22); if (kill && damp === 1) JU.slow(big ? 450 : 160, big ? .35 : .5);
   }
-  // 피격 이펙트 하나 (일반 · 치명타 · 우리 편). 이펙트 칸이 꽉 찼을 때만 픽셀 불꽃으로 대신한다 (둘을 겹쳐 그리던 것 — 2026-11-23)
-  if (win.map && inWin(e.x, e.y) && !pfx(power >= .25 ? 'impacts/crit-hit' : e.kind === 'mon' ? 'impacts/hit-spark' : 'impacts/blunt-hit', wx(e._dx == null ? e.x : e._dx), wy(e._dy == null ? e.y : e._dy), Z_CHEST, { flip: !!from && (from.x - from.y) > (e.x - e.y), k: 1.3 })) { const p = project(wx(e._dx == null ? e.x : e._dx), wy(e._dy == null ? e.y : e._dy), 1.4); spark(p.sx, p.sy, 8 + power * 14 | 0, e.kind === 'mon' ? [rgb(255, 250, 220), rgb(255, 210, 90), rgb(240, 130, 60)] : [rgb(190, 40, 44), rgb(236, 90, 70), rgb(255, 220, 200)]); } if (from) { const dx = e.x - from.x, dy = e.y - from.y, l = Math.hypot(dx, dy) || 1; e._kx = dx / l; e._ky = dy / l; } };
+  // 피격 이펙트 (2026-11-27 Polished Crawl식): 맞은 자리(때린 쪽을 향한 몸 가장자리)에서 · 속성마다 다른 모양 · 강도 셋(가벼움 · 묵직함 · 강타)으로 크기와 파편이 달라진다
+  //   강도 = 체력 대비 피해 (12% · 30%) · 치명타는 늘 강타. 원소 피해(불 · 냉기 · 번개 · 산 · 독 · 사령 · 광휘 · 천둥 · 역장 · 정신)는 그 원소의 작은 터짐 + 바닥에 잠깐 흔적 (G.decal)
+  if (win.map && inWin(e.x, e.y)) {
+    const r2 = Math.min(1, dmg / (e.max || 1)), tier = power >= .25 || r2 >= .3 ? 2 : r2 >= .12 ? 1 : 0, K = [1, 1.3, 1.75][tier];
+    const ex0 = e._dx == null ? e.x : e._dx, ey0 = e._dy == null ? e.y : e._dy; let cx = ex0, cy = ey0;
+    if (from) { const dx = from.x - ex0, dy = from.y - ey0, l = Math.hypot(dx, dy) || 1, o2 = Math.min(.32, l * .5); cx += dx / l * o2; cy += dy / l * o2; } // 맞은 자리: 때린 쪽을 향해 몸 가장자리
+    const el = IMPACT_EL[dtype], flip = !!from && (from.x - from.y) > (e.x - e.y), p = project(wx(cx), wy(cy), 1.4);
+    let ok = el && el[0] ? pfx(el[0], wx(cx), wy(cy), Z_CHEST, { flip, k: K }) : null; // 번개만 짧은 그림 이펙트 (0.9초) — 나머지 원소는 픽셀 터짐
+    if (el) G.burst(p.sx, p.sy, el[1], tier);
+    if (!el || tier >= 1) ok = pfx(power >= .25 ? 'impacts/crit-hit' : dtype === 'bludgeoning' || (!dtype && e.kind !== 'mon') ? 'impacts/blunt-hit' : 'impacts/hit-spark', wx(cx), wy(cy), Z_CHEST, { flip, k: (el ? .9 : 1.15) * K }) || ok;
+    if (!el && (!ok || tier)) spark(p.sx, p.sy, [5, 10, 18][tier] + (power * 10 | 0), e.kind === 'mon' ? [rgb(255, 250, 220), rgb(255, 210, 90), rgb(240, 130, 60)] : [rgb(190, 40, 44), rgb(236, 90, 70), rgb(255, 220, 200)], [55, 70, 95][tier]); // 강할수록 파편이 많고 멀리
+    if (el && G.decal) G.decal(ex0, ey0, el[1], .45 + tier * .15); // 원소 흔적 (1.3~2.8초)
+  }
+  if (from) { const dx = e.x - from.x, dy = e.y - from.y, l = Math.hypot(dx, dy) || 1; e._kx = dx / l; e._ky = dy / l; } };
+// 원소 피해 → [그림 이펙트(번개만) · 터짐 · 흔적 종류] (sprites.js G.burst · G.decal)
+const IMPACT_EL = { fire: [null, 'fire'], cold: [null, 'cold'], lightning: ['lightning/zap-hit', 'shock'], thunder: [null, 'shock'], acid: [null, 'acid'], poison: [null, 'poison'], necrotic: [null, 'necro'], radiant: [null, 'holy'], force: [null, 'arcane'], psychic: [null, 'arcane'] };
 J.shake = (id, amp = 4) => JU.add(Math.min(1, amp / 12)); // 함정 · 미믹 · 전멸: 세기(px)를 흔들림 값으로
 J.finish = () => { JU.add(.6); JU.freeze(200); JU.flash(.32); JU.slow(800, .3); }; // 우두머리 처치: 크게 흔들고 · 번쩍 · 잠깐 멈췄다가 느리게
 J.lunge = (id, a, tg) => {

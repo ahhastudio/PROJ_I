@@ -9,7 +9,7 @@ G.saveOpt = () => { try { localStorage.setItem('rift_inc_opt', JSON.stringify(G.
 
 const nop = () => {};
 G.J = {
-  hit: nop, // (id, 맞은 대상, 세기 0~1, 때린 쪽, 피해)
+  hit: nop, // (id, 맞은 대상, 세기 0~1, 때린 쪽, 피해, 피해 종류)
   lunge: nop, // (id, 공격하는 쪽, 대상)
   shake: nop, // (id, 세기 px, 방향 x, 방향 y, 길이 초)
   finish: nop, // (id, x, y): 우두머리 처치

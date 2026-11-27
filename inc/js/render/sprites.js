@@ -122,13 +122,56 @@ function blitRot(sp, cx, cy, ang, sc, d, o = {}) {
     if (iu < 0 || iv < 0 || iu >= sp.w || iv >= sp.h) continue;
     const c = sp.px[iv * sp.w + (o.flip ? sp.w - 1 - iu : iu)]; if (!c) continue;
     const ix = Math.round(cx) + a, iy = Math.round(cy) + b; if (ix < 0 || ix >= W || iy < 0 || iy >= H) continue;
-    const k = iy * W + ix; if (d <= zb[k]) continue; zb[k] = d; pix[k] = o.flash ? (c === rgb(...C.ink) ? c : FLASH) : o.gray ? GRAYC(c) : c;
+    if (o.ghost && ((ix + iy) & 1)) continue; // 잔상: 체크무늬로 반만 · 밝게 (휘두름 궤적)
+    const k = iy * W + ix; if (d <= zb[k]) continue; zb[k] = d; pix[k] = o.ghost ? GHOSTC(c) : o.flash ? (c === rgb(...C.ink) ? c : FLASH) : o.gray ? GRAYC(c) : c;
+  }
+}
+const GHOSTC = c => rgb(lerp(c & 255, 255, .5), lerp(c >> 8 & 255, 250, .5), lerp(c >> 16 & 255, 235, .5));
+// 바닥 흔적 (2026-11-27 Polished Crawl식 — 원소 피해가 닿은 자리에 1.3~2.8초): 불 그을음 · 서리 · 산 웅덩이 · 번개 탄 자국 … 점점이 사라진다
+//   G.decal(칸 x, y, 종류, 반지름 칸) — boot.js의 J.hit이 부른다. 바닥(구운 그림 그대로인 칸)에만 칠한다: 소품 · 사람 위로는 안 번진다
+const DECALS = [], DEC_LIFE = { fire: 2.8, cold: 2.4, acid: 2.2, poison: 2, shock: 1.3, necro: 1.8, holy: 1.4, arcane: 1.4 };
+const DEC_COL = { fire: [rgb(34, 22, 18), rgb(58, 34, 22), rgb(255, 150, 50)], cold: [rgb(150, 200, 230), rgb(210, 236, 250), rgb(255, 255, 255)], acid: [rgb(70, 130, 30), rgb(120, 190, 50), rgb(200, 250, 120)], poison: [rgb(60, 90, 50), rgb(90, 130, 70), rgb(160, 200, 120)], shock: [rgb(36, 32, 52), rgb(60, 56, 90), rgb(210, 225, 255)], necro: [rgb(44, 30, 66), rgb(80, 50, 120), rgb(170, 120, 230)], holy: [rgb(200, 170, 90), rgb(255, 225, 140), rgb(255, 255, 220)], arcane: [rgb(70, 50, 120), rgb(120, 90, 200), rgb(220, 200, 255)] };
+const DEC_B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+G.decal = (x, y, kind, r = .5) => { if (!DEC_COL[kind]) return; if (DECALS.length > 48) DECALS.shift(); DECALS.push({ x, y, kind, r, t0: performance.now(), seed: Math.random() * 1e4 | 0 }); };
+const dh = (a, b, s) => { let h = (a * 374761393 + b * 668265263 + s * 1103515245) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+// 원소 타격 터짐 (2026-11-27 Polished Crawl식 — 0.3~0.8초 짧게): 그 원소답게 움직이는 파편 + 번개는 갈라지는 선 · 광휘는 십자 반짝
+//   G.burst(화면 x, y, 종류, 강도 0~2). 파편은 spark()와 같은 목록(parts)을 쓴다 — g < 0이면 위로 떠오른다
+const BOLTS = [];
+G.burst = (x, y, kind, tier = 0) => {
+  const c = DEC_COL[kind] ? [DEC_COL[kind][2], DEC_COL[kind][1], ...(kind === 'fire' ? [rgb(255, 230, 140)] : kind === 'cold' ? [rgb(190, 230, 255)] : [])] : [rgb(255, 255, 255)], n = [7, 12, 20][tier];
+  if (kind === 'fire') { spark(x, y, n, c, 50 + tier * 15, -70, .55); spark(x, y + 2, n >> 1, [rgb(255, 120, 40)], 25, -40, .8); } // 불씨가 위로
+  else if (kind === 'cold') { spark(x, y, n, c, 80 + tier * 20, 160, .4); BOLTS.push({ x, y, t: .12, c: rgb(235, 250, 255), star: 1 }); } // 얼음 조각이 튀어 떨어진다
+  else if (kind === 'shock') { for (let i = 0; i < 2 + tier; i++) BOLTS.push({ x, y, a: Math.random() * 6.28, l: 7 + tier * 3, t: .14 + i * .03, c: i % 2 ? rgb(200, 220, 255) : rgb(255, 255, 240) }); spark(x, y, n >> 1, c, 90, 60, .25); }
+  else if (kind === 'acid' || kind === 'poison') spark(x, y, n, c, 45 + tier * 12, 220, .5); // 방울이 떨어진다
+  else if (kind === 'necro') spark(x, y, n, c, 20 + tier * 6, -30, .8); // 천천히 떠오르는 기운
+  else if (kind === 'holy') { spark(x, y, n, c, 40, -20, .6); BOLTS.push({ x, y, t: .18, c: rgb(255, 250, 210), star: 2 + tier }); }
+  else spark(x, y, n, c, 60 + tier * 10, 0, .45); // 역장 · 정신: 둥글게 퍼진다
+};
+function drawBolts(dt) {
+  for (let q = BOLTS.length - 1; q >= 0; q--) { const b = BOLTS[q]; b.t -= dt; if (b.t <= 0) { BOLTS.splice(q, 1); continue; }
+    const put = (ix, iy) => { ix |= 0; iy |= 0; if (ix >= 0 && iy >= 0 && ix < W && iy < H) pix[iy * W + ix] = b.c; };
+    if (b.star) { const L = 2 + b.star * 2; for (let i = -L; i <= L; i++) { put(b.x + i, b.y); put(b.x, b.y + i); } continue; } // 십자 반짝
+    let x = b.x, y = b.y; for (let i = 0; i < b.l; i++) { x += Math.cos(b.a) * 1.6 + (Math.random() - .5) * 2.2; y += Math.sin(b.a) * 1.6 + (Math.random() - .5) * 2.2; put(x, y); } // 갈라지는 선 (매 프레임 새로 떨린다)
+  }
+}
+function drawDecals() {
+  const n = performance.now();
+  for (let q = DECALS.length - 1; q >= 0; q--) { const D0 = DECALS[q], life = DEC_LIFE[D0.kind] || 1.5, age = (n - D0.t0) / 1000 / life; if (age >= 1) { DECALS.splice(q, 1); continue; }
+    const p = project(wx(D0.x), wy(D0.y), 0), rx = D0.r * S, ry = rx * SIN, cs = DEC_COL[D0.kind], fade = Math.max(0, (age - .45) / .55); // 앞 45%는 그대로 · 그 뒤 점점이 사라진다
+    for (let j = Math.floor(-ry); j <= ry; j++) for (let i = Math.floor(-rx); i <= rx; i++) {
+      const e2 = (i * i) / (rx * rx) + (j * j) / (ry * ry), ix = Math.round(p.sx) + i, iy = Math.round(p.sy) + j; if (ix < 0 || iy < 0 || ix >= W || iy >= H) continue;
+      const nz = dh(i, j, D0.seed); if (e2 > .55 + nz * .45) continue; // 가장자리는 들쭉날쭉
+      if ((DEC_B[(iy & 3) * 4 + (ix & 3)] + .5) / 16 < fade) continue;
+      const k = iy * W + ix; if (zb[k] !== bakedZ[k]) continue;
+      const hot = nz > .9 && (D0.kind !== 'fire' || age < .5) && ((n / 90 + i * 3 + j) | 0) % 3; pix[k] = hot ? cs[2] : e2 < .3 + nz * .2 ? cs[0] : cs[1];
+    }
   }
 }
 // 파편: 화면 좌표로 튄다
 const parts = [];
 const spark = (x, y, n, cols, sp = 60, g = 120, life = .4) => { for (let i = 0; i < n && parts.length < 400; i++) { const a = Math.random() * 6.283, v = sp * (.35 + Math.random() * .8); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - sp * .3, g, t: life * (.5 + Math.random() * .7), c: cols[i % cols.length] }); } };
 function drawParts(dt) {
+  drawBolts(dt);
   for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.t -= dt; if (p.t <= 0) { parts.splice(i, 1); continue; } p.x += p.vx * dt; p.y += p.vy * dt; p.vy += p.g * dt; const ix = p.x | 0, iy = p.y | 0; if (ix < 0 || iy < 0 || ix >= W || iy >= H) continue; pix[iy * W + ix] = p.c; if (p.t > .18 && ix + 1 < W) pix[iy * W + ix + 1] = p.c; }
 }
 // 픽셀 숫자

@@ -24,7 +24,7 @@ function frame(tt) {
     settle(r, dt);
     const recs = r.mons.concat(r.party).map(e => prep(e, r, t, dt)).filter(Boolean);
     flushShadow(); applyShadows(bakedZ); shadeEdges(); HDBG.mark(1); // 그림자까지
-    drawRange(r); drawAim(r, t); stepFx(dt); paintFx(true); HDBG.mark(2); // 바닥 이펙트(횃불 빛)까지
+    drawRange(r); drawAim(r, t); drawDecals(); stepFx(dt); paintFx(true); HDBG.mark(2); // 바닥 이펙트(횃불 빛)까지
     for (const R0 of QPX.corpses(r, recs)) drawRec(R0, t);
     for (const R0 of recs) drawRec(R0, t);
     if (MINI_ON) MD.snap();
