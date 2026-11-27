@@ -429,7 +429,7 @@ G.Dive = (() => {
   // 길드 상태창의 수치 (2026-11-24): 명단의 영웅이 낀 마법 물건(h.tr)을 잠깐 이 세계의 물건 목록에 그 사람이 낀 채로 넣고 엔진 수치를 잰다 — 원정 전투(revive)와 같은 값.
   //   물건마다 칸(G.Gear.slotOf: w 무기 · a 방어구 · s 방패 · t 장신구)을 붙여 돌려준다 — 화면은 칸대로 그린다 (전에는 마법 무기 · 갑옷도 「물건」 칸에 그렸다)
   function sheetOf(h) { const f = G.S.w.fantasy, A = G.Trinket.all(f), mm = { ...h.m, uid: -9001 }, tmp = (h.tr || []).map((t, i) => ({ ...t, id: -9001 - i, on: mm.uid })); A.push(...tmp);
-    try { const e = { merc: mm }, w = G.Dnd.weapon(e), dB = G.Trinket.sum(mm, 'dmgB'), sh = G.Tavern.sheet(mm); return { sh, hp: sh.hp, ac: sh.ac, hit: G.Dnd.hit(e), dmg: { n: w.n, d: w.d, b: (w.b || 0) + dB }, items: (h.tr || []).map(t => ({ t, r: rOf({ kind: 'magic', t }), n: G.Gear.nameOf(t), slot: G.Gear.slotOf({ kind: 'magic', t }) })) }; }
+    try { const e = { merc: mm }, w = G.Dnd.weapon(e), dB = G.Trinket.sum(mm, 'dmgB'), sh = G.Tavern.sheet(mm); return { sh, hp: sh.hp, ac: sh.ac, hit: G.Dnd.hit(e), dmg: { n: w.n, d: w.d, b: (w.b || 0) + dB }, items: (h.tr || []).map(t => ({ t, r: rOf({ kind: 'magic', t }), n: G.Gear.nameOf(t), slot: G.Gear.slotOf({ kind: 'magic', t }) })), worn: G.Gear.worn(f, mm) }; } // worn: 칸마다 낀 것 (등록증의 장비 줄)
     finally { for (const t of tmp) { const i = A.indexOf(t); if (i >= 0) A.splice(i, 1); } } }
   const endWhy = (st, why) => (st.done === 'win' ? 'win' : st.done === 'lose' ? 'lose' : why || 'back'); // 끝난 이유: 용 처치 · 전멸 · 귀환(경로 끝 plan · 짐 가득 full · 위험 risk · 직접 quit)
   function hook() {

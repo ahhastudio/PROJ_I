@@ -228,7 +228,7 @@ const DIVEUI = (() => {
       + `<div class="rc-tiers">${tiers}</div>` + (B?.list?.length ? `<div class="dv-picks rc-list${rcFresh ? ' rv' : ''}">${B.list.map(row).join('')}</div>` : '');
     box.querySelectorAll('.rc-a canvas').forEach((cv, i) => { const draw = () => { if (box.isConnected && !UI.face(cv, B.list[i].m)) setTimeout(draw, 400); }; draw(); });
     box.onclick = ev => { const x = ev.target.closest('button'); if (!x || x.disabled) return; if (x.classList.contains('dv-x')) { box.remove(); guild(); return; }
-      if (x.dataset.post != null) { if (D.post(S, +x.dataset.post, !!x.dataset.big)) { put(S); rcFresh = true; recruit(); } return; }
+      if (x.dataset.post != null) { if (D.post(S, +x.dataset.post, !!x.dataset.big)) { put(S); GACHA.play(S.board.list.map(a0 => a0.m)).then(() => recruit()); } return; } // 모집 연출 (js/app/gacha.js)
       if (x.dataset.i != null) { const a0 = B.list[+x.dataset.i]; if (a0) hero(null, { m: JSON.parse(JSON.stringify(a0.m)), tr: [], hire: +x.dataset.i, fee: a0.fee }); } }; // 지원자: 등록증을 먼저 (2026-11-28 사용자: 「바로 고용되게 하지 말고」)
     rcFresh = false;
   }
@@ -272,7 +272,7 @@ const DIVEUI = (() => {
     const cell = (c0, i) => { if (c0.s) return `<div class="lc-on" data-sk="${c0.s.k}">${SKUI.img(c0.s.k)}<span><b>${esc(c0.s.n)}</b><small>${esc(num(c0.s.k))}</small></span></div>`;
       const k = line ? core[i] : c0.will?.k, nm = line ? G.D.MSKILLS[k]?.n || k || '' : c0.will?.n || '', need0 = line ? `${UI.px('lock')}${'★'.repeat(Math.max(1, i))}` : `Lv ${c0.will?.lv || c0.open || ''}`;
       return `<div class="off"${k ? ` data-sk="${k}"` : ''}>${k ? SKUI.img(k) : '<i class="lc-nok"></i>'}<span><b>${esc(nm)}</b><small>${k ? esc(num(k)) : ''}</small></span><em>${need0}</em></div>`; };
-    const eq = [sh.weapon?.n, sh.armor].filter(x => x && x !== '없음'), mg = Q.items;
+    const eqRow = (Q.worn || []).map(w => `<span class="${w.empty ? 'off' : ''}${w.r ? ` r${w.r}` : ''}"><small>${esc(w.slotN)}</small>${esc(w.empty ? '—' : w.n)}</span>`).join(''); // 장비 칸 (2026-11-28 사용자: 장비 현황 · 탐험 재주를 따로)
     const knack = D.knacksOf(m).map(g => `<span>${UI.px(D.KNACK[g].ic)}${esc(D.KNACK[g].n)}</span>`).join('');
     const box = panel('dv-lic'), no = String(1000 + (parseInt(String(c ?? h.fall?.n ?? '').replace(/\D/g, ''), 10) || 1) * 37).padStart(5, '0');
     box.innerHTML = `<div class="lc${h.fall ? ' dead' : ''}${ap ? ' ap' : ''}" style="--r:${r};--rd:${rd}"><div class="lc-in"><div class="lc-hd"><b>${ap ? '지원서' : '모험가 등록증'}</b> · 원정대 길드<span>${h.fall ? `${UI.px('skull')} ${h.fall.floor}층 · ` : ''}${ap ? '' : `No. ${no}`}</span><button class="lc-x dv-x">✕</button></div>`
@@ -281,7 +281,7 @@ const DIVEUI = (() => {
       + `<div class="lc-main"><div class="lc-name"><b>${esc(m.name)}</b><em>Lv ${m.lv} / ${mx}</em></div>`
       + `<div class="lc-st"><span><b>${Q.hp}</b>체력</span><span><b>${sg(Q.hit)}</b>명중</span><span><b>${atk}</b>공격</span><span><b>${Q.ac}</b>방어</span></div>`
       + `<div class="lc-sk">${v.slots.slice(0, 6).map((c0, i) => cell(c0, i)).join('')}</div>`
-      + `<div class="lc-ft">${knack}${eq.map(n => `<span>${esc(n)}</span>`).join('')}${mg.map(x => `<span class="r${x.r}">${esc(x.n)}</span>`).join('')}</div></div><div class="lc-sig">길드장</div></div></div>`
+      + `<div class="lc-kn"><b>탐험</b>${knack || '<i>—</i>'}</div><div class="lc-eq">${eqRow}</div></div><div class="lc-sig">길드장</div></div></div>`
       + (ap ? (() => { const why = D.canHire(S, h.hire); return `<div class="lc-more lc-hire"><button class="rc-hire" data-hire="1"${why === true ? '' : ' disabled'}>고용 · ${UI.px('coin')} ${h.fee}${why === true ? '' : ` · ${why === '명단' ? `명단 ${D.ROSTER_CAP}/${D.ROSTER_CAP}` : `${UI.px('coin')} ${S.gold}`}`}</button></div>`; })() : '') + (!ro && (m.cardq || []).length || inh.length ? `<div class="lc-more">${(m.cardq || []).length ? `<button class="chip dv-pickb">${UI.px('star')} ${m.cardq.length}</button>` : ''}`
         + (inh.length ? `<div class="lc-inh"><b>계승 ${stars(st + 1)}</b>${inh.map(o => { const g = S.roster[o.hid].m; return `<div><span>${esc(g.name)} ${stars(g.star)} Lv ${g.lv}</span>${o.sk.map(k => `<button class="chip" data-inh="${o.hid}" data-k="${k}">${SKUI.img(k)}${esc(G.D.MSKILLS[k]?.n || k)}</button>`).join('')}</div>`; }).join('')}</div>` : '') + '</div>' : '');
     const fitK = () => { const el = box.querySelector('.lc'), more = box.querySelector('.lc-more'), H0 = 328 + (more ? more.offsetHeight + 10 : 0), k = Math.min(1, (innerWidth - 16) / 520, (innerHeight - 24) / H0); box.style.setProperty('--k', k.toFixed(3)); }; fitK();
