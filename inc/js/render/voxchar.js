@@ -81,5 +81,11 @@ const VCH = (() => {
     if (!mode || !VOX.api?.toV || o.flash || (o.sc || 1) !== 1 || !e) return false;
     return relit(sp, sx, sy, d0, o, e);
   }
-  return { on: mode > 0, mode, draw };
+  // 2.5D 시안: 발 위 한 점이 받는 빛의 밝기 (등불 밖은 어둡게)
+  function lightAt(e) {
+    if (!mode || !VOX.api?.toV) return 1; if (!litAt(e)) return .5;
+    const a = A(), [px, py, pz] = a.toV(wx(e._rx ?? e._dx ?? e.x), wy(e._ry ?? e._dy ?? e.y), .8), c = shadeN(1, 1, 1, toWorld(0, -.3, .95), px, py, pz);
+    return c ? clamp((c[0] * .3 + c[1] * .59 + c[2] * .11) * 1.35, .5, 1) : .5;
+  }
+  return { on: mode > 0, mode, draw, lightAt };
 })();

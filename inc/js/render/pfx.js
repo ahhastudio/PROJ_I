@@ -53,9 +53,10 @@ function actorOf(e) {
   const db = dollBody(e); if (db) return db;
   const dl = DCSS && dcssOf(e); if (!dl) return NO_BODY;
   let a = bodies.get(dl); if (a) return a;
-  const px = dl.fr.idle[0], w = dl.w, h = dl.h, data = new Uint8Array(w * h); for (let i = 0; i < px.length; i++) if (px[i]) data[i] = 1;
-  const top = dl.top - dl.foot;
-  a = { mask: { w, h, data }, pixels: px, x: -(w >> 1), y: -dl.foot, w, h, k: 2, head: [0, top], chest: [0, Math.round(top * .62)] };
+  let px = dl.fr.idle[0], w = dl.w, h = dl.h, foot = dl.foot, top = dl.top - dl.foot;
+  if (D25) { const w2 = Math.ceil(w * 1.5), h2 = Math.ceil(h * 1.5), o = new Uint32Array(w2 * h2); for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) o[y * w2 + x] = px[Math.min(h - 1, y / 1.5 | 0) * w + Math.min(w - 1, x / 1.5 | 0)]; px = o; w = w2; h = h2; foot = Math.round(foot * 1.5); top = Math.round(top * 1.5); } // 2.5D 시안: 1.5배 그림에 맞춘 윤곽
+  const data = new Uint8Array(w * h); for (let i = 0; i < px.length; i++) if (px[i]) data[i] = 1;
+  a = { mask: { w, h, data }, pixels: px, x: -(w >> 1), y: -foot, w, h, k: 2, head: [0, top], chest: [0, Math.round(top * .62)] };
   bodies.set(dl, a); return a;
 }
 // 인형으로 그리는 사람(용병 · 사람형 몬스터 — actors.js와 같은 갈래)의 몸 윤곽: 서 있는 첫 그림. 상태 이펙트(가속 · 감속 · 매혹 …)는 몸 윤곽이 있어야 그려진다 —
@@ -88,6 +89,7 @@ function paintFx(under) {
     const ca = q.clip && iy > Y - q.clip ? 0 : c >>> 24; // 원본의 긴 손잡이는 잘라 낸다 (빛은 남긴다)
     if (ca) { const key = c | 0xff000000; let tc = fxTone.get(key); if (tc === undefined) { tc = tone(key); fxTone.set(key, tc); } if (ca >= 250) d = tc; else { const u = ca / 255; d = rgb(lerp(d & 255, tc & 255, u), lerp(d >> 8 & 255, tc >> 8 & 255, u), lerp(d >> 16 & 255, tc >> 16 & 255, u)); } }
     if (l) d = rgb(Math.min(255, (d & 255) + (l & 255) * FX_LIGHT), Math.min(255, (d >> 8 & 255) + (l >> 8 & 255) * FX_LIGHT), Math.min(255, (d >> 16 & 255) + (l >> 16 & 255) * FX_LIGHT));
+    if (D25 && !under && !ca && l) FXLO.add(i);
     pix[i] = d;
     }
   }

@@ -9,10 +9,11 @@
 //  - 쓰러진 몸은 예전처럼 픽셀 버퍼에 눕혀 찍는다
 // 원본 파츠는 유료 에셋: 저장소에 공개로 올리지 않는다 (게임에 넣어 배포하는 것은 된다).
 // ?art=dcss 이면 쓰지 않는다 (예전 DCSS 인형). ?ms=0.38 로 크기를 바꾼다.
-const MINI_ON = DCSS && q.get('art') !== 'dcss' && !!window.PaperDoll, MS = +(q.get('ms') || 0.38);
+const MINI_ON = DCSS && q.get('art') !== 'dcss' && !D25 && !!window.PaperDoll, MS = +(q.get('ms') || 0.38);
 let MINI_READY = false;
 if (MINI_ON) PaperDoll.load('assets/chars/').then(() => { MINI_READY = true; }).catch(e => console.warn('minidoll:', e.message));
 
+const bufPix = () => pix; // MD 안의 pix 함수(인형 한 장)와 이름이 겹친다: 화면 버퍼는 이것으로
 const MD = (() => {
   const C = () => PaperDoll.catalog;
   const hs = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
@@ -364,28 +365,46 @@ const MD = (() => {
     c.drawImage(big4, p, p, sp.w * s, (sp.foot + 1) * s);
     o.p = p; if (m.size > 24) m.clear(); m.set(key, o); return o;
   }
+  // 2.5D 시안 (?art=d25): 픽셀 그대로 키워 발끝 기준으로 늘이고 기울인다 · 무기는 손잡이를 축으로 돌린다 · 등불 빛만큼 어둡게
+  const pxC = new WeakMap();
+  function pxCanvas(px, w, h) { let c = pxC.get(px); if (c) return c; c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer.slice(px.byteOffset, px.byteOffset + w * h * 4)), w, h), 0, 0); pxC.set(px, c); return c; }
+  function drawD25(R0, flip, fx, fy, k) {
+    const { sp, sc } = R0, P = R0.pose, s = sc * k, body = pxCanvas(sp.px, sp.w, sp.foot + 1);
+    tx.save(); tx.imageSmoothingEnabled = false;
+    tx.translate(fx, fy); tx.transform(P.px, 0, -P.lean, P.py, 0, 0); if (flip) tx.scale(-1, 1);
+    tx.drawImage(body, -sp.w / 2 * s, -sp.foot * s, sp.w * s, (sp.foot + 1) * s);
+    const Wp = sp.weapon; if (Wp) {
+      const wc = pxCanvas(Wp.px, Wp.w, Wp.h), gx = (-sp.w / 2 + Wp.gx) * s, gy = (-sp.foot + Wp.gy) * s;
+      const one = (a, al) => { tx.save(); tx.globalAlpha = al; tx.translate(gx, gy); tx.rotate(-a); tx.drawImage(wc, -Wp.gx * s, -Wp.gy * s, Wp.w * s, Wp.h * s); tx.restore(); };
+      if (P.ghost) P.ghost.forEach((a, i) => one(a, .22 + i * .14)); one(P.wa, 1);
+    }
+    tx.restore();
+    if (P.light < .99) { tx.globalCompositeOperation = 'source-atop'; tx.fillStyle = `rgba(14,10,26,${(1 - P.light).toFixed(2)})`; tx.fillRect(0, 0, tmp.width, tmp.height); tx.globalCompositeOperation = 'source-over'; }
+  }
   // drawRec에서: 서 있는 인형을 버퍼 대신 줄에 세운다
+  let zr = null; const zref = z => { zr = zr && zr.length === z.length ? (zr.set(z), zr) : z.slice(); };
   function enqueue(R0, flip, flash) { queue.push({ R0, flip, flash }); }
   // 인형 그리기 직후(픽셀 버퍼에 이펙트를 얹기 전): 인형마다 보이는 픽셀 판정을 만들고 버퍼를 기억해 둔다
   function snap() {
+    FXLO.clear();
     if (!queue.length) { snapPix = null; return; }
     for (const Q of queue) {
-      const { sp, sx, sy, d, sc } = Q.R0, w = sp.w, L = Math.round(sx - w * sc / 2), B = Math.round(sy);
-      const mw = Math.ceil(w * sc), mh = Math.ceil((sp.foot + 1) * sc), M = new Uint8ClampedArray(mw * mh * 4);
+      const { sp, sx, sy, d, sc } = Q.R0, pad = Q.R0.pose ? Math.ceil(sp.w * sc * .45) : 0, w = sp.w, L = Math.round(sx - w * sc / 2) - pad, B = Math.round(sy) + (pad ? 2 : 0);
+      const mw = Math.ceil(w * sc) + pad * 2, mh = Math.ceil((sp.foot + 1) * sc * (pad ? 1.25 : 1)) + (pad ? 2 : 0), M = new Uint8ClampedArray(mw * mh * 4);
       for (let up = 0; up < mh; up++) {
-        const j = sp.foot - Math.floor(up / sc), iy = B - up; if (j < 0 || iy < 0 || iy >= H) continue;
+        const j = pad ? 0 : sp.foot - Math.floor(up / sc), iy = B - up; if (j < 0 || iy < 0 || iy >= H) continue;
         const dz = d + up / (COS * S) * SIN + .06;
         for (let a = 0; a < mw; a++) {
           const i = Math.floor(a / sc), ix = L + a; if (ix < 0 || ix >= W) continue;
           const k = iy * W + ix, o = ((mh - 1 - up) * mw + a) * 4;
           // 앞에 무언가 있으면: 벽 · 바닥(구운 깊이)이면 비치고, 다른 인물 · 소품이면 가린다
-          const al = dz > zb[k] ? 255 : zb[k] === bakedZ[k] ? 150 : 0;
+          const zk = zr ? zr[k] : zb[k], al = dz > zk ? 255 : zk === bakedZ[k] ? 150 : 0;
           M[o] = M[o + 1] = M[o + 2] = 255; M[o + 3] = al;
         }
       }
       Q.mask = { w: mw, h: mh, L, T: B - mh + 1, data: new ImageData(M, mw, mh) };
     }
-    snapPix = pix.slice();
+    snapPix = bufPix().slice();
   }
   function clear() { if (hd && hd.width) hx.clearRect(0, 0, hd.width, hd.height); queue.length = 0; }
   // 화면에 올리기 (putImageData 다음)
@@ -405,7 +424,8 @@ const MD = (() => {
       const bw = Math.ceil(mask.w * k), bh = Math.ceil(mask.h * k);
       if (tmp.width < bw || tmp.height < bh) { tmp.width = Math.max(tmp.width, bw); tmp.height = Math.max(tmp.height, bh); }
       tx.setTransform(1, 0, 0, 1, 0, 0); tx.clearRect(0, 0, tmp.width, tmp.height); tx.globalCompositeOperation = 'source-over';
-      if (px) { const sp = R0.sp, o = spriteHD(sp, sc * k, Q.flip); tx.drawImage(o, (sx - sp.w * sc / 2 - mask.L) * k - o.p, (sy - (sp.foot + 1) * sc + 1 - mask.T) * k - o.p); } // 픽셀 몬스터: 붉은 외곽선까지 담긴 그림
+      if (R0.pose) drawD25(R0, Q.flip, (sx - mask.L) * k, (sy - mask.T) * k, k);
+      else if (px) { const sp = R0.sp, o = spriteHD(sp, sc * k, Q.flip); tx.drawImage(o, (sx - sp.w * sc / 2 - mask.L) * k - o.p, (sy - (sp.foot + 1) * sc + 1 - mask.T) * k - o.p); } // 픽셀 몬스터: 붉은 외곽선까지 담긴 그림
       else {
       setPose(D.doll, clip, time);
       // 인형 발끝 = 버퍼의 (sx, sy). tmp 안에서는 마스크 왼쪽 위 기준
@@ -433,7 +453,7 @@ const MD = (() => {
         const M = Q.mask; if (!M) continue;
         const x0 = Math.max(0, M.L), y0 = Math.max(0, M.T), x1 = Math.min(W, M.L + M.w), y1 = Math.min(H, M.T + M.h), w = x1 - x0, h = y1 - y0; if (w <= 0 || h <= 0) continue;
         const out = new Uint32Array(w * h); let any = false;
-        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const kk = (y0 + y) * W + x0 + x; if (pix[kk] !== snapPix[kk]) { out[y * w + x] = pix[kk]; any = true; } }
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const kk = (y0 + y) * W + x0 + x; if (bufPix()[kk] !== snapPix[kk] && !FXLO.has(kk)) { out[y * w + x] = bufPix()[kk]; any = true; } }
         if (!any) continue;
         mcv.width = w; mcv.height = h; mx.putImageData(new ImageData(new Uint8ClampedArray(out.buffer), w, h), 0, 0);
         hx.imageSmoothingEnabled = false; hx.drawImage(mcv, Math.round(x0 * k), Math.round(y0 * k), w * k, h * k); hx.imageSmoothingEnabled = true;
@@ -468,5 +488,5 @@ const MD = (() => {
   }
   // 몬스터의 서 있는 모습 (인형으로 그리는 몬스터만 — 아니면 null)
   function pixMon(e) { if (!MINI_READY || !isMon(e)) return null; const d = monDoll(e); let sp = d.cache.get('P0'); if (!sp) { sp = px32(d, 'Idle', 0); d.cache.set('P0', sp); } return sp; }
-  return { lookOf, frame, portrait, pix, pixFolk, pixMon, iconUrl, itemUrl, enqueue, snap, present, clear, isMon };
+  return { lookOf, frame, portrait, pix, pixFolk, pixMon, iconUrl, itemUrl, enqueue, snap, present, clear, isMon, zref };
 })();

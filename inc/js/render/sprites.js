@@ -17,6 +17,8 @@ function pack(iw, ih, draw) {
 // DCSS: 직업은 부품을 겹쳐 인형으로, 몬스터는 한 장 (?art=dcss). 한 장 그림을 고쳐 대기 · 걷기 · 맞기 · 공격 프레임을 만든다
 const DCSS = q.get('art') !== 'old', dolls = new Map(), PAD = 3, INKT = rgb(44, 38, 54);
 const DNG = DCSS && q.get('dng') !== 'proc', TEX = {};
+// ?art=d25: DCSS 그림을 고해상도 층에 1.5배로 세우고 늘이기 · 기울이기로 모으기 · 휘두름 · 움찔 · 깡충 (2.5D 시안, minidoll.js drawD25)
+const D25 = q.get('art') === 'd25', FXLO = new Set(); // FXLO: 인물 위 이펙트가 빛만 더한 픽셀 — 고해상도 인물 위로 다시 얹지 않는다
 function loadTex() {
   G.DCSS.dng[2].f = G.DCSS.dng[0].f.slice(); // 오크 타일은 벽 그림이라 바닥에 깔면 구멍이 나고 시끄럽다
   const names = G.DCSS.dng.flatMap(z => z.f.concat(z.w)).concat(['d_stair_down', 'd_stair_up']); const floors = new Set(G.DCSS.dng.flatMap(z => z.f));
@@ -38,7 +40,7 @@ function rawOf(ims, size = 32) {
   const w = size + PAD * 2, c = document.createElement('canvas'); c.width = c.height = w;
   const x = c.getContext('2d', { willReadFrequently: true }); for (const im of ims) if (im) x.drawImage(im, PAD, PAD);
   const d = new Uint32Array(x.getImageData(0, 0, w, w).data.buffer), o = new Uint32Array(w * w);
-  for (let i = 0; i < o.length; i++) if ((d[i] >>> 24) > 110) o[i] = tone(d[i]);
+  for (let i = 0; i < o.length; i++) if ((d[i] >>> 24) > 110) o[i] = D25 ? (d[i] | 0xff000000) >>> 0 : tone(d[i]); // 시안: 원래 색 그대로
   return { w, h: w, px: o };
 }
 function outline(px, w, h) {

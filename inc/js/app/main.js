@@ -25,9 +25,10 @@ function frame(tt) {
     const recs = r.mons.concat(r.party).map(e => prep(e, r, t, dt)).filter(Boolean);
     flushShadow(); applyShadows(bakedZ); shadeEdges(); HDBG.mark(1); // 그림자까지
     drawRange(r); drawAim(r, t); drawDecals(); stepFx(dt); paintFx(true); HDBG.mark(2); // 바닥 이펙트(횃불 빛)까지
+    if (D25) MD.zref(zb); // 시안: 시체 · 땅 위 그림은 서 있는 인물을 가리지 않는다
     for (const R0 of QPX.corpses(r, recs)) drawRec(R0, t);
     for (const R0 of recs) drawRec(R0, t);
-    if (MINI_ON) MD.snap();
+    if (MINI_ON || D25) MD.snap();
     // 쓰러져 사망 내성 중인 사람은 피를 흘린다
     for (const p of r.party) { if (p.dying && !p._bleed) p._bleed = pfx('status/bleeding', wx(p._dx ?? p.x), wy(p._dy ?? p.y), 0, { e: p }); else if (!p.dying && p._bleed) { p._bleed.fx.stop(); p._bleed = null; } }
     drawParts(dt);
@@ -44,7 +45,7 @@ function frame(tt) {
   { const [jx, jy] = JU.step(dt), k = canvas.clientWidth / W; canvas.style.transform = Math.abs(jx) + Math.abs(jy) > .3 ? `translate(${(jx * k / 3).toFixed(1)}px,${(jy * k / 3).toFixed(1)}px)` : ''; } // 버퍼 px → 화면 (×3 기준 그대로)
   HDBG.put(ctx, image); // 선 그림 배경이면 배경 픽셀만 투명하게
   HDBG.present();
-  if (MINI_ON) MD.present();
+  if (MINI_ON || D25) MD.present();
   VFX.present(); // 선 그림 이펙트 층 (인형 위)
   cost += (now() - c0); fN++;
   if (n - fT > 1000) { fps = fN; $('fps').textContent = q.has('debug') ? `${fps}fps · 프레임 ${(cost / fN).toFixed(1)}ms · 굽기 ${(bake0 || 0).toFixed(0)}ms` : ''; G.isoStat = { fps, ms: cost / fN, bake: bake0 }; fN = 0; cost = 0; fT = n; }

@@ -123,8 +123,8 @@ function prep(e, r, t, dt) {
     sp = dl.spr ? dl.spr[fk][idx] : { w: dl.w, h: dl.h, foot: dl.foot, px: list[idx], weapon: dl.weapon, top: dl.top }; // 용: 미리 구운 그림 객체 그대로
   } else sp = sprite(k2, fr) || sprite(key, 0);
   if (!sp) return null;
-  e._sz = (e._sz ?? 1) + (G.Dnd.sizeK(e) - (e._sz ?? 1)) * Math.min(1, dt * 6); const sc = SC * (sp.native ? 1 : e.boss || (e.kind === 'mon' && e.s >= 2) ? 2 : 1) * e._sz; // 용 그림은 이미 제 크기 (배율 1이라 복셀 다시 칠하기도 탄다) // 보스 · 큰 몬스터는 두 배로, 거대화는 서서히 커진다
-  if (!down) { if (typeof HDBG !== 'undefined' && HDBG.on && !f.town) HDBG.shadow(wxp, wyp, .42 * sc); /* 선 그림 배경: 발밑 둥근 그림자 하나 */ else { pend.push([wxp, wyp, 0], .34 * sc, [wxp, wyp, ((sp.hh ?? sp.foot) * sc) / (COS * S) * .85]); castShadow(wxp, wyp, 0, .42 * sc, 2); } }
+  e._sz = (e._sz ?? 1) + (G.Dnd.sizeK(e) - (e._sz ?? 1)) * Math.min(1, dt * 6); const sc = SC * (sp.native ? 1 : e.boss || (e.kind === 'mon' && e.s >= 2) ? 2 : 1) * e._sz * (D25 ? 1.5 : 1); // 용 그림은 이미 제 크기 (배율 1이라 복셀 다시 칠하기도 탄다) // 보스 · 큰 몬스터는 두 배로, 거대화는 서서히 커진다
+  if (!down) { if (typeof HDBG !== 'undefined' && HDBG.on && !f.town) HDBG.shadow(wxp, wyp, .42 * sc); /* 선 그림 배경: 발밑 둥근 그림자 하나 */ else if (D25) castShadow(wxp, wyp, 0, .36 * sc, 2, .6); /* 시안: 발밑 그림자만 */ else { pend.push([wxp, wyp, 0], .34 * sc, [wxp, wyp, ((sp.hh ?? sp.foot) * sc) / (COS * S) * .85]); castShadow(wxp, wyp, 0, .42 * sc, 2); } }
   return { e, sp, sx: base.sx + ox, sy: base.sy + oy, d: base.d, sc, flash, down, lq, moving, fk };
 }
 // 활 (쏘는 사람의 칸은 그대로): 대상 쪽으로 활을 돌려 겨누고 → 시위를 당겼다가 → 놓으면 시위가 떨린다
@@ -162,10 +162,11 @@ function drawRec(R0, t) {
   if (DCSS) {
     // DCSS 그림은 왼쪽을 본다: 오른쪽을 볼 때 뒤집는다
     const fl = sp.qpx ? false : !e._flipS; // 구운 8방향 그림은 뒤집지 않는다
-    if (sp.mini) MD.enqueue(R0, fl, flash); // 용병 인형: 고해상도 층에 원본 그대로 (minidoll.js)
+    if (D25 && !sp.qpx) { R0.pose = pose25(R0, fl); MD.enqueue(R0, fl, flash); }
+    else if (sp.mini) MD.enqueue(R0, fl, flash); // 용병 인형: 고해상도 층에 원본 그대로 (minidoll.js)
     else if (MINI_ON && !VOXON && typeof HDBG !== 'undefined' && HDBG.on && !f.town) MD.enqueue(R0, fl, flash); // 선 그림 배경: 픽셀 몬스터도 고해상도 층에
     else if (!(VCH.on && VCH.draw(sp, sx, sy, d, { flip: fl, flash, sc, xray: true }, e))) blit(sp, sx, sy, d, { flip: fl, flash, sc, xray: true }); // 복셀 층: 배경과 같은 빛 · 색으로 다시 칠한다 (voxchar.js, ?vchar=0이면 원래 색)
-    if (sp.weapon) {
+    if (sp.weapon && !R0.pose) {
       const Wp = sp.weapon, ranged = isRanged(e), sign = fl ? 1 : -1, of = [0, 0];
       let ang = 0, lift = 0;
       if (lq < 1) { if (ranged) { const u = Math.sin(Math.PI * lq); ang = sign * .3 * u; lift = u * 3; } else ang = sign * (lq < .22 ? lerp(0, -.8, lq / .22) : lq < .5 ? lerp(-.8, 1.7, ease((lq - .22) / .28)) : lerp(1.7, 0, ease((lq - .5) / .5))); }
@@ -195,6 +196,21 @@ function drawRec(R0, t) {
   }
   if (e._mark && now() < e._mark.until) drawBang(sx, sy - (sp.hh ?? sp.foot) * sc - 8, e._mark.c);
   if (st && st.cur === e) drawArrowAt(sx, sy - (sp.hh ?? sp.foot) * sc - 8, t, e.kind === 'mon' ? C.red : [255, 214, 10]);
+}
+// 2.5D 시안 (?art=d25): 발끝 기준 가로 · 세로 배율과 기울기(위가 화면 오른쪽으로 가면 +). 가만히 서 있을 때는 움직이지 않는다
+function pose25(R0, fl) {
+  const { e, lq, moving } = R0, hq = e._hit ? (now() - e._hit) / 260 : 1, fwd = fl ? 1 : -1, far = isRanged(e);
+  let px = 1, py = 1, lean = 0;
+  if (lq < 1 && !far) {
+    if (lq < .22) { const u = ease(lq / .22); lean = -fwd * .22 * u; py = 1 - .08 * u; px = 1 + .06 * u; } // 모으기: 뒤로 젖히며 웅크림
+    else if (lq < .42) { const v = ease((lq - .22) / .2); lean = fwd * lerp(-.22, .4, v); py = lerp(.92, 1.08, v); px = lerp(1.06, .93, v); } // 휘두름: 앞으로 쏠리며 늘어남
+    else { const v = ease((lq - .42) / .58); lean = fwd * lerp(.4, 0, v); py = lerp(1.08, 1, v); px = lerp(.93, 1, v); }
+  } else if (lq < 1) { const u = Math.sin(Math.PI * Math.min(1, lq / .6)); lean = -fwd * .14 * u; py = 1 - .05 * u; }
+  if (hq < 1) { const h = (1 - hq) * (1 - hq), kd = Math.sign((e._kx || 0) - (e._ky || 0)) || -fwd; lean += kd * .22 * h; py *= 1 - .12 * h; px *= 1 + .08 * h; } // 움찔: 맞은 쪽으로 젖혀지며 눌림
+  if (moving) { const s = Math.abs(Math.sin(e._hopP || 0)); lean += fwd * .1; py *= lerp(.92, 1.05, s); px *= lerp(1.06, .97, s); } // 깡충: 닿을 때 눌리고 뜰 때 늘어남
+  const wa = lq < 1 ? (far ? .3 * Math.sin(Math.PI * lq) : lq < .22 ? lerp(0, -.8, lq / .22) : lq < .5 ? lerp(-.8, 1.7, ease((lq - .22) / .28)) : lerp(1.7, 0, ease((lq - .5) / .5))) : 0;
+  const ghost = !far && lq > .24 && lq < .56 ? [.09, .05].map(g => { const q2 = Math.max(.22, lq - g); return q2 < .5 ? lerp(-.8, 1.7, ease((q2 - .22) / .28)) : lerp(1.7, 0, ease((q2 - .5) / .5)); }) : null;
+  return { px, py, lean, wa, ghost, light: VCH.lightAt ? VCH.lightAt(e) : 1 };
 }
 function drawArrowAt(sx, sy, t, col) {
   const A = ['..ooooo..', '..oXXXo..', '..oXXXo..', 'oooXXXooo', 'oXXXXXXXo', '.oXXXXXo.', '..oXXXo..', '...oXo...', '....o....'], L = Math.round(sx) - 4, Y = Math.round(sy) - A.length - (Math.floor(t * 3) % 2) * 2, ink = rgb(...C.ink), fill = rgb(...col);
