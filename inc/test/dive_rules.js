@@ -318,7 +318,8 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
   m.lv = 11; m.cardq = []; G.Guild.grow(m); t('11레벨부터는 바꾸기', m.cardq[0]?.kind === 'swap');
   const nk = D.cardCands(m)[0], old0 = m.picks[0]; D.cardChoose(m, nk, 0); t('칸이 차면 고른 카드로 칸 하나를 바꾼다', m.picks[0] === nk && m.picks[0] !== old0 && m.picks.length === 6);
   m.cardq = [{ lv: 13, kind: 'swap' }]; const before = m.picks.join(); D.cardChoose(m, null); t('넘김', m.picks.join() === before && !m.cardq.length);
-  const m3 = D.member(F, 'dragoon', 3); t('2레벨 이상으로 들어오면 지나간 몫은 추천대로 채워져 있다', !m3.cardq.length && m3.picks.length >= 2, m3.picks);
+  const m3 = D.member(F, 'cleric', 3); t('2레벨 이상으로 들어오면 지나간 몫은 추천대로 채워져 있다', !m3.cardq.length && m3.picks.length >= 2, m3.picks);
+  { const LV = [1, 4, 5, 9, 13, 17], ok = LV.map(L => G.Builds.slots(D.member(F, 'barbarian', L, Math.random, 'barbarian_charge')).filter(Boolean).length); t('계열 빌드 (2026-11-27): 카드 없이 여섯 칸을 성급 차례로 — 1 · 5 · 9 · 13 · 17레벨에 2 · 3 · 4 · 5 · 6칸', ok.join() === '2,2,3,4,5,6' && !D.member(F, 'barbarian', 9, Math.random, 'barbarian_charge').cardq.length && G.Builds.LIST.filter(b => b.line).length === 20, ok.join()); }
   const oldH = D.member(F, 'cleric', 7); delete oldH.picks; G.Builds.CARD.on = false; const had = G.Builds.slots(oldH).filter(Boolean).join(); G.Builds.CARD.on = true; D.cardInit(oldH);
   t('옛 저장의 영웅: 지금 든 스킬 그대로 (소마법 = 기본 공격은 칸 밖)', oldH.picks.join() === had.split(',').filter(k => G.Guild.spLv(k) !== 0).join() && had.length > 0);
   { const sm = D.member(F, 'mage', 5), oldM = D.member(F, 'mage', 5); D.rebuild(sm, 'sorcerer'); G.Builds.CARD.on = false; G.Builds.apply(oldM, G.Builds.byId('sorcerer')); G.Builds.CARD.on = true; delete oldM.picks; oldM.cardq = []; D.cardInit(oldM);
@@ -357,7 +358,7 @@ t('PACE: 높은 레벨일수록 크다 (3→5 · 5→10 · 10→15 · 15→20 �
 // 소생술이 오는 레벨 (SRD 3레벨 주문: 클레릭 5 · 팔라딘 9)
 { const F = G.S.w.fantasy, at = (cls, b, lv) => { const m = D.member(F, cls, lv); D.rebuild(m, b); m.picks = m.picks.filter(k => k !== 'sr_revive'); return [D.cardCands(m).includes('sr_revive'), D.cardRec(m)]; };
   t('소생술: 생명 클레릭 4레벨 후보 아님 · 5레벨 추천', !at('cleric', 'cleric', 4)[0] && at('cleric', 'cleric', 5)[1] === 'sr_revive');
-  t('소생술: 수호 팔라딘 8레벨 후보 아님 · 9레벨 추천', !at('paladin', 'paladin_shield', 8)[0] && at('paladin', 'paladin_shield', 9)[1] === 'sr_revive');
+  // 팔라딘은 계열 빌드 (카드 없음 — 2026-11-27)라 소생술 카드 시험은 클레릭만
 }
 // 다중 직업 (원정에서는 쓰지 않는다): 들어올 때 한 직업 · 옛 저장은 불러올 때 한 직업으로 (레벨 합 그대로)
 { const F = G.S.w.fantasy; let mcN = 0; for (let i = 0; i < 40; i++) { const m = D.member(F, 'paladin', 9); if (m.mc?.length || G.Builds.byId(m.build)?.mc) mcN++; }

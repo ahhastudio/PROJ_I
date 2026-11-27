@@ -205,6 +205,7 @@ G.SkillAI = (() => {
     },
     scoreNow(k, a, x, threat) {
       const S = SK()[k], M = D.MSKILLS[k], m = a.merc, o = meta(k), num = G.SkillNum_at?.(k, m.cls, m.lv), res = S.res; if (S.prio) return 2 + S.prio; // 우선 기술
+      if (S.ai) { try { return S.ai(a, x); } catch (e) { return -1; } } // 계열 스킬 (js/rules/lines.js): 스킬이 제 값을 기본 공격 단위로 돌려준다
       let v;
       const ps = alive(x), tot = Math.max(1, x.seen.reduce((s, q) => s + q.hp, 0)), base = AI.basic(a, x);
       // 값 매기기: 피해 · 상태 이상은 SRD DB와 코드 기록표(skill_nums), 그 밖의 효과는 효과표(skill_eff — test/gen_skill_eff.js). 기술마다 따로 쓴 식은 없다 (2026-11-20)

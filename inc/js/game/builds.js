@@ -112,6 +112,7 @@ G.Builds = (() => {
   // 칸 6개 (자리 그대로 — 아직 안 열렸거나 빈 칸은 null)
   function slots(m) {
     m = base(m); const b = byId(m.build); if (!b) return [];
+    if (b.line) return G.Lines.LINE_LV.map((lv, i) => (m.lv >= lv ? b.core[i] || null : null)); // 계열 빌드 (js/rules/lines.js): 여섯 칸을 성급 차례로 — 레벨이 열고, 고르지 않는다
     if (CARD.on && m.picks) return SLOT_LV.map((_, i) => (m.picks[i] && ready(m, m.picks[i]) ? m.picks[i] : null)); // 카드 모드: 고른 것
     return SLOT_LV.map((lv, i) => (m.lv < lv ? null : b.core[i] ? (ready(m, b.core[i]) ? b.core[i] : null) : freeAt(m, i)));
   }

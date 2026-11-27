@@ -258,7 +258,9 @@ G.Dive = (() => {
   //   주문 칸 · 집중점 · 휴식 횟수 · 분노 횟수를 쓰지 않는다. 시계는 라운드 하나(G.Res.clock): 전투 라운드마다 1, 방을 하나 옮기면 ROOM_R(6) — 탐험 스킬과 한 시계. 전투가 끝나도 이어지고 야영하면 전부 돌아온다
   //   쿨 = 표(CD)에 적힌 값 → 없으면 기본값: 주문 레벨 + 1 · 집중점 2 · 짧은 휴식 기능 6 · 긴 휴식 기능 8 · 분노 10 · 자원이 없는 스킬(무기 기술)은 그 스킬의 값(SK.cd). 수치를 고칠 때는 CD에 적는다
   const CD = { sr_revive: 30 };
-  const cdOf = (k, res) => { if (CD[k] != null) return CD[k]; if (!res) return G.Skill.SK[k]?.cd || 0; return res.slot ? Math.min(10, res.slot + 1) : res.focus ? 2 : res.rage ? 10 : res.short ? 6 : res.long ? 8 : 0; };
+  // 광역 주문 (2026-11-27 — 측정: 높은 레벨 광역 주문이 밀리의 2~5배): 범위가 있는 피해 주문은 쿨 = 주문 레벨 × 2 + 2 (최대 14), 한 대상 주문은 그대로 레벨 + 1
+  const AREA_K = 0.5; let areaOf = null; const spArea = k => { if (!areaOf) { areaOf = {}; const byEn = {}; for (const id in G.SRD_SP || {}) byEn[G.SRD_SP[id].en] = G.SRD_SP[id]; for (const q in G.D.MSKILLS) { const o = byEn[G.D.MSKILLS[q].en]; if (o?.area && o.dice) areaOf[q] = o.area; } } return areaOf[k] || 0; };
+  const cdOf = (k, res) => { if (CD[k] != null) return CD[k]; if (!res) return G.Skill.SK[k]?.cd || 0; return res.slot ? (spArea(k) ? Math.min(14, res.slot * 2 + 2) : Math.min(10, res.slot + 1)) : res.focus ? 2 : res.rage ? 10 : res.short ? 6 : res.long ? 8 : 0; };
   let cdHooked = false;
   const USED = []; // 방금 자원을 쓴 스킬 (화면이 이름 · 아이콘을 띄우고 비운다)
   function cdHook() {
@@ -274,6 +276,9 @@ G.Dive = (() => {
     Rs.castLevel = function (m, res) { if (!Rs.cdOn) return R0.castLevel.apply(this, arguments); return res.slot; }; // 올려 쓰기 없음 — 그 주문의 레벨로
     Rs.slotFrac = function (m) { if (!Rs.cdOn) return R0.slotFrac.apply(this, arguments); return 1; }; // 남은 전투 수를 보고 아끼는 계산을 끈다
     Rs.longRest = function (list) { const out = R0.longRest.apply(this, arguments); if (Rs.cdOn) for (const m of list || []) if (m) m.cdK = {}; return out; }; // 야영 = 전부 돌아온다
+    // 광역 피해 주문은 원정에서 피해 × AREA_K (2026-11-27 — 쿨타임만으로는 못 누른다: 방을 옮기면 6라운드가 흘러 큰 주문이 전투마다 한 번씩 나간다). 주문 피해는 모두 G.Turn.skK를 거친다 (js/srd/srd.js G0)
+    { let on = 0; const k0 = G.Turn.skK; G.Turn.skK = rt => k0(rt) * (on && Rs.cdOn ? AREA_K : 1);
+      for (const k in G.Skill.SK) { const S = G.Skill.SK[k]; if (!spArea(k) || !S.run || S.areaK) continue; const r0 = S.run; S.areaK = true; S.run = function () { on++; try { return r0.apply(this, arguments); } finally { on--; } }; } }
     // 자원이 없는 스킬(무기 기술)의 쿨타임도 같은 시계 · 같은 기록으로 (자원이 있는 스킬은 위의 can · pay가 본다)
     const Sk = G.Skill, S0 = { cdLeft: Sk.cdLeft, cdStart: Sk.cdStart };
     Sk.cdLeft = function (rt, a, k) { if (!Rs.cdOn || !a.merc) return S0.cdLeft.apply(this, arguments); return Sk.resOf(k) ? 0 : Rs.cdLeftOf(a.merc, k, null); };
@@ -349,7 +354,8 @@ G.Dive = (() => {
     // 소생술 (SRD Revivify, 3레벨 슬롯): 엔진은 금화 300을 요구한다 — 원정에서는 금화 없이 주문 슬롯만 (금화를 잠깐 채웠다가 되돌린다). 기록: 「소생 · 시전자 → 대상」
     const rv0 = G.Skill.revivify; if (rv0) G.Skill.revivify = function (f, rt, p) { if (!curS) return rv0.apply(this, arguments); const c = rt.party.find(q => q !== p && q.merc && !q.dead && !q.dying && G.Guild.picks(q.merc).includes('sr_revive')), g0 = f.gold || 0; f.gold = g0 + 300; const ok = rv0.apply(this, arguments); f.gold = g0; if (ok && cur) cur.log.push({ t: `소생 · ${c?.merc?.name || '?'} → ${p.merc?.name || '?'}`, k: 'dv' }); return ok; };
     cdHook();
-    if (G.Builds?.CARD) { G.Builds.CARD.on = true; const gr0 = G.Guild.grow; G.Guild.grow = function (m) { cardInit(m); const out = gr0.apply(this, arguments); if (G.Builds.CARD.on && G.Builds.byId(m.build)) { const q = (m.cardq = m.cardq || []); if (CARD.PICK.includes(m.lv) && (m.picks || []).length + q.filter(x => x.kind === 'pick').length < G.Builds.SLOT_N) q.push({ lv: m.lv, kind: 'pick' }); else if (CARD.PICK.includes(m.lv) || CARD.SWAP.includes(m.lv)) q.push({ lv: m.lv, kind: 'swap' }); } return out; }; } // 레벨업 카드
+    if (G.Lines) { const L = G.Builds.LIST, cls = new Set(G.Lines.LIST.map(b => b.cls)); for (let i = L.length - 1; i >= 0; i--) if (cls.has(L[i].cls) && !L[i].mc) L.splice(i, 1); L.push(...G.Lines.LIST); } // 밀리 · 원거리 직업은 계열 빌드로 (2026-11-27 — inc/SKILL_LINES.md)
+    if (G.Builds?.CARD) { G.Builds.CARD.on = true; const gr0 = G.Guild.grow; G.Guild.grow = function (m) { cardInit(m); const out = gr0.apply(this, arguments); if (G.Builds.CARD.on && G.Builds.byId(m.build) && !G.Builds.byId(m.build).line) { const q = (m.cardq = m.cardq || []); if (CARD.PICK.includes(m.lv) && (m.picks || []).length + q.filter(x => x.kind === 'pick').length < G.Builds.SLOT_N) q.push({ lv: m.lv, kind: 'pick' }); else if (CARD.PICK.includes(m.lv) || CARD.SWAP.includes(m.lv)) q.push({ lv: m.lv, kind: 'swap' }); } return out; }; } // 레벨업 카드
     G.Gear.pickR = pickR; G.Gear.noRand = true; // 원정의 희귀도 표 · 랜다트(지어낸 물건) 없이 SRD 물건만
     // 첫 층은 더 순하게: 한 무리 둘까지 (탐사 게임은 셋). 원정 페이지에서만 바뀐다
     const g = typeof RUN !== 'undefined' && RUN.ZONES.find(q => q.id === 'goblin'); if (g) g.seats = [1, 2];
@@ -388,7 +394,8 @@ G.Dive = (() => {
   // bid: 영입할 때 고른 빌드 (2026-11-24 — 빌드는 영입할 때 한 번 고르고 고정, 사용자: 「장착한 장비, 얻은 스킬이 막 바뀌는게 말이 안돼」). 없으면 무게대로
   function member(f, cls, lv, rng = Math.random, bid = null) {
     const R = G.Reward, m = G.Party.trim(G.Guild.make(f, cls, { lv: 1, ab: G.Party.stdAb(cls) })); if (G.Builds) { G.Builds.assign(m, rng); const pick = bid && soloBuilds(cls).find(b => b.id === bid); if (pick) G.Builds.apply(m, pick); else if (G.Builds.byId(m.build)?.mc) { const L = soloBuilds(cls); let r = rng() * L.reduce((a, b) => a + b.w, 0); G.Builds.apply(m, L.find(b => (r -= b.w) < 0) || L[0]); } } // 다중 직업 빌드가 뽑히면 한 직업 빌드로 (무게대로)
-    if (G.Builds?.CARD?.on) { m.picks = []; const r = cardRec(m); if (r) m.picks.push(r); m.cardq = [{ lv: 1, kind: 'pick' }]; G.Builds.refresh(m); } // 카드 모드: 대표 스킬 하나로 시작 · 1레벨 몫은 고를 것
+    if (G.Builds.byId(m.build)?.line) { m.cardq = []; m.picks = []; } // 계열 빌드: 고르지 않는다 (칸은 레벨이 연다 — G.Builds.slots)
+    if (G.Builds?.CARD?.on && !G.Builds.byId(m.build)?.line) { m.picks = []; const r = cardRec(m); if (r) m.picks.push(r); m.cardq = [{ lv: 1, kind: 'pick' }]; G.Builds.refresh(m); } // 카드 모드: 대표 스킬 하나로 시작 · 1레벨 몫은 고를 것
     while (m.lv < lv) { m.lv++; G.Guild.grow(m); }
     if (lv > 1) cardAuto(m); // 2레벨 이상으로 들어오면 지나간 몫은 추천대로
     for (let i = 0; i < 300 && R.pending(m); i++) { const o = R.offer(m, rng); R.choose(m, o.kind === 'new' ? { kind: 'new' } : o.kind === 'swap' || !o.options.length ? 'keep' : o.options[0]); if (!o.options.length && o.kind !== 'new' && o.kind !== 'swap') break; }
